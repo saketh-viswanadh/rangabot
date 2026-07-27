@@ -1,4 +1,4 @@
-# Local Codex Assistant
+# Rangabot
 
 A local-first personal chatbot. Routine coding and brainstorming are processed by a downloaded model through Ollama. Cloud and connected-tool escalation will be added behind explicit previews and approvals.
 
@@ -18,12 +18,12 @@ The server binds only to the local computer by default.
 - Local chat interface
 - Local-only / smart-routing / Codex mode controls
 - Ollama availability and model detection
-- Local Ollama chat endpoint
+- Streaming local Ollama chat responses
+- Stop generation control
 - No cloud transmission
 
 ## Next milestones
 
-- Streaming responses and cancellation
 - SQLite conversation history
 - Repository selection and local code search
 - Cloud handoff preview and approval

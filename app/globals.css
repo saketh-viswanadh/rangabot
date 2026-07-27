@@ -61,6 +61,7 @@ header p { color: var(--muted); font-size: 12px; margin: 0; }
 .composer select { color: #c9d0d6; background: #20262b; border: 1px solid #343c42; border-radius: 7px; padding: 6px 8px; font-size: 11px; }
 .route-note { color: #68737c; font-size: 10px; }
 .composer button { margin-left: auto; width: 32px; height: 32px; border: 0; border-radius: 9px; background: var(--accent); color: #07382c; font-size: 18px; font-weight: 800; cursor: pointer; }
+.composer button.stop-button { background: #fecaca; color: #7f1d1d; font-size: 12px; }
 .composer button:disabled { opacity: .25; cursor: default; }
 .composer-wrap small { display: block; color: #586169; font-size: 9px; text-align: center; margin-top: 9px; }
 

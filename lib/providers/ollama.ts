@@ -37,10 +37,15 @@ export async function getOllamaStatus(): Promise<ProviderStatus> {
   }
 }
 
-export async function chatWithOllama(messages: ChatMessage[]): Promise<string> {
+interface OllamaStreamChunk {
+  message?: { content?: string };
+  error?: string;
+}
+
+export async function streamChatWithOllama(messages: ChatMessage[]): Promise<ReadableStream<Uint8Array>> {
   const response = await ollamaFetch("/api/chat", {
     method: "POST",
-    body: JSON.stringify({ model: configuredModel, messages, stream: false }),
+    body: JSON.stringify({ model: configuredModel, messages, stream: true }),
   });
 
   if (!response.ok) {
@@ -48,7 +53,45 @@ export async function chatWithOllama(messages: ChatMessage[]): Promise<string> {
     throw new Error(`Ollama request failed (${response.status}): ${detail}`);
   }
 
-  const data = (await response.json()) as { message?: { content?: string } };
-  if (!data.message?.content) throw new Error("Ollama returned an empty response");
-  return data.message.content;
+  if (!response.body) throw new Error("Ollama returned an empty response stream");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buffer = "";
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          buffer += decoder.decode();
+          if (buffer.trim()) processLine(buffer, controller, encoder);
+          controller.close();
+          return;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) processLine(line, controller, encoder);
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      await reader.cancel(reason);
+    },
+  });
+}
+
+function processLine(
+  line: string,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder,
+) {
+  if (!line.trim()) return;
+  const chunk = JSON.parse(line) as OllamaStreamChunk;
+  if (chunk.error) throw new Error(chunk.error);
+  if (chunk.message?.content) controller.enqueue(encoder.encode(chunk.message.content));
 }

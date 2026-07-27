@@ -1,4 +1,4 @@
-# Local Codex Assistant development rules
+# Rangabot development rules
 
 - Privacy is a product feature. Default to local processing and never add a cloud handoff without a visible disclosure and user approval.
 - Bind development and production servers to `127.0.0.1` unless the user explicitly requests network access and authentication is implemented first.
