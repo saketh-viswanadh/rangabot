@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { chatWithOllama } from "@/lib/providers/ollama";
+import { streamChatWithOllama } from "@/lib/providers/ollama";
 import type { ChatMessage } from "@/lib/providers/types";
 
 export const runtime = "nodejs";
@@ -28,8 +28,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const content = await chatWithOllama(body.messages);
-    return NextResponse.json({ content, source: "local" });
+    const stream = await streamChatWithOllama(body.messages);
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "The local model request failed." },
