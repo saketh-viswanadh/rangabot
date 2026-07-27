@@ -4,17 +4,24 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import type { ChatMessage, ProviderStatus } from "@/lib/providers/types";
 
 type Mode = "local" | "smart" | "codex";
-type DisplayMessage = ChatMessage & { id: string; source?: "local"; error?: boolean };
-
-const welcome: DisplayMessage = {
-  id: "welcome",
-  role: "assistant",
-  content: "I’m Rangabot, your local-first assistant. Coding and brainstorming stay on this computer. Cloud handoff is not enabled yet.",
-  source: "local",
+type DisplayMessage = ChatMessage & {
+  id: string;
+  source?: "local";
+  error?: boolean;
+  active?: boolean;
+  stopped?: boolean;
 };
 
+const welcomeLines = [
+  { text: "The best way to predict the future is to invent it.", credit: "Alan Kay", kind: "QUOTE" },
+  { text: "First, solve the problem. Then, write the code.", credit: "John Johnson", kind: "QUOTE" },
+  { text: "Why did the developer go broke? They used up all their cache.", credit: "A tiny local joke", kind: "JOKE" },
+  { text: "Small steps, thoughtfully repeated, become remarkable things.", credit: "Rangabot", kind: "THOUGHT" },
+];
+
 export default function Home() {
-  const [messages, setMessages] = useState<DisplayMessage[]>([welcome]);
+  const [messages, setMessages] = useState<DisplayMessage[]>([]);
+  const [welcomeIndex, setWelcomeIndex] = useState(0);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("smart");
   const [status, setStatus] = useState<ProviderStatus | null>(null);
@@ -41,12 +48,13 @@ export default function Home() {
 
     const userMessage: DisplayMessage = { id: crypto.randomUUID(), role: "user", content };
     const assistantId = crypto.randomUUID();
-    const nextMessages = [...messages.filter((message) => message.id !== "welcome"), userMessage];
+    const nextMessages = [...messages, userMessage];
     setMessages((current) => [...current, userMessage, {
       id: assistantId,
       role: "assistant",
       content: "",
       source: "local",
+      active: true,
     }]);
     setInput("");
     setSending(true);
@@ -79,14 +87,14 @@ export default function Home() {
         if (!chunk) continue;
         receivedContent = true;
         setMessages((current) => current.map((message) => (
-          message.id === assistantId ? { ...message, content: message.content + chunk } : message
+          message.id === assistantId ? { ...message, content: message.content + chunk, active: true } : message
         )));
       }
       const finalChunk = decoder.decode();
       if (finalChunk) {
         receivedContent = true;
         setMessages((current) => current.map((message) => (
-          message.id === assistantId ? { ...message, content: message.content + finalChunk } : message
+          message.id === assistantId ? { ...message, content: message.content + finalChunk, active: true } : message
         )));
       }
       if (!receivedContent) throw new Error("The local model returned an empty response.");
@@ -98,8 +106,10 @@ export default function Home() {
           return {
             ...message,
             content: message.content
-              ? `${message.content}\n\n[Generation stopped]`
-              : "[Generation stopped]",
+              ? message.content
+              : "No response was generated.",
+            active: false,
+            stopped: true,
           };
         }
         return {
@@ -107,10 +117,14 @@ export default function Home() {
           content: error instanceof Error ? error.message : "The request failed.",
           error: true,
           source: undefined,
+          active: false,
         };
       }));
       if (!stopped) void refreshStatus();
     } finally {
+      setMessages((current) => current.map((message) => (
+        message.id === assistantId ? { ...message, active: false } : message
+      )));
       setSending(false);
       abortRef.current = null;
     }
@@ -120,13 +134,25 @@ export default function Home() {
     abortRef.current?.abort();
   }
 
+  function startNewChat() {
+    abortRef.current?.abort();
+    setMessages([]);
+    setInput("");
+    setWelcomeIndex((current) => (current + 1 + Math.floor(Math.random() * (welcomeLines.length - 1))) % welcomeLines.length);
+  }
+
+  function chooseStarter(prompt: string) {
+    setInput(prompt);
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus());
+  }
+
   const ready = status?.available && status.modelInstalled;
 
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><span className="brand-mark">R</span><span>Rangabot</span></div>
-        <button className="new-chat" onClick={() => setMessages([welcome])}>＋ New chat</button>
+        <div className="brand"><span className="brand-mark" aria-hidden="true" /><span>Rangabot</span></div>
+        <button className="new-chat" onClick={startNewChat}>＋ New chat</button>
         <nav>
           <span className="nav-label">Workspace</span>
           <button className="nav-item active">Chat</button>
@@ -149,12 +175,42 @@ export default function Home() {
         </header>
 
         <div className="messages">
+          {messages.length === 0 && (
+            <section className="welcome-state" aria-labelledby="welcome-title">
+              <div className="welcome-orbit" aria-hidden="true" />
+              <span className="welcome-kicker">{welcomeLines[welcomeIndex].kind}</span>
+              <h2 id="welcome-title">A fresh conversation</h2>
+              <blockquote>“{welcomeLines[welcomeIndex].text}”</blockquote>
+              <cite>— {welcomeLines[welcomeIndex].credit}</cite>
+              <div className="starter-grid" aria-label="Conversation starters">
+                <button type="button" onClick={() => chooseStarter("Help me think through an idea: ")}>
+                  <span className="starter-icon idea" aria-hidden="true">✦</span>
+                  <span><strong>Explore an idea</strong><small>Brainstorm it locally</small></span>
+                  <i aria-hidden="true">›</i>
+                </button>
+                <button type="button" onClick={() => chooseStarter("Help me with this coding task: ")}>
+                  <span className="starter-icon code" aria-hidden="true">⌘</span>
+                  <span><strong>Build something</strong><small>Plan or improve code</small></span>
+                  <i aria-hidden="true">›</i>
+                </button>
+              </div>
+            </section>
+          )}
           {messages.map((message) => (
             <article key={message.id} className={`message ${message.role} ${message.error ? "error" : ""}`}>
-              {message.role === "assistant" && <div className="avatar">R</div>}
+              {message.role === "assistant" && <div className={`avatar ${message.active ? "active" : ""}`} aria-hidden="true" />}
               <div className="message-body">
                 {message.source && <span className="source">LOCAL</span>}
-                <p>{message.content}</p>
+                {message.content && <p>{message.content}</p>}
+                {message.active && (
+                  <div className="message-activity" role="status" aria-label="Rangabot is thinking">
+                    <span className="thinking-dots" aria-hidden="true"><i /><i /><i /></span>
+                    <span>Thinking</span>
+                  </div>
+                )}
+                {message.stopped && (
+                  <div className="stopped-state" role="status"><i aria-hidden="true" /> Stopped</div>
+                )}
               </div>
             </article>
           ))}
