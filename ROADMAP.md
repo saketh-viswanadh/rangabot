@@ -31,6 +31,7 @@
 - [ ] Model management for installed models and active selection
 - [x] Repository selection with an explicit filesystem allowlist
 - [x] Local code search with scoped file-context previews
+- [x] Explicit code-preview attachment with visible send scope and local-only delivery
 
 ## Proposed
 
@@ -72,6 +73,9 @@
 - Repository search is explicit and on demand. It skips sensitive, generated,
   binary, large and symlinked paths; previews are bounded and revalidated under
   the approved canonical root before every read.
+- Code attachments save only a visible repository/file/line reference in chat
+  history. The server revalidates the approval and bounded preview at send time,
+  strips metadata before provider delivery, and sends source only to local Ollama.
 - Knowledge files and indexes remain private and Git-ignored. Only source
   metadata and update reports are versioned. Rangabot uses retrieval rather than
   changing chat-model weights, making sources inspectable and updates reversible.

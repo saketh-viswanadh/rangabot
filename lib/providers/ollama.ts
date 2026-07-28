@@ -45,7 +45,7 @@ interface OllamaStreamChunk {
 export async function streamChatWithOllama(messages: ChatMessage[]): Promise<ReadableStream<Uint8Array>> {
   const response = await ollamaFetch("/api/chat", {
     method: "POST",
-    body: JSON.stringify({ model: configuredModel, messages, stream: true }),
+    body: JSON.stringify({ model: configuredModel, messages: messages.map(({ role, content }) => ({ role, content })), stream: true }),
   });
 
   if (!response.ok) {
