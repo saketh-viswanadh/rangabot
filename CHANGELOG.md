@@ -9,6 +9,8 @@ All notable released changes will be documented here using
 
 - Open-source setup, diagnostics, privacy validation and community documentation.
 - Local model registry and self-service Knowledge Vault commands.
+- Final CC BY 4.0 licensing and provenance records for original Ranga artwork,
+  plus a distinct-product naming policy for modified distributions.
 
 ### Fixed
 

@@ -6,7 +6,7 @@ the owner explicitly approves publication.
 ## Completed foundation
 
 - [x] Apache-2.0 code and documentation license
-- [x] Interim branding and mascot policy
+- [x] Final CC BY 4.0 Ranga artwork license and Rangabot naming policy
 - [x] Contribution, conduct, security, support and maintainer guides
 - [x] Pull-request and issue templates
 - [x] CI for tests, lint, type checking, production build, privacy check and production audit
@@ -17,7 +17,7 @@ the owner explicitly approves publication.
 
 ## Blocking before publication
 
-- [ ] Decide the final license for Ranga artwork and whether contributors may use the Rangabot name on forks
+- [x] Decide the final license for Ranga artwork and whether contributors may use the Rangabot name on forks
 - [x] Review historical Git objects for local user paths, common tokens, private keys and AWS access-key patterns
 - [ ] Verify all bundled/public assets and starter sources have redistribution-compatible licenses
 - [x] Rehearse dependency installation, tests, lint, type checking, build, privacy scan and production audit from a clean clone with no private runtime data

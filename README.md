@@ -93,5 +93,6 @@ Rangabot is being prepared for community development. Read
 request. Codex is optional; all required maintenance paths are normal scripts,
 documentation and GitHub workflows.
 
-Source code and documentation use Apache-2.0. The Rangabot name and Ranga
-artwork follow the separate interim policy in [BRANDING.md](BRANDING.md).
+Source code and documentation use Apache-2.0. Original Ranga artwork uses CC BY
+4.0 with attribution. The Rangabot naming policy is documented in
+[BRANDING.md](BRANDING.md).
