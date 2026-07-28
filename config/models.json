@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-07-28",
+  "models": [
+    {
+      "id": "llama3.2:3b",
+      "label": "Llama 3.2 3B",
+      "tier": "lightweight",
+      "minimumMemoryGb": 8,
+      "downloadSize": "approximately 2.0 GB",
+      "contextWindow": "128K upstream; use a conservative local context on limited-memory hardware",
+      "uses": ["general-chat", "brainstorming", "basic-coding"],
+      "notes": "Default starter model. Fast and compact, but not suitable for high-stakes or deeply complex answers.",
+      "upstream": "https://ollama.com/library/llama3.2",
+      "licenseReview": "Review the upstream Llama license before redistribution or commercial use."
+    },
+    {
+      "id": "qwen2.5-coder:3b",
+      "label": "Qwen2.5-Coder 3B",
+      "tier": "lightweight",
+      "minimumMemoryGb": 8,
+      "downloadSize": "approximately 1.9 GB",
+      "contextWindow": "32K upstream",
+      "uses": ["coding", "sql", "code-explanation"],
+      "notes": "Compact coding-oriented alternative. Model quality and speed depend on hardware and quantization.",
+      "upstream": "https://ollama.com/library/qwen2.5-coder",
+      "licenseReview": "Review the exact upstream model variant and license before use."
+    },
+    {
+      "id": "qwen2.5:7b",
+      "label": "Qwen2.5 7B",
+      "tier": "balanced",
+      "minimumMemoryGb": 16,
+      "downloadSize": "approximately 4.7 GB",
+      "contextWindow": "32K Ollama artifact",
+      "uses": ["general-chat", "reasoning", "teaching", "coding"],
+      "notes": "Higher-quality general option for machines with more memory. Verify current availability in Ollama.",
+      "upstream": "https://ollama.com/library/qwen2.5",
+      "licenseReview": "Review the exact upstream model variant and license before use."
+    }
+  ],
+  "embeddingModels": [
+    {
+      "id": "nomic-embed-text",
+      "label": "Nomic Embed Text",
+      "downloadSize": "approximately 274 MB",
+      "contextWindow": "2K",
+      "uses": ["knowledge-vault-retrieval"],
+      "upstream": "https://ollama.com/library/nomic-embed-text"
+    }
+  ]
+}

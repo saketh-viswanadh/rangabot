@@ -2,6 +2,7 @@ node_modules/
 .next/
 .env
 .env.local
+.env.*.local
 *.log
 *.tsbuildinfo
 .DS_Store
@@ -10,5 +11,8 @@ data/*.db-*
 data/knowledge/inbox/
 data/knowledge/processed/
 data/knowledge/indexes/
+data/knowledge/backups/
+data/knowledge/*.private.*
+data/knowledge/LOCAL_*
 work/
 outputs/

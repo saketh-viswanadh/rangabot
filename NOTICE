@@ -1,0 +1,9 @@
+Rangabot
+Copyright 2026 Saketh Viswanadh
+
+Rangabot includes and interoperates with third-party software, models and source
+documents whose licenses remain their own. Consult package-lock.json, upstream
+model cards and data/knowledge/SOURCE_MANIFEST.json before redistribution.
+
+The Rangabot name and Ranga mascot are subject to BRANDING.md and are not
+licensed as trademarks under Apache-2.0.

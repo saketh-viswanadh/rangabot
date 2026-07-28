@@ -2,6 +2,14 @@
 
 ## Approved
 
+- [x] Open-source governance, security, support and contribution foundation
+- [x] Guided/non-interactive setup, doctor and privacy-check commands
+- [x] Public local-model registry with hardware and upstream-license guidance
+- [x] Self-service Knowledge Vault initialization, validation, backup and rollback
+- [x] Pull-request CI and community issue templates
+- [ ] Fresh-clone and cross-platform open-source release rehearsal
+- [ ] Final Ranga artwork and Rangabot branding license decision
+- [ ] Historical Git-object secret scan before visibility change
 - [x] Local Ollama provider behind typed interfaces
 - [x] Streaming responses and Stop generation
 - [x] Apple-inspired interface and Ranga mascot

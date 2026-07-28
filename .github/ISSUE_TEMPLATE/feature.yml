@@ -1,0 +1,28 @@
+name: Feature proposal
+description: Propose a focused improvement and explain its privacy impact.
+title: "[Proposal]: "
+labels: [proposal]
+body:
+  - type: textarea
+    id: benefit
+    attributes:
+      label: User benefit
+    validations:
+      required: true
+  - type: textarea
+    id: approach
+    attributes:
+      label: Suggested approach
+  - type: dropdown
+    id: network
+    attributes:
+      label: Does this introduce network or cloud behavior?
+      options: [No, Maybe, Yes]
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy, storage, model and cost implications
+    validations:
+      required: true

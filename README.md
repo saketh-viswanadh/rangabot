@@ -1,18 +1,19 @@
 # Rangabot
 
-A local-first personal chatbot. Routine coding and brainstorming are processed by a downloaded model through Ollama. Cloud and connected-tool escalation will be added behind explicit previews and approvals.
+A beautiful, local-first assistant for private chat, coding, brainstorming and
+teaching from your own documents. Rangabot uses downloaded Ollama models and a
+local Knowledge Vault; cloud handoff remains disabled.
 
 ## First run
 
-1. Install [Ollama](https://ollama.com/).
-2. Download the lightweight chat model: `ollama pull llama3.2:3b`.
-3. Download the local retrieval model: `ollama pull nomic-embed-text`.
-4. Copy `.env.example` to `.env.local` if you want to change a model, address,
-   or the default 4 GB Knowledge Vault budget.
-5. Install dependencies: `npm install`.
-6. Add personal documents to `data/knowledge/inbox/`, then run
-   `npm run knowledge:ingest`.
-7. Start the app: `npm run dev` and open `http://127.0.0.1:3000`.
+1. Install Node.js 24+ and [Ollama](https://ollama.com/).
+2. Run `npm install`.
+3. Run `npm run setup` for guided model selection and private vault setup.
+4. Run `npm run doctor` to verify the installation.
+5. Start with `npm run dev` and open `http://127.0.0.1:3000`.
+
+Experienced users can copy `.env.example` to `.env.local` and use the manual
+model guidance in [docs/models.md](docs/models.md).
 
 The server binds only to the local computer by default.
 
@@ -82,3 +83,15 @@ available offline after the weekly source check.
 - Cloud handoff preview and approval
 - Model registry, evaluation, updates, and rollback
 - Safe daily feature-branch automation
+
+## Contributing
+
+Rangabot is being prepared for community development. Read
+[CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), the
+[architecture](docs/architecture.md), [privacy model](docs/privacy.md), and
+[model guide](docs/models.md). Run `npm run check` before submitting a pull
+request. Codex is optional; all required maintenance paths are normal scripts,
+documentation and GitHub workflows.
+
+Source code and documentation use Apache-2.0. The Rangabot name and Ranga
+artwork follow the separate interim policy in [BRANDING.md](BRANDING.md).
