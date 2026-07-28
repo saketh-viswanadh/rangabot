@@ -5,6 +5,16 @@ All notable released changes will be documented here using
 
 ## Unreleased
 
+### Added
+
+- A dedicated Knowledge Brief drawer with weekly intelligence cards, monthly
+  archive, private-vault status and a separate Rangabot product changelog.
+
+### Fixed
+
+- Streaming responses no longer force the reader to the bottom after they
+  intentionally scroll upward.
+
 ## 0.1.0 - 2026-07-28
 
 ### Added
