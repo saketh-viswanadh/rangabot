@@ -1,11 +1,25 @@
 # Rangabot name and Ranga artwork
 
-The Apache-2.0 license covers source code and documentation unless a file says
-otherwise. It does not grant trademark rights to the Rangabot name or Ranga
-mascot, and it does not imply endorsement by the project maintainers.
+## Code and documentation
 
-Until a dedicated asset license is selected, files under `public/ranga/` are
-source-available for running and contributing to Rangabot but should not be
-reused as branding for an unrelated product. Forks should use a distinct name
-and mascot unless permission is granted. This policy must be finalized before
-the repository becomes public.
+Rangabot source code and documentation are licensed under Apache-2.0 unless a
+file explicitly states otherwise.
+
+## Ranga artwork
+
+The original artwork in `public/ranga/` is licensed under the Creative Commons
+Attribution 4.0 International license (CC BY 4.0). You may copy, modify and use
+it commercially provided you give appropriate credit, link to the license and
+indicate whether changes were made. See `public/ranga/LICENSE.md` for the exact
+attribution format and asset provenance.
+
+## Rangabot name
+
+The Apache and Creative Commons licenses do not grant trademark rights in the
+Rangabot name. Forks and derivative projects may truthfully say “based on
+Rangabot” or “compatible with Rangabot,” but should use a distinct product name
+and must not imply endorsement or official status.
+
+Unmodified community builds of this repository may identify themselves as
+Rangabot. Materially modified distributions should use a distinct primary name
+unless the project owner grants written permission.

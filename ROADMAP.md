@@ -8,7 +8,7 @@
 - [x] Self-service Knowledge Vault initialization, validation, backup and rollback
 - [x] Pull-request CI and community issue templates
 - [ ] Fresh-clone and cross-platform open-source release rehearsal
-- [ ] Final Ranga artwork and Rangabot branding license decision
+- [x] Final Ranga artwork and Rangabot branding license decision
 - [ ] Historical Git-object secret scan before visibility change
 - [x] Local Ollama provider behind typed interfaces
 - [x] Streaming responses and Stop generation

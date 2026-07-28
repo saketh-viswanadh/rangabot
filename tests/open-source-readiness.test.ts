@@ -24,6 +24,13 @@ test("validation never deletes the live Next.js output directory", () => {
   assert.match(cleaner, /stale duplicate Next\.js type/);
 });
 
+test("publishes separate code, artwork, and naming terms", () => {
+  assert.match(readFileSync("package.json", "utf8"), /Apache-2\.0/);
+  assert.match(readFileSync("public/ranga/LICENSE.md", "utf8"), /CC BY 4\.0/);
+  assert.match(readFileSync("public/ranga/README.md", "utf8"), /asset provenance/i);
+  assert.match(readFileSync("BRANDING.md", "utf8"), /distinct product name/i);
+});
+
 test("keeps private runtime and Knowledge Vault material ignored", () => {
   const ignore = readFileSync(".gitignore", "utf8");
   for (const entry of [".env.local", "data/*.db", "data/knowledge/inbox/", "data/knowledge/indexes/", "data/knowledge/backups/"]) {
