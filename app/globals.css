@@ -65,9 +65,12 @@ header p { color: var(--muted); font-size: 12px; margin: 0; }
 .message-body { position: relative; max-width: 76%; border-radius: 18px; padding: 9px 13px 10px; }
 .message.user .message-body { background: #0a84ff; border-radius: 18px 18px 5px 18px; }
 .message.assistant .message-body { background: var(--assistant-bubble); border-radius: 18px 18px 18px 5px; }
+.message.assistant.thinking .message-body { isolation: isolate; background: #242426; box-shadow: 0 12px 36px #0008; }
+.message.assistant.thinking .message-body::before { content: ""; position: absolute; z-index: -1; inset: -1px; border-radius: inherit; padding: 1px; background: conic-gradient(from var(--thinking-angle), #4cc9ff, #7b61ff, #ff5ea8, #ffbe55, #6ee7b7, #4cc9ff); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; animation: thinking-border 2.7s linear infinite; }
+.message.assistant.thinking .message-body::after { content: ""; position: absolute; z-index: -2; inset: -5px; border-radius: 22px; background: conic-gradient(from var(--thinking-angle), #4cc9ff55, #7b61ff44, #ff5ea844, #ffbe5544, #6ee7b744, #4cc9ff55); filter: blur(10px); opacity: .55; animation: thinking-border 2.7s linear infinite; }
 .message.error .message-body { background: #3a1618; color: #ffb4b4; }
 .avatar { flex: 0 0 auto; width: 31px; height: 31px; filter: drop-shadow(0 3px 5px #0008); }
-.avatar.active { background-image: url("/ranga/ranga-running.gif"); }
+.avatar.active { background-image: url("/ranga/ranga-running.gif"); animation: mascot-thinking 1.15s ease-in-out infinite; filter: drop-shadow(0 0 5px #ffbe55cc) drop-shadow(0 0 10px #5ac8fa66); }
 .source { display: block; color: #8e8e93; font-size: 9px; font-weight: 650; letter-spacing: .06em; margin-bottom: 4px; }
 .message p { white-space: pre-wrap; line-height: 1.42; font-size: 14px; letter-spacing: -.005em; margin: 0; }
 .markdown-content { min-width: 0; font-size: 14px; line-height: 1.52; overflow-wrap: anywhere; }
@@ -92,11 +95,13 @@ header p { color: var(--muted); font-size: 12px; margin: 0; }
 .hljs-keyword, .hljs-selector-tag, .hljs-literal { color: #ff7ab2; }.hljs-string, .hljs-attribute { color: #ff8170; }
 .hljs-title, .hljs-function, .hljs-section { color: #82d2ce; }.hljs-number, .hljs-symbol { color: #d9c97c; }
 .hljs-comment, .hljs-quote { color: #7f8c8d; font-style: italic; }.hljs-variable, .hljs-template-variable { color: #c8a1ff; }
-.message-activity { display: flex; align-items: center; gap: 7px; color: #aeaeb2; font-size: 10px; margin-top: 7px; }
-.thinking-dots { display: inline-flex; align-items: center; gap: 3px; height: 9px; }
-.thinking-dots i { width: 5px; height: 5px; border-radius: 50%; background: #aeaeb2; animation: message-dot 1.15s ease-in-out infinite; }
-.thinking-dots i:nth-child(2) { animation-delay: .16s; }.thinking-dots i:nth-child(3) { animation-delay: .32s; }
-@keyframes message-dot { 0%, 60%, 100% { opacity: .35; transform: translateY(0) scale(.9); } 30% { opacity: 1; transform: translateY(-3px) scale(1); } }
+.message-activity { display: flex; align-items: center; gap: 7px; color: #c7c7cc; font-size: 10px; margin-top: 8px; }
+.thinking-runner { position: relative; width: 38px; height: 4px; overflow: hidden; border-radius: 999px; background: #ffffff12; }
+.thinking-runner i { position: absolute; width: 14px; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #4cc9ff, #bf5af2, #ffbe55); box-shadow: 0 0 8px #64d2ff; animation: thinking-run 1.05s ease-in-out infinite alternate; }
+@property --thinking-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+@keyframes thinking-border { to { --thinking-angle: 360deg; } }
+@keyframes thinking-run { from { transform: translateX(-3px); } to { transform: translateX(27px); } }
+@keyframes mascot-thinking { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-2px) scale(1.035); } }
 .stopped-state { display: flex; align-items: center; gap: 5px; color: #8e8e93; font-size: 10px; margin-top: 7px; }
 .stopped-state i { width: 7px; height: 7px; border-radius: 2px; background: #8e8e93; }
 .composer-wrap { width: min(780px, calc(100% - 36px)); margin: 0 auto; padding-bottom: 14px; }

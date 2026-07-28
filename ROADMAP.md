@@ -5,6 +5,7 @@
 - [x] Local Ollama provider behind typed interfaces
 - [x] Streaming responses and Stop generation
 - [x] Apple-inspired interface and Ranga mascot
+- [x] Minimal golden-retriever Ranga with ambient thinking-light treatment
 - [x] Local SQLite conversation history: create, list, reopen, update, and delete
 - [x] Markdown and syntax-highlighted code rendering with copy controls
 - [ ] Model management for installed models and active selection

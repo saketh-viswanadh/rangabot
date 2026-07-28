@@ -276,7 +276,7 @@ export default function Home() {
             </section>
           )}
           {messages.map((message) => (
-            <article key={message.id} className={`message ${message.role} ${message.error ? "error" : ""}`}>
+            <article key={message.id} className={`message ${message.role} ${message.error ? "error" : ""} ${message.active ? "thinking" : ""}`}>
               {message.role === "assistant" && <div className={`avatar ${message.active ? "active" : ""}`} aria-hidden="true" />}
               <div className="message-body">
                 {message.source && <span className="source">LOCAL</span>}
@@ -285,7 +285,7 @@ export default function Home() {
                   : <p>{message.content}</p>)}
                 {message.active && (
                   <div className="message-activity" role="status" aria-label="Rangabot is thinking">
-                    <span className="thinking-dots" aria-hidden="true"><i /><i /><i /></span>
+                    <span className="thinking-runner" aria-hidden="true"><i /></span>
                     <span>Thinking</span>
                   </div>
                 )}

@@ -63,3 +63,16 @@ Next approved item: Markdown and syntax-highlighted code rendering with copy con
 - Added focused tests for inline-versus-block code and language detection.
 
 Next approved item: model management and active local model selection.
+
+## 2026-07-28 — Golden Ranga and illuminated thinking
+
+- Replaced the colorful tiger mascot with a minimal charcoal golden-retriever
+  shadow, using a restrained warm-gold outline for clarity at small sizes.
+- Added quiet idle breathing and blink motion, plus a focused processing loop
+  while the local model responds.
+- Redesigned the active assistant bubble with a moving multicolor light edge
+  and an internal light runner inspired by modern ambient voice interfaces.
+- Added a synchronized gold-and-blue mascot glow that stops with generation.
+
+The optional full directional pet atlas remains under visual QA and is not used
+by the chat interface until its final edge gate passes.
