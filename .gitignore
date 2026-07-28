@@ -9,6 +9,7 @@ node_modules/
 data/*.db
 data/*.db-*
 data/repositories.json
+data/artifacts/
 data/knowledge/inbox/
 data/knowledge/processed/
 data/knowledge/indexes/

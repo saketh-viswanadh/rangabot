@@ -97,6 +97,7 @@ header p { color: var(--muted); font-size: 12px; margin: 0; }
 .starter-grid button > i { color: #636366; font-size: 22px; font-style: normal; }
 .starter-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; font-size: 15px; }
 .starter-icon.idea { color: #e9c5ff; background: #bf5af22b; }.starter-icon.code { color: #aad8ff; background: #0a84ff2b; }
+.starter-icon.mail { color: #b9eccf; background: #30d15824; }.starter-icon.document { color: #ffd3a6; background: #ff9f0a24; }
 .message { display: flex; align-items: flex-end; gap: 9px; margin: 0 0 12px; border-radius: 20px; transition: background .18s ease; }
 .message:hover, .message:focus-within { background: var(--hover); }
 .message.user { justify-content: flex-end; }

@@ -49,7 +49,7 @@ test("keeps public demo content synthetic and free of local paths", () => {
 
 test("keeps private runtime and Knowledge Vault material ignored", () => {
   const ignore = readFileSync(".gitignore", "utf8");
-  for (const entry of [".env.local", "data/*.db", "data/knowledge/inbox/", "data/knowledge/indexes/", "data/knowledge/backups/"]) {
+  for (const entry of [".env.local", "data/*.db", "data/artifacts/", "data/knowledge/inbox/", "data/knowledge/indexes/", "data/knowledge/backups/"]) {
     assert.ok(ignore.includes(entry), `${entry} must remain ignored`);
   }
 });

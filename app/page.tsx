@@ -683,6 +683,16 @@ export default function Home() {
                   <span><strong>Build something</strong><small>Plan or improve code</small></span>
                   <i aria-hidden="true">›</i>
                 </button>
+                <button type="button" onClick={() => chooseStarter("Help me write this email. Ask me for the audience, purpose, tone, and key details before drafting: ")}>
+                  <span className="starter-icon mail" aria-hidden="true">✉</span>
+                  <span><strong>Write an email</strong><small>Draft it locally in the right tone</small></span>
+                  <i aria-hidden="true">›</i>
+                </button>
+                <button type="button" onClick={() => chooseStarter("Help me create or improve this document. Ask what format, audience, purpose, and source material I have: ")}>
+                  <span className="starter-icon document" aria-hidden="true">▤</span>
+                  <span><strong>Create or edit a document</strong><small>Prepare content before file export</small></span>
+                  <i aria-hidden="true">›</i>
+                </button>
               </div>
             </section>
           )}
