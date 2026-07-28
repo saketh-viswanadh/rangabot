@@ -37,6 +37,10 @@ export function listAllowedRepositories() {
   return readRegistry();
 }
 
+export function getAllowedRepository(id: string) {
+  return readRegistry().find((repository) => repository.id === id) ?? null;
+}
+
 export function allowRepository(inputPath: string): AllowedRepository {
   const candidate = inputPath.trim();
   if (!candidate || candidate.length > 1024 || !isAbsolute(candidate)) {

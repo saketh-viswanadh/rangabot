@@ -30,7 +30,7 @@
 - [x] Initial data-science pack: NumPy, pandas, scikit-learn, and DuckDB
 - [ ] Model management for installed models and active selection
 - [x] Repository selection with an explicit filesystem allowlist
-- [ ] Local code search with scoped file-context previews
+- [x] Local code search with scoped file-context previews
 
 ## Proposed
 
@@ -69,6 +69,9 @@
   filesystem access; repository attachment remains a separate allowlist flow.
 - Repository approvals are canonical absolute paths stored in a private local
   registry. Revocation removes only the approval and never changes user files.
+- Repository search is explicit and on demand. It skips sensitive, generated,
+  binary, large and symlinked paths; previews are bounded and revalidated under
+  the approved canonical root before every read.
 - Knowledge files and indexes remain private and Git-ignored. Only source
   metadata and update reports are versioned. Rangabot uses retrieval rather than
   changing chat-model weights, making sources inspectable and updates reversible.
