@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import type { ChatMessage, ProviderStatus } from "@/lib/providers/types";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
+import { welcomeLines } from "@/lib/welcome-content";
 
 type Mode = "local" | "smart" | "codex";
 type Appearance = "light" | "dark";
@@ -20,13 +21,6 @@ type ConversationSummary = {
   createdAt: string;
   updatedAt: string;
 };
-
-const welcomeLines = [
-  { text: "The best way to predict the future is to invent it.", credit: "Alan Kay", kind: "QUOTE" },
-  { text: "First, solve the problem. Then, write the code.", credit: "John Johnson", kind: "QUOTE" },
-  { text: "Why did the developer go broke? They used up all their cache.", credit: "A tiny local joke", kind: "JOKE" },
-  { text: "Small steps, thoughtfully repeated, become remarkable things.", credit: "Rangabot", kind: "THOUGHT" },
-];
 
 export default function Home() {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);

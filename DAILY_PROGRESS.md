@@ -90,3 +90,14 @@ by the chat interface until its final edge gate passes.
   sent message, and local-model context explaining which message is referenced.
 - Browser QA covered dark sand, light lavender, long conversations, and reply
   selection without horizontal layout movement.
+
+## 2026-07-28 — Expanded welcome collection
+
+- Expanded the offline new-chat rotation from four entries to 27 short quotes,
+  developer jokes, and original Rangabot thoughts.
+- Moved the collection into a dedicated typed module so daily additions stay
+  reviewable and do not clutter the chat interface.
+- Added a test requiring all three categories, at least 24 entries, short copy,
+  and no duplicate text.
+- Kept the runtime fully local: the app never fetches welcome content from the
+  internet.
