@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup and design discussions
+    url: https://github.com/saketh-viswanadh/local-model-with-routing-capabilities/discussions
+    about: Ask questions or brainstorm before opening implementation work.
