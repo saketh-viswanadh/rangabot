@@ -7,6 +7,8 @@ All notable released changes will be documented here using
 
 ### Added
 
+- Explicit local code attachment from a bounded preview, with a visible composer
+  disclosure and saved file/line reference while raw source stays out of history.
 - On-demand local code search and bounded line-numbered previews restricted to
   explicitly approved repository folders.
 - An explicit local repository allowlist with canonical-path validation and

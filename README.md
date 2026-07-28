@@ -31,6 +31,7 @@ The server binds only to the local computer by default.
 - Local project folders and project-scoped chats
 - Explicit local repository allowlisting with reversible access approval
 - On-demand scoped code search with bounded, line-numbered local file previews
+- Explicit code-preview attachment to a chat, revalidated at send time for local Ollama only
 - Private 4 GB Knowledge Vault with PDF, DOCX, HTML, Markdown, and text ingestion
 - Hybrid local keyword and embedding retrieval
 - Teacher Mode with passage citations and explicit evidence limits
@@ -49,6 +50,9 @@ folder path. Selecting an approved repository opens on-demand code search.
 Rangabot reads only eligible text/code files after an explicit search, skips
 secrets, symlinks, dependencies and build output, and never creates a background
 repository index.
+An attached preview is visibly listed above the composer before sending. Saved
+chats retain only the repository, file and line-range reference; the raw source
+preview is read again at send time and supplied only to the local Ollama model.
 
 ## Knowledge Vault
 

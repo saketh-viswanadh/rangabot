@@ -30,6 +30,7 @@ type ProjectSummary = { id: string; name: string; createdAt: string; updatedAt: 
 type AllowedRepository = { id: string; name: string; path: string; addedAt: string };
 type CodeSearchResult = { path: string; line: number; excerpt: string };
 type CodePreview = { path: string; startLine: number; focusLine: number; lines: string[] };
+type AttachedCodeContext = { repositoryId: string; repositoryName: string; path: string; line: number; startLine: number; endLine: number; characterCount: number };
 type KnowledgeStatus = { usedBytes: number; budgetBytes: number; documents: number; chunks: number };
 type KnowledgeUpdates = { week: string; month: string; changelog: string; weekUpdatedAt: string | null };
 type KnowledgeTab = "discover" | "vault" | "updates";
@@ -56,6 +57,7 @@ export default function Home() {
   const [codeQuery, setCodeQuery] = useState("");
   const [codeResults, setCodeResults] = useState<CodeSearchResult[]>([]);
   const [codePreview, setCodePreview] = useState<CodePreview | null>(null);
+  const [attachedCodeContext, setAttachedCodeContext] = useState<AttachedCodeContext | null>(null);
   const [codeSearchMessage, setCodeSearchMessage] = useState("");
   const [codeSearching, setCodeSearching] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -176,6 +178,21 @@ export default function Home() {
     else setCodeSearchMessage(data.error ?? "Could not preview this file.");
   }
 
+  function attachCodePreview() {
+    if (!selectedRepository || !codePreview) return;
+    setAttachedCodeContext({
+      repositoryId: selectedRepository.id,
+      repositoryName: selectedRepository.name,
+      path: codePreview.path,
+      line: codePreview.focusLine,
+      startLine: codePreview.startLine,
+      endLine: codePreview.startLine + codePreview.lines.length - 1,
+      characterCount: codePreview.lines.join("\n").length,
+    });
+    setRepositoryPanelOpen(false);
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus());
+  }
+
   async function refreshKnowledge() {
     const [statusResponse, updatesResponse] = await Promise.all([fetch("/api/knowledge/status", { cache: "no-store" }), fetch("/api/knowledge/updates", { cache: "no-store" })]);
     if (statusResponse.ok) setKnowledgeStatus(await statusResponse.json());
@@ -222,6 +239,7 @@ export default function Home() {
       source: message.role === "assistant" ? "local" : undefined,
     })));
     setActiveConversationId(id);
+    setAttachedCodeContext(null);
   }
 
   async function removeConversation(id: string) {
@@ -359,10 +377,17 @@ export default function Home() {
       role: replyTo.role as "user" | "assistant",
       excerpt: replyTo.content.slice(0, 160),
     } : undefined;
-    const userMessage: DisplayMessage = { id: crypto.randomUUID(), role: "user", content, replyTo: reference };
+    const codeContextForRequest = attachedCodeContext;
+    const codeContext = codeContextForRequest ? {
+      repository: codeContextForRequest.repositoryName,
+      path: codeContextForRequest.path,
+      startLine: codeContextForRequest.startLine,
+      endLine: codeContextForRequest.endLine,
+    } : undefined;
+    const userMessage: DisplayMessage = { id: crypto.randomUUID(), role: "user", content, replyTo: reference, codeContext };
     const assistantId = crypto.randomUUID();
     const nextMessages = [...messages, userMessage];
-    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}) }));
+    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply, codeContext: code }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}), ...(code ? { codeContext: code } : {}) }));
     let conversationId = activeConversationId;
     if (!conversationId) {
       const createResponse = await fetch("/api/conversations", {
@@ -400,6 +425,7 @@ export default function Home() {
         signal: abortController.signal,
         body: JSON.stringify({
           mode,
+          ...(codeContextForRequest ? { codeContext: { repositoryId: codeContextForRequest.repositoryId, path: codeContextForRequest.path, line: codeContextForRequest.line } } : {}),
           messages: nextMessages.map(({ role, content: text, replyTo: reply }) => ({
             role,
             content: reply ? `[Replying to ${reply.role}: “${reply.excerpt}”]\n\n${text}` : text,
@@ -410,6 +436,7 @@ export default function Home() {
         const data = (await response.json()) as { error?: string };
         throw new Error(data.error ?? "Request failed");
       }
+      setAttachedCodeContext(null);
       if (!response.body) throw new Error("The local model returned no response stream.");
       const knowledgeUsed = response.headers.get("X-Rangabot-Knowledge") === "used";
       if (knowledgeUsed) {
@@ -498,6 +525,7 @@ export default function Home() {
     setActiveProjectId(projectId);
     setInput("");
     setReplyTo(null);
+    setAttachedCodeContext(null);
     setWelcomeIndex((current) => nextWelcomeIndex(current));
   }
 
@@ -663,6 +691,7 @@ export default function Home() {
               {message.role === "assistant" && <div className={`avatar ${message.active ? "active" : ""}`} aria-hidden="true" />}
               <div className="message-body">
                 {message.replyTo && <div className="reply-reference"><strong>{message.replyTo.role === "assistant" ? "Rangabot" : "You"}</strong><span>{message.replyTo.excerpt}</span></div>}
+                {message.codeContext && <div className="message-code-reference"><strong>Attached code</strong><span>{message.codeContext.repository} · {message.codeContext.path} · lines {message.codeContext.startLine}–{message.codeContext.endLine}</span></div>}
                 {message.source && <span className="source">LOCAL{message.knowledgeUsed ? " · KNOWLEDGE VAULT" : ""}</span>}
                 {message.content && (message.role === "assistant"
                   ? <MarkdownMessage content={message.content} />
@@ -690,6 +719,7 @@ export default function Home() {
           </div>}
           <form className="composer" onSubmit={sendMessage}>
             {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply">×</button></div>}
+            {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code">×</button></div>}
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -792,7 +822,7 @@ export default function Home() {
                 {!codeResults.length && <p>Search an approved repository to see up to 50 matches.</p>}
               </section>
               <section className="code-preview" aria-label="Local file preview">
-                {codePreview ? <><div className="code-section-heading"><span>{codePreview.path}</span><small>Lines {codePreview.startLine}–{codePreview.startLine + codePreview.lines.length - 1}</small></div><pre>{codePreview.lines.map((line, index) => {
+                {codePreview ? <><div className="code-section-heading"><span>{codePreview.path}</span><small>Lines {codePreview.startLine}–{codePreview.startLine + codePreview.lines.length - 1}</small></div><button type="button" className="attach-code-button" onClick={attachCodePreview}>Attach preview to chat</button><pre>{codePreview.lines.map((line, index) => {
                   const lineNumber = codePreview.startLine + index;
                   return <code className={lineNumber === codePreview.focusLine ? "focus" : ""} key={lineNumber}><b>{lineNumber}</b><span>{line || " "}</span></code>;
                 })}</pre></> : <div className="code-preview-empty"><strong>File context</strong><p>Select a match to read a bounded local preview.</p></div>}

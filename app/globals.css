@@ -162,6 +162,8 @@ header p { color: var(--muted); font-size: 12px; margin: 0; }
 .composer-reply { display: flex; align-items: center; gap: 12px; border-left: 2px solid var(--accent); background: var(--hover); border-radius: 8px; padding: 7px 9px; margin-bottom: 9px; }
 .composer-reply > span { min-width: 0; display: grid; gap: 2px; color: var(--muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .composer-reply strong { color: var(--text); font-size: 10px; }.composer .composer-reply button { margin-left: auto; width: 24px; height: 24px; flex: 0 0 auto; background: transparent; color: var(--muted); box-shadow: none; }
+.composer-code-context { display: flex; align-items: center; gap: 12px; border-left: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--hover)); border-radius: 8px; padding: 8px 9px; margin-bottom: 9px; }.composer-code-context > span { min-width: 0; display: grid; gap: 2px; color: var(--muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.composer-code-context strong { color: var(--text); }.composer-code-context small { color: var(--muted); font-size: 9px; }.composer .composer-code-context button { margin-left: auto; width: 24px; height: 24px; flex: 0 0 auto; background: transparent; color: var(--muted); box-shadow: none; }
+.message-code-reference { display: grid; gap: 2px; max-width: 100%; margin-bottom: 7px; padding: 7px 9px; border-left: 2px solid var(--accent); border-radius: 7px; background: color-mix(in srgb, var(--accent) 8%, transparent); font-size: 9px; color: var(--muted); }.message-code-reference strong { color: var(--text); }.message-code-reference span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .route-note { color: #68737c; font-size: 10px; }
 .composer button { margin-left: auto; width: 32px; height: 32px; border: 0; border-radius: 50%; background: var(--accent); color: #fff; font-size: 18px; font-weight: 700; cursor: pointer; transition: transform .16s ease, opacity .16s ease; }
 .composer button:hover:not(:disabled) { transform: scale(1.06); }.composer button:active:not(:disabled) { transform: scale(.94); }
@@ -199,3 +201,4 @@ header p { color: var(--muted); font-size: 12px; margin: 0; }
   .starter-grid { grid-template-columns: 1fr; max-width: 340px; }
 }
 @keyframes knowledge-sheet { from { transform: translateY(28px); opacity: .5; } }
+.attach-code-button { position: sticky; top: 0; z-index: 1; margin: 0 4px 10px; border: .5px solid var(--line); border-radius: 9px; background: var(--accent); color: #fff; padding: 7px 10px; font-size: 9px; font-weight: 700; cursor: pointer; }
