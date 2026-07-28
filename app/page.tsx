@@ -28,6 +28,8 @@ type ConversationSummary = {
 };
 type ProjectSummary = { id: string; name: string; createdAt: string; updatedAt: string };
 type AllowedRepository = { id: string; name: string; path: string; addedAt: string };
+type CodeSearchResult = { path: string; line: number; excerpt: string };
+type CodePreview = { path: string; startLine: number; focusLine: number; lines: string[] };
 type KnowledgeStatus = { usedBytes: number; budgetBytes: number; documents: number; chunks: number };
 type KnowledgeUpdates = { week: string; month: string; changelog: string; weekUpdatedAt: string | null };
 type KnowledgeTab = "discover" | "vault" | "updates";
@@ -49,6 +51,13 @@ export default function Home() {
   const [allowedRepositories, setAllowedRepositories] = useState<AllowedRepository[]>([]);
   const [repositoryPath, setRepositoryPath] = useState("");
   const [repositoryMessage, setRepositoryMessage] = useState("");
+  const [repositoryPanelOpen, setRepositoryPanelOpen] = useState(false);
+  const [selectedRepository, setSelectedRepository] = useState<AllowedRepository | null>(null);
+  const [codeQuery, setCodeQuery] = useState("");
+  const [codeResults, setCodeResults] = useState<CodeSearchResult[]>([]);
+  const [codePreview, setCodePreview] = useState<CodePreview | null>(null);
+  const [codeSearchMessage, setCodeSearchMessage] = useState("");
+  const [codeSearching, setCodeSearching] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState("");
   const [knowledgeStatus, setKnowledgeStatus] = useState<KnowledgeStatus | null>(null);
@@ -63,6 +72,7 @@ export default function Home() {
   const followLatestRef = useRef(true);
   const knowledgeCloseRef = useRef<HTMLButtonElement>(null);
   const conversationImportRef = useRef<HTMLInputElement>(null);
+  const repositoryCloseRef = useRef<HTMLButtonElement>(null);
 
   async function refreshStatus() {
     try {
@@ -122,7 +132,48 @@ export default function Home() {
       return;
     }
     setRepositoryMessage(`Revoked ${repository.path}. The folder was not changed.`);
+    if (selectedRepository?.id === repository.id) {
+      setRepositoryPanelOpen(false);
+      setSelectedRepository(null);
+    }
     await refreshRepositories();
+  }
+
+  function openRepositorySearch(repository: AllowedRepository) {
+    setSelectedRepository(repository);
+    setCodeQuery("");
+    setCodeResults([]);
+    setCodePreview(null);
+    setCodeSearchMessage("");
+    setRepositoryPanelOpen(true);
+  }
+
+  async function searchAllowedRepository(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedRepository || codeQuery.trim().length < 2) return;
+    setCodeSearching(true);
+    setCodePreview(null);
+    setCodeSearchMessage("");
+    const parameters = new URLSearchParams({ query: codeQuery.trim() });
+    const response = await fetch(`/api/repositories/${selectedRepository.id}/search?${parameters}`, { cache: "no-store" });
+    const data = (await response.json()) as { results?: CodeSearchResult[]; error?: string };
+    setCodeSearching(false);
+    if (!response.ok || !data.results) {
+      setCodeResults([]);
+      setCodeSearchMessage(data.error ?? "Code search failed.");
+      return;
+    }
+    setCodeResults(data.results);
+    setCodeSearchMessage(data.results.length ? `${data.results.length} local match${data.results.length === 1 ? "" : "es"}.` : "No matches in searchable files.");
+  }
+
+  async function openCodePreview(result: CodeSearchResult) {
+    if (!selectedRepository) return;
+    const parameters = new URLSearchParams({ path: result.path, line: String(result.line) });
+    const response = await fetch(`/api/repositories/${selectedRepository.id}/preview?${parameters}`, { cache: "no-store" });
+    const data = (await response.json()) as { preview?: CodePreview; error?: string };
+    if (response.ok && data.preview) setCodePreview(data.preview);
+    else setCodeSearchMessage(data.error ?? "Could not preview this file.");
   }
 
   async function refreshKnowledge() {
@@ -254,6 +305,15 @@ export default function Home() {
     requestAnimationFrame(() => knowledgeCloseRef.current?.focus());
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [knowledgePanelOpen]);
+  useEffect(() => {
+    if (!repositoryPanelOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setRepositoryPanelOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    requestAnimationFrame(() => repositoryCloseRef.current?.focus());
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [repositoryPanelOpen]);
   useEffect(() => {
     if (!knowledgePanelOpen || knowledgeTab !== "discover" || !knowledgeUpdates?.weekUpdatedAt) return;
     localStorage.setItem("rangabot-knowledge-read", knowledgeUpdates.weekUpdatedAt);
@@ -506,7 +566,7 @@ export default function Home() {
         <section className="repositories" aria-label="Allowed local repositories">
           <div className="repository-heading"><span>Local repositories</span><span>{allowedRepositories.length}</span></div>
           {allowedRepositories.map((repository) => <div className="repository-item" key={repository.id} title={repository.path}>
-            <span aria-hidden="true">⌂</span><span><strong>{repository.name}</strong><small>{repository.path}</small></span>
+            <button type="button" className="repository-open" onClick={() => openRepositorySearch(repository)} aria-label={`Search ${repository.name}`}><span aria-hidden="true">⌂</span><span><strong>{repository.name}</strong><small>{repository.path}</small></span></button>
             <button type="button" onClick={() => void revokeLocalRepository(repository)} aria-label={`Revoke ${repository.name}`}>×</button>
           </div>)}
           <form className="repository-create" onSubmit={allowLocalRepository}>
@@ -706,6 +766,37 @@ export default function Home() {
                 <div className="vault-note"><strong>Private by design</strong><p>Documents, passages, embeddings and retrieval stay on this computer. Add material to <code>data/knowledge/inbox/</code> and run <code>npm run knowledge:ingest</code>.</p></div>
               </section>}
               {knowledgeTab === "updates" && <div className="knowledge-markdown changelog"><MarkdownMessage content={knowledgeUpdates?.changelog ?? "No Rangabot changelog is available yet."} /></div>}
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {repositoryPanelOpen && selectedRepository && (
+        <div className="knowledge-backdrop" onMouseDown={() => setRepositoryPanelOpen(false)}>
+          <aside className="code-panel" role="dialog" aria-modal="true" aria-labelledby="code-panel-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="knowledge-panel-header">
+              <div><span>Approved folder · local only</span><h2 id="code-panel-title">{selectedRepository.name}</h2><small>{selectedRepository.path}</small></div>
+              <button type="button" ref={repositoryCloseRef} onClick={() => setRepositoryPanelOpen(false)} aria-label="Close code search">×</button>
+            </div>
+            <form className="code-search-form" onSubmit={searchAllowedRepository}>
+              <input value={codeQuery} onChange={(event) => setCodeQuery(event.target.value)} placeholder="Search code and text files" aria-label="Search repository code" minLength={2} maxLength={120} />
+              <button type="submit" disabled={codeSearching || codeQuery.trim().length < 2}>{codeSearching ? "Searching…" : "Search"}</button>
+              <p>Reads eligible files in this approved folder only when you submit.</p>
+            </form>
+            <div className="code-workspace">
+              <section className="code-results" aria-label="Code search results">
+                <div className="code-section-heading"><span>Matches</span><small>{codeSearchMessage}</small></div>
+                {codeResults.map((result) => <button type="button" key={`${result.path}:${result.line}`} onClick={() => void openCodePreview(result)} className={codePreview?.path === result.path && codePreview.focusLine === result.line ? "active" : ""}>
+                  <strong>{result.path}<span>:{result.line}</span></strong><small>{result.excerpt || "Blank matching line"}</small>
+                </button>)}
+                {!codeResults.length && <p>Search an approved repository to see up to 50 matches.</p>}
+              </section>
+              <section className="code-preview" aria-label="Local file preview">
+                {codePreview ? <><div className="code-section-heading"><span>{codePreview.path}</span><small>Lines {codePreview.startLine}–{codePreview.startLine + codePreview.lines.length - 1}</small></div><pre>{codePreview.lines.map((line, index) => {
+                  const lineNumber = codePreview.startLine + index;
+                  return <code className={lineNumber === codePreview.focusLine ? "focus" : ""} key={lineNumber}><b>{lineNumber}</b><span>{line || " "}</span></code>;
+                })}</pre></> : <div className="code-preview-empty"><strong>File context</strong><p>Select a match to read a bounded local preview.</p></div>}
+              </section>
             </div>
           </aside>
         </div>

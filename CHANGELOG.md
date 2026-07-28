@@ -7,6 +7,8 @@ All notable released changes will be documented here using
 
 ### Added
 
+- On-demand local code search and bounded line-numbered previews restricted to
+  explicitly approved repository folders.
 - An explicit local repository allowlist with canonical-path validation and
   revocation that never modifies the selected folder.
 - Local Markdown conversation export and restore, including exact recovery of
