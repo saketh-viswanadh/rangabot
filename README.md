@@ -34,6 +34,7 @@ The server binds only to the local computer by default.
 - Teacher Mode with passage citations and explicit evidence limits
 - Automatic local Knowledge Vault lookup for informational questions in Smart mode
 - Weekly and monthly sourced subject-intelligence briefs
+- Dedicated Knowledge Brief panel with news cards, vault status and app changelog
 - No cloud transmission
 
 Conversation data stays in `data/rangabot.db` on this computer. The database and

@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ProviderStatus } from "@/lib/providers/types";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { welcomeLines } from "@/lib/welcome-content";
 import { isNearMessageBottom } from "@/lib/message-scroll";
+import { parseKnowledgeBrief } from "@/lib/knowledge-brief";
 
 type Mode = "local" | "smart" | "teach" | "codex";
 type Appearance = "light" | "dark";
@@ -26,6 +27,8 @@ type ConversationSummary = {
 };
 type ProjectSummary = { id: string; name: string; createdAt: string; updatedAt: string };
 type KnowledgeStatus = { usedBytes: number; budgetBytes: number; documents: number; chunks: number };
+type KnowledgeUpdates = { week: string; month: string; changelog: string; weekUpdatedAt: string | null };
+type KnowledgeTab = "discover" | "vault" | "updates";
 
 export default function Home() {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
@@ -42,11 +45,16 @@ export default function Home() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState("");
   const [knowledgeStatus, setKnowledgeStatus] = useState<KnowledgeStatus | null>(null);
-  const [knowledgeUpdates, setKnowledgeUpdates] = useState<{ week: string; month: string } | null>(null);
+  const [knowledgeUpdates, setKnowledgeUpdates] = useState<KnowledgeUpdates | null>(null);
+  const [knowledgePanelOpen, setKnowledgePanelOpen] = useState(false);
+  const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab>("discover");
+  const [knowledgePeriod, setKnowledgePeriod] = useState<"week" | "month">("week");
+  const [readKnowledgeVersion, setReadKnowledgeVersion] = useState<string | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const followLatestRef = useRef(true);
+  const knowledgeCloseRef = useRef<HTMLButtonElement>(null);
 
   async function refreshStatus() {
     try {
@@ -131,11 +139,26 @@ export default function Home() {
     const savedPalette = localStorage.getItem("rangabot-palette") as Palette | null;
     if (savedAppearance === "light" || savedAppearance === "dark") setAppearance(savedAppearance);
     if (["sand", "sage", "lavender"].includes(savedPalette ?? "")) setPalette(savedPalette as Palette);
+    setReadKnowledgeVersion(localStorage.getItem("rangabot-knowledge-read"));
     void refreshStatus();
     void refreshConversations();
     void refreshProjects();
     void refreshKnowledge();
   }, []);
+  useEffect(() => {
+    if (!knowledgePanelOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setKnowledgePanelOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    requestAnimationFrame(() => knowledgeCloseRef.current?.focus());
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [knowledgePanelOpen]);
+  useEffect(() => {
+    if (!knowledgePanelOpen || knowledgeTab !== "discover" || !knowledgeUpdates?.weekUpdatedAt) return;
+    localStorage.setItem("rangabot-knowledge-read", knowledgeUpdates.weekUpdatedAt);
+    setReadKnowledgeVersion(knowledgeUpdates.weekUpdatedAt);
+  }, [knowledgePanelOpen, knowledgeTab, knowledgeUpdates?.weekUpdatedAt]);
   useEffect(() => {
     const parameters = new URLSearchParams(window.location.search);
     if (parameters.get("demo") !== "knowledge") return;
@@ -327,6 +350,21 @@ export default function Home() {
   const visibleConversations = activeProjectId
     ? conversations.filter((conversation) => conversation.projectId === activeProjectId)
     : conversations;
+  const weeklyBrief = useMemo(() => parseKnowledgeBrief(knowledgeUpdates?.week ?? ""), [knowledgeUpdates?.week]);
+  const unreadKnowledge = knowledgeUpdates?.weekUpdatedAt && knowledgeUpdates.weekUpdatedAt !== readKnowledgeVersion
+    ? weeklyBrief.length
+    : 0;
+
+  function openKnowledgeBrief(tab: KnowledgeTab = "discover") {
+    setKnowledgeTab(tab);
+    setKnowledgePanelOpen(true);
+  }
+
+  function askAboutUpdate(title: string) {
+    setInput(`Teach me about this update and why it matters: ${title}`);
+    setKnowledgePanelOpen(false);
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus());
+  }
 
   function followCursor(event: React.PointerEvent<HTMLElement>) {
     const x = Math.max(-1, Math.min(1, (event.clientX / window.innerWidth - .5) * 2));
@@ -360,12 +398,10 @@ export default function Home() {
           </div>)}
           <form className="project-create" onSubmit={createNewProject}><input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="New project" maxLength={60} aria-label="New project name" /><button type="submit" disabled={!newProjectName.trim()} aria-label="Create project">＋</button></form>
         </section>
-        <details className="knowledge-card">
-          <summary><span>Knowledge Vault</span><small>{knowledgeStatus ? `${knowledgeStatus.documents} docs · ${(knowledgeStatus.usedBytes / 1024 ** 2).toFixed(0)} MB` : "Loading…"}</small></summary>
-          <div className="knowledge-report"><strong>New this week</strong><p>{knowledgeUpdates?.week.replace(/^#.*\n+|^##.*\n+/gm, "").trim() ?? "No report yet."}</p></div>
-          <div className="knowledge-report"><strong>New this month</strong><p>{knowledgeUpdates?.month.replace(/^#.*\n+|^##.*\n+/gm, "").trim() ?? "No report yet."}</p></div>
-          {knowledgeStatus && <progress value={knowledgeStatus.usedBytes} max={knowledgeStatus.budgetBytes} aria-label="Knowledge Vault storage used" />}
-        </details>
+        <button type="button" className="knowledge-launcher" onClick={() => openKnowledgeBrief()}>
+          <span><strong>Knowledge Brief</strong><small>{knowledgeStatus ? `${knowledgeStatus.documents} docs · ${(knowledgeStatus.usedBytes / 1024 ** 2).toFixed(0)} MB` : "Loading…"}</small></span>
+          <span className="knowledge-launcher-action">{unreadKnowledge > 0 ? <b>{unreadKnowledge} new</b> : "Explore"} <i aria-hidden="true">›</i></span>
+        </button>
         <nav className="history">
           <span className="nav-label">{activeProjectId ? "Project chats" : "Recent chats"}</span>
           {visibleConversations.length === 0 && <p className="history-empty">Your local conversations will appear here.</p>}
@@ -386,6 +422,9 @@ export default function Home() {
         <header>
           <div><h1>Rangabot</h1><p>Code, think, and build privately</p></div>
           <div className="header-actions">
+            <button type="button" className="knowledge-header-button" onClick={() => openKnowledgeBrief()} aria-label={`Open Knowledge Brief${unreadKnowledge ? `, ${unreadKnowledge} new items` : ""}`}>
+              ◈<span>Brief</span>{unreadKnowledge > 0 && <b>{unreadKnowledge}</b>}
+            </button>
             <div className="theme-picker" aria-label="Theme settings">
               <button type="button" className="appearance-toggle" onClick={() => changeAppearance(appearance === "dark" ? "light" : "dark")} aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}>{appearance === "dark" ? "☀︎" : "☾"}</button>
               {(["sand", "sage", "lavender"] as Palette[]).map((choice) => <button type="button" key={choice} className={`palette-dot ${choice} ${palette === choice ? "selected" : ""}`} onClick={() => changePalette(choice)} aria-label={`Use ${choice} palette`} />)}
@@ -489,6 +528,56 @@ export default function Home() {
           <small>Local models can make mistakes. Review important code and decisions.</small>
         </div>
       </section>
+
+      {knowledgePanelOpen && (
+        <div className="knowledge-backdrop" onMouseDown={() => setKnowledgePanelOpen(false)}>
+          <aside className="knowledge-panel" role="dialog" aria-modal="true" aria-labelledby="knowledge-panel-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="knowledge-panel-header">
+              <div><span>Local intelligence</span><h2 id="knowledge-panel-title">Knowledge Brief</h2></div>
+              <button type="button" ref={knowledgeCloseRef} onClick={() => setKnowledgePanelOpen(false)} aria-label="Close Knowledge Brief">×</button>
+            </div>
+            <nav className="knowledge-tabs" aria-label="Knowledge Brief sections">
+              <button type="button" className={knowledgeTab === "discover" ? "active" : ""} onClick={() => setKnowledgeTab("discover")}>Discover</button>
+              <button type="button" className={knowledgeTab === "vault" ? "active" : ""} onClick={() => setKnowledgeTab("vault")}>Vault</button>
+              <button type="button" className={knowledgeTab === "updates" ? "active" : ""} onClick={() => setKnowledgeTab("updates")}>Rangabot updates</button>
+            </nav>
+            <div className="knowledge-panel-content">
+              {knowledgeTab === "discover" && <>
+                <div className="knowledge-period" aria-label="Brief period">
+                  <button type="button" className={knowledgePeriod === "week" ? "active" : ""} onClick={() => setKnowledgePeriod("week")}>This week</button>
+                  <button type="button" className={knowledgePeriod === "month" ? "active" : ""} onClick={() => setKnowledgePeriod("month")}>This month</button>
+                </div>
+                {knowledgePeriod === "week" ? (
+                  <div className="brief-list">
+                    {weeklyBrief.length === 0 && <p className="knowledge-empty">No verified updates are available this week.</p>}
+                    {weeklyBrief.map((item) => <article className="brief-card" key={`${item.category}-${item.title}`}>
+                      <div className="brief-meta"><span>{item.category}</span><time>{item.date}</time></div>
+                      <h3>{item.title}</h3>
+                      <p>{item.change}</p>
+                      <div className="brief-why"><strong>Why it matters</strong><p>{item.why}</p></div>
+                      <div className="brief-footer">
+                        {item.evidenceUrl ? <a href={item.evidenceUrl} target="_blank" rel="noreferrer">{item.evidenceLabel || "Source"}</a> : <span>{item.evidenceLabel}</span>}
+                        <small>{item.vaultStatus}</small>
+                      </div>
+                      <button type="button" className="ask-update" onClick={() => askAboutUpdate(item.title)}>Ask Rangabot about this <span aria-hidden="true">→</span></button>
+                    </article>)}
+                  </div>
+                ) : <div className="knowledge-markdown"><MarkdownMessage content={knowledgeUpdates?.month ?? "No monthly brief is available yet."} /></div>}
+              </>}
+              {knowledgeTab === "vault" && <section className="vault-overview">
+                <div className="vault-stat-grid">
+                  <div><strong>{knowledgeStatus?.documents ?? "—"}</strong><span>Documents</span></div>
+                  <div><strong>{knowledgeStatus?.chunks ?? "—"}</strong><span>Passages</span></div>
+                  <div><strong>{knowledgeStatus ? `${(knowledgeStatus.usedBytes / 1024 ** 2).toFixed(0)} MB` : "—"}</strong><span>Local storage</span></div>
+                </div>
+                {knowledgeStatus && <><progress value={knowledgeStatus.usedBytes} max={knowledgeStatus.budgetBytes} aria-label="Knowledge Vault storage used" /><p>{((knowledgeStatus.usedBytes / knowledgeStatus.budgetBytes) * 100).toFixed(1)}% of the private 4 GB budget used.</p></>}
+                <div className="vault-note"><strong>Private by design</strong><p>Documents, passages, embeddings and retrieval stay on this computer. Add material to <code>data/knowledge/inbox/</code> and run <code>npm run knowledge:ingest</code>.</p></div>
+              </section>}
+              {knowledgeTab === "updates" && <div className="knowledge-markdown changelog"><MarkdownMessage content={knowledgeUpdates?.changelog ?? "No Rangabot changelog is available yet."} /></div>}
+            </div>
+          </aside>
+        </div>
+      )}
     </main>
   );
 }
