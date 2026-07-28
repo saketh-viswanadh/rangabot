@@ -35,6 +35,7 @@ The server binds only to the local computer by default.
 - Automatic local Knowledge Vault lookup for informational questions in Smart mode
 - Weekly and monthly sourced subject-intelligence briefs
 - Dedicated Knowledge Brief panel with news cards, vault status and app changelog
+- Offline welcome library with 100 quotes, 100 jokes and 100 thoughts, plus a 60-item no-repeat window
 - No cloud transmission
 
 Conversation data stays in `data/rangabot.db` on this computer. The database and

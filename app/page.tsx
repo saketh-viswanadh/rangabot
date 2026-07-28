@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ProviderStatus } from "@/lib/providers/types";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
-import { welcomeLines } from "@/lib/welcome-content";
+import { appendWelcomeHistory, chooseWelcomeIndex, parseWelcomeHistory, welcomeLines } from "@/lib/welcome-content";
 import { isNearMessageBottom } from "@/lib/message-scroll";
 import { parseKnowledgeBrief } from "@/lib/knowledge-brief";
 
@@ -140,6 +140,7 @@ export default function Home() {
     if (savedAppearance === "light" || savedAppearance === "dark") setAppearance(savedAppearance);
     if (["sand", "sage", "lavender"].includes(savedPalette ?? "")) setPalette(savedPalette as Palette);
     setReadKnowledgeVersion(localStorage.getItem("rangabot-knowledge-read"));
+    setWelcomeIndex((current) => nextWelcomeIndex(current));
     void refreshStatus();
     void refreshConversations();
     void refreshProjects();
@@ -338,7 +339,14 @@ export default function Home() {
     setActiveProjectId(projectId);
     setInput("");
     setReplyTo(null);
-    setWelcomeIndex((current) => (current + 1 + Math.floor(Math.random() * (welcomeLines.length - 1))) % welcomeLines.length);
+    setWelcomeIndex((current) => nextWelcomeIndex(current));
+  }
+
+  function nextWelcomeIndex(current: number) {
+    const history = parseWelcomeHistory(localStorage.getItem("rangabot-welcome-history"));
+    const next = chooseWelcomeIndex(current, history);
+    localStorage.setItem("rangabot-welcome-history", JSON.stringify(appendWelcomeHistory(history, next)));
+    return next;
   }
 
   function chooseStarter(prompt: string) {
