@@ -43,6 +43,7 @@ export default function Home() {
   const [sending, setSending] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationSearch, setConversationSearch] = useState("");
+  const [conversationTransferMessage, setConversationTransferMessage] = useState("");
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState("");
@@ -57,6 +58,7 @@ export default function Home() {
   const abortRef = useRef<AbortController | null>(null);
   const followLatestRef = useRef(true);
   const knowledgeCloseRef = useRef<HTMLButtonElement>(null);
+  const conversationImportRef = useRef<HTMLInputElement>(null);
 
   async function refreshStatus() {
     try {
@@ -146,6 +148,29 @@ export default function Home() {
       body: JSON.stringify({ pinned: !conversation.pinned }),
     });
     if (response.ok) await refreshConversations();
+  }
+
+  async function importConversation(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setConversationTransferMessage("Import failed: the file is larger than 2 MB.");
+      return;
+    }
+    const response = await fetch("/api/conversations/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markdown: await file.text(), projectId: activeProjectId }),
+    });
+    const data = (await response.json()) as { conversation?: { id: string }; error?: string };
+    if (!response.ok || !data.conversation) {
+      setConversationTransferMessage(`Import failed: ${data.error ?? "invalid file"}`);
+      return;
+    }
+    setConversationTransferMessage(`Imported ${file.name} locally.`);
+    await refreshConversations();
+    await openConversation(data.conversation.id);
   }
 
   useEffect(() => {
@@ -446,13 +471,21 @@ export default function Home() {
           <input value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Search chats" aria-label="Search conversations" maxLength={120} />
           {conversationSearch && <button type="button" onClick={() => setConversationSearch("")} aria-label="Clear conversation search">×</button>}
         </label>
+        <div className="conversation-tools">
+          <button type="button" onClick={() => conversationImportRef.current?.click()}>Import .md</button>
+          {activeConversationId
+            ? <a href={`/api/conversations/${activeConversationId}/export`}>Export open chat</a>
+            : <span aria-disabled="true">Export open chat</span>}
+          <input ref={conversationImportRef} type="file" accept=".md,text/markdown,text/plain" onChange={(event) => void importConversation(event)} />
+        </div>
+        {conversationTransferMessage && <p className="conversation-transfer-status" role="status">{conversationTransferMessage}</p>}
         <nav className="history">
           <span className="nav-label">{conversationSearch ? "Search results" : activeProjectId ? "Project chats" : "Recent chats"}</span>
           {visibleConversations.length === 0 && <p className="history-empty">{conversationSearch ? "No local conversations match this search." : "Your local conversations will appear here."}</p>}
           {visibleConversations.map((conversation) => (
             <div className={`history-row ${conversation.id === activeConversationId ? "active" : ""} ${conversation.pinned ? "pinned" : ""}`} key={conversation.id}>
               <button type="button" onClick={() => void openConversation(conversation.id)}>{conversation.title}</button>
-              <button type="button" className="pin-chat" onClick={() => void toggleConversationPin(conversation)} aria-label={`${conversation.pinned ? "Unpin" : "Pin"} ${conversation.title}`} aria-pressed={conversation.pinned}>{conversation.pinned ? "◆" : "◇"}</button>
+              <button type="button" className="pin-chat" onClick={() => void toggleConversationPin(conversation)} aria-label={`${conversation.pinned ? "Unpin" : "Pin"} ${conversation.title}`} aria-pressed={conversation.pinned}>{conversation.pinned ? "Pinned" : "Pin"}</button>
               <button type="button" className="delete-chat" onClick={() => void removeConversation(conversation.id)} aria-label={`Delete ${conversation.title}`}>×</button>
             </div>
           ))}
