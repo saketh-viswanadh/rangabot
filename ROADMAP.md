@@ -10,6 +10,8 @@
 - [x] Local SQLite conversation history: create, list, reopen, update, and delete
 - [x] Markdown and syntax-highlighted code rendering with copy controls
 - [x] Message hover affordances and reply-to-message context
+- [x] Varied offline welcome rotation with quotes, jokes, and original thoughts
+- [x] Local project folders with project-scoped chat history
 - [ ] Model management for installed models and active selection
 - [ ] Repository selection with an explicit filesystem allowlist
 - [ ] Local code search with scoped file-context previews
@@ -41,3 +43,7 @@
   links open separately, and code highlighting and copying stay in-browser.
 - Appearance preferences stay in browser-local storage. Reply references remain
   in the local conversation record and are expanded only for the local model.
+- Welcome content is reviewed and bundled with the app. It never introduces a
+  runtime network request; additions require attribution and duplicate checks.
+- Projects currently organize local chats only. Selecting a project never grants
+  filesystem access; repository attachment remains a separate allowlist flow.
