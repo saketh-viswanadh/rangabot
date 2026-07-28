@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import type { ChatMessage, ProviderStatus } from "@/lib/providers/types";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { welcomeLines } from "@/lib/welcome-content";
+import { isNearMessageBottom } from "@/lib/message-scroll";
 
 type Mode = "local" | "smart" | "teach" | "codex";
 type Appearance = "light" | "dark";
@@ -45,6 +46,7 @@ export default function Home() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const followLatestRef = useRef(true);
 
   async function refreshStatus() {
     try {
@@ -107,6 +109,7 @@ export default function Home() {
     const response = await fetch(`/api/conversations/${id}`, { cache: "no-store" });
     if (!response.ok) return;
     const data = (await response.json()) as { conversation: { messages: ChatMessage[] } };
+    followLatestRef.current = true;
     setMessages(data.conversation.messages.map((message) => ({
       ...message,
       id: crypto.randomUUID(),
@@ -160,7 +163,9 @@ export default function Home() {
       content: "NumPy 2.5 raises the Python baseline to 3.12+, removes distutils, improves free-threading support, and adds Array API-compatible descending sorts. For an upgrade, test packaging and sorting behavior against your real workloads. [Source 1]",
     }]);
   }, []);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => {
+    if (followLatestRef.current) endRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+  }, [messages]);
 
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
@@ -189,6 +194,7 @@ export default function Home() {
         void refreshConversations();
       }
     }
+    followLatestRef.current = true;
     setMessages((current) => [...current, userMessage, {
       id: assistantId,
       role: "assistant",
@@ -303,6 +309,7 @@ export default function Home() {
 
   function startNewChat(projectId: string | null = activeProjectId) {
     abortRef.current?.abort();
+    followLatestRef.current = true;
     setMessages([]);
     setActiveConversationId(null);
     setActiveProjectId(projectId);
@@ -389,7 +396,16 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="messages">
+        <div
+          className="messages"
+          onScroll={(event) => {
+            const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
+            followLatestRef.current = isNearMessageBottom(scrollTop, clientHeight, scrollHeight);
+          }}
+          onWheel={(event) => {
+            if (event.deltaY < 0) followLatestRef.current = false;
+          }}
+        >
           {messages.length === 0 && (
             <section className="welcome-state" aria-labelledby="welcome-title">
               <div className="ranga-scene" aria-hidden="true"><span className="butterfly one">◆</span><span className="butterfly two">◆</span><div className="welcome-orbit" /></div>
