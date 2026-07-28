@@ -119,14 +119,18 @@ available offline after the weekly source check.
 
 ## Next milestones
 
-- Repository selection and local code search
-- Page-aware citation display and source preview controls
-- Curated technical, history, and mythology source packs
-- Retrieval evaluation fixtures by subject
-- Model management and active model selection (deferred)
-- Cloud handoff preview and approval
-- Model registry, evaluation, updates, and rollback
-- Safe daily feature-branch automation
+1. Preserve book, chapter, section, heading, page, and passage structure during
+   Knowledge Vault ingestion.
+2. Add conversation-aware multi-book retrieval and evidence synthesis using the
+   downloaded model, vault sources, and relevant chat context.
+3. Add inspectable local learning memory and cross-book concept summaries.
+4. Add draft, grounding, revision, feedback, and regression-evaluation loops so
+   improvement is measured rather than assumed.
+5. Continue the artifact roadmap with existing-Word editing, PDF, email drafting,
+   long-form writing, technical documentation, presentations, and spreadsheets.
+
+Model management remains deferred. Cloud/Codex handoff remains disabled pending
+a separately approved disclosure and consent design.
 
 ## Contributing
 

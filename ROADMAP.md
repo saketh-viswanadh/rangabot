@@ -1,5 +1,30 @@
 # Rangabot roadmap
 
+## Current execution order
+
+The completed foundation remains documented below. New work follows this order
+unless user feedback exposes a more urgent defect:
+
+1. **Learning Core foundation** — hierarchical ingestion plus source-aware,
+   multi-book retrieval.
+2. **Knowledge synthesis** — conversation-aware planning, comparison across
+   sources, disagreement handling, and original explanations that combine cited
+   vault evidence with clearly labelled downloaded-model background.
+3. **Inspectable local learning** — preferences, proficiency, progress,
+   corrections, and approved conclusions with provenance and user controls.
+4. **Quality engine** — draft, grounding review, revision, feedback capture, and
+   regression evaluation across teaching, coding, research, and writing.
+5. **Cross-book knowledge layer** — rebuildable concept summaries and
+   relationships that update when the vault changes.
+6. **Artifact expansion** — existing Word editing, then PDF, email drafting,
+   long-form writing, technical documentation and diagrams, presentations, and
+   spreadsheets, each using the shared gold-standard validation contract.
+7. **Deferred platform work** — installed-model management, optional local
+   encryption, and any cloud/Codex handoff design.
+
+Automatic model-weight mutation is not part of this sequence. A reviewed
+fine-tuning dataset and rollback workflow remain a later proposal.
+
 ## Approved
 
 - [x] Open-source governance, security, support and contribution foundation
@@ -7,9 +32,9 @@
 - [x] Public local-model registry with hardware and upstream-license guidance
 - [x] Self-service Knowledge Vault initialization, validation, backup and rollback
 - [x] Pull-request CI and community issue templates
-- [ ] Fresh-clone and cross-platform open-source release rehearsal
+- [x] Fresh-clone and cross-platform open-source release rehearsal
 - [x] Final Ranga artwork and Rangabot branding license decision
-- [ ] Historical Git-object secret scan before visibility change
+- [x] Historical Git-object secret scan before visibility change
 - [x] Local Ollama provider behind typed interfaces
 - [x] Streaming responses and Stop generation
 - [x] Apple-inspired interface and Ranga mascot
