@@ -95,6 +95,12 @@ Rangabot welcomes community development. Read
 request. Codex is optional; all required maintenance paths are normal scripts,
 documentation and GitHub workflows.
 
+New contributors can browse
+[`good first issue`](https://github.com/saketh-viswanadh/rangabot/labels/good%20first%20issue)
+and [`help wanted`](https://github.com/saketh-viswanadh/rangabot/labels/help%20wanted)
+tasks, or introduce themselves in
+[GitHub Discussions](https://github.com/saketh-viswanadh/rangabot/discussions).
+
 CI validates Linux and Windows on every pull request; macOS is covered by the
 documented clean-clone release rehearsal. Starter-source licensing and the
 local-download-only policy are documented in

@@ -12,3 +12,6 @@ Start Rangabot and open:
 The demo mode is presentation-only: it does not persist the synthetic messages
 or transmit them to Ollama. Regenerate media after material UI changes and
 review every frame before publishing it.
+
+`rangabot-social-preview.png` is the 1280×640 public repository sharing card.
+It uses generated, project-owned launch artwork and contains no user content.
