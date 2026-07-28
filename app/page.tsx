@@ -22,6 +22,7 @@ type ConversationSummary = {
   id: string;
   title: string;
   projectId: string | null;
+  pinned: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -41,6 +42,7 @@ export default function Home() {
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [sending, setSending] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [conversationSearch, setConversationSearch] = useState("");
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState("");
@@ -65,8 +67,11 @@ export default function Home() {
     }
   }
 
-  async function refreshConversations() {
-    const response = await fetch("/api/conversations", { cache: "no-store" });
+  async function refreshConversations(query = conversationSearch, projectId = activeProjectId) {
+    const parameters = new URLSearchParams();
+    if (query.trim()) parameters.set("query", query.trim());
+    if (projectId) parameters.set("projectId", projectId);
+    const response = await fetch(`/api/conversations${parameters.size ? `?${parameters}` : ""}`, { cache: "no-store" });
     if (response.ok) {
       const data = (await response.json()) as { conversations: ConversationSummary[] };
       setConversations(data.conversations);
@@ -134,6 +139,15 @@ export default function Home() {
     await refreshConversations();
   }
 
+  async function toggleConversationPin(conversation: ConversationSummary) {
+    const response = await fetch(`/api/conversations/${conversation.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pinned: !conversation.pinned }),
+    });
+    if (response.ok) await refreshConversations();
+  }
+
   useEffect(() => {
     const savedAppearance = localStorage.getItem("rangabot-appearance") as Appearance | null;
     const savedPalette = localStorage.getItem("rangabot-palette") as Palette | null;
@@ -142,10 +156,29 @@ export default function Home() {
     setReadKnowledgeVersion(localStorage.getItem("rangabot-knowledge-read"));
     setWelcomeIndex((current) => nextWelcomeIndex(current));
     void refreshStatus();
-    void refreshConversations();
     void refreshProjects();
     void refreshKnowledge();
   }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      const parameters = new URLSearchParams();
+      if (conversationSearch.trim()) parameters.set("query", conversationSearch.trim());
+      if (activeProjectId) parameters.set("projectId", activeProjectId);
+      const response = await fetch(`/api/conversations${parameters.size ? `?${parameters}` : ""}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      }).catch(() => null);
+      if (response?.ok) {
+        const data = (await response.json()) as { conversations: ConversationSummary[] };
+        setConversations(data.conversations);
+      }
+    }, 160);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [conversationSearch, activeProjectId]);
   useEffect(() => {
     if (!knowledgePanelOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -355,9 +388,7 @@ export default function Home() {
   }
 
   const ready = status?.available && status.modelInstalled;
-  const visibleConversations = activeProjectId
-    ? conversations.filter((conversation) => conversation.projectId === activeProjectId)
-    : conversations;
+  const visibleConversations = conversations;
   const weeklyBrief = useMemo(() => parseKnowledgeBrief(knowledgeUpdates?.week ?? ""), [knowledgeUpdates?.week]);
   const unreadKnowledge = knowledgeUpdates?.weekUpdatedAt && knowledgeUpdates.weekUpdatedAt !== readKnowledgeVersion
     ? weeklyBrief.length
@@ -410,12 +441,18 @@ export default function Home() {
           <span><strong>Knowledge Brief</strong><small>{knowledgeStatus ? `${knowledgeStatus.documents} docs · ${(knowledgeStatus.usedBytes / 1024 ** 2).toFixed(0)} MB` : "Loading…"}</small></span>
           <span className="knowledge-launcher-action">{unreadKnowledge > 0 ? <b>{unreadKnowledge} new</b> : "Explore"} <i aria-hidden="true">›</i></span>
         </button>
+        <label className="conversation-search">
+          <span aria-hidden="true">⌕</span>
+          <input value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Search chats" aria-label="Search conversations" maxLength={120} />
+          {conversationSearch && <button type="button" onClick={() => setConversationSearch("")} aria-label="Clear conversation search">×</button>}
+        </label>
         <nav className="history">
-          <span className="nav-label">{activeProjectId ? "Project chats" : "Recent chats"}</span>
-          {visibleConversations.length === 0 && <p className="history-empty">Your local conversations will appear here.</p>}
+          <span className="nav-label">{conversationSearch ? "Search results" : activeProjectId ? "Project chats" : "Recent chats"}</span>
+          {visibleConversations.length === 0 && <p className="history-empty">{conversationSearch ? "No local conversations match this search." : "Your local conversations will appear here."}</p>}
           {visibleConversations.map((conversation) => (
-            <div className={`history-row ${conversation.id === activeConversationId ? "active" : ""}`} key={conversation.id}>
+            <div className={`history-row ${conversation.id === activeConversationId ? "active" : ""} ${conversation.pinned ? "pinned" : ""}`} key={conversation.id}>
               <button type="button" onClick={() => void openConversation(conversation.id)}>{conversation.title}</button>
+              <button type="button" className="pin-chat" onClick={() => void toggleConversationPin(conversation)} aria-label={`${conversation.pinned ? "Unpin" : "Pin"} ${conversation.title}`} aria-pressed={conversation.pinned}>{conversation.pinned ? "◆" : "◇"}</button>
               <button type="button" className="delete-chat" onClick={() => void removeConversation(conversation.id)} aria-label={`Delete ${conversation.title}`}>×</button>
             </div>
           ))}

@@ -12,6 +12,7 @@ export interface ConversationSummary {
   id: string;
   title: string;
   projectId: string | null;
+  pinned: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,6 +56,9 @@ function getDatabase() {
   if (!columns.some((column) => column.name === "project_id")) {
     database.exec("ALTER TABLE conversations ADD COLUMN project_id TEXT");
   }
+  if (!columns.some((column) => column.name === "pinned")) {
+    database.exec("ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
+  }
   return database;
 }
 
@@ -62,12 +66,33 @@ function parseMessages(value: string): ChatMessage[] {
   return JSON.parse(value) as ChatMessage[];
 }
 
-export function listConversations(): ConversationSummary[] {
-  return getDatabase().prepare(`
-    SELECT id, title, project_id AS projectId, created_at AS createdAt, updated_at AS updatedAt
+type ConversationSummaryRow = Omit<ConversationSummary, "pinned"> & { pinned: number };
+
+function toConversationSummary(row: ConversationSummaryRow): ConversationSummary {
+  return { ...row, pinned: Boolean(row.pinned) };
+}
+
+export function listConversations(options: { query?: string; projectId?: string | null } = {}): ConversationSummary[] {
+  const query = options.query?.trim().toLocaleLowerCase() ?? "";
+  const conditions: string[] = [];
+  const parameters: string[] = [];
+  if (options.projectId) {
+    conditions.push("project_id = ?");
+    parameters.push(options.projectId);
+  }
+  if (query) {
+    conditions.push("(lower(title) LIKE ? ESCAPE '\\' OR lower(messages) LIKE ? ESCAPE '\\')");
+    const escaped = query.replace(/[\\%_]/g, "\\$&");
+    parameters.push(`%${escaped}%`, `%${escaped}%`);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const rows = getDatabase().prepare(`
+    SELECT id, title, project_id AS projectId, pinned, created_at AS createdAt, updated_at AS updatedAt
     FROM conversations
-    ORDER BY updated_at DESC
-  `).all() as unknown as ConversationSummary[];
+    ${where}
+    ORDER BY pinned DESC, updated_at DESC
+  `).all(...parameters) as unknown as ConversationSummaryRow[];
+  return rows.map(toConversationSummary);
 }
 
 export function createConversation(messages: ChatMessage[], projectId: string | null = null): Conversation {
@@ -76,6 +101,7 @@ export function createConversation(messages: ChatMessage[], projectId: string | 
     id: randomUUID(),
     title: titleFromMessages(messages),
     projectId,
+    pinned: false,
     messages,
     createdAt: now,
     updatedAt: now,
@@ -96,10 +122,10 @@ export function createConversation(messages: ChatMessage[], projectId: string | 
 
 export function getConversation(id: string): Conversation | null {
   const row = getDatabase().prepare(`
-    SELECT id, title, messages, project_id AS projectId, created_at AS createdAt, updated_at AS updatedAt
+    SELECT id, title, messages, project_id AS projectId, pinned, created_at AS createdAt, updated_at AS updatedAt
     FROM conversations WHERE id = ?
-  `).get(id) as unknown as (ConversationSummary & { messages: string }) | undefined;
-  return row ? { ...row, messages: parseMessages(row.messages) } : null;
+  `).get(id) as unknown as (ConversationSummaryRow & { messages: string }) | undefined;
+  return row ? { ...toConversationSummary(row), messages: parseMessages(row.messages) } : null;
 }
 
 export function updateConversation(id: string, messages: ChatMessage[]): Conversation | null {
@@ -114,6 +140,16 @@ export function updateConversation(id: string, messages: ChatMessage[]): Convers
 
 export function deleteConversation(id: string): boolean {
   return getDatabase().prepare("DELETE FROM conversations WHERE id = ?").run(id).changes > 0;
+}
+
+export function setConversationPinned(id: string, pinned: boolean): ConversationSummary | null {
+  const result = getDatabase().prepare("UPDATE conversations SET pinned = ? WHERE id = ?").run(pinned ? 1 : 0, id);
+  if (!result.changes) return null;
+  const row = getDatabase().prepare(`
+    SELECT id, title, project_id AS projectId, pinned, created_at AS createdAt, updated_at AS updatedAt
+    FROM conversations WHERE id = ?
+  `).get(id) as unknown as ConversationSummaryRow;
+  return toConversationSummary(row);
 }
 
 export function listProjects(): ProjectSummary[] {

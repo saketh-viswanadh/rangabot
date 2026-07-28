@@ -19,6 +19,7 @@ test("creates, lists, updates, opens, and deletes a local conversation", () => {
   assert.equal(created.projectId, project.id);
   assert.equal(conversations.listProjects()[0]?.name, "Tiny app");
   assert.equal(conversations.listConversations()[0]?.id, created.id);
+  assert.equal(created.pinned, false);
 
   const updated = conversations.updateConversation(created.id, [
     { role: "user", content: "Plan a tiny local app" },
@@ -27,10 +28,21 @@ test("creates, lists, updates, opens, and deletes a local conversation", () => {
   assert.equal(updated?.messages.length, 2);
   assert.equal(conversations.getConversation(created.id)?.messages[1]?.role, "assistant");
 
+  const other = conversations.createConversation([
+    { role: "user", content: "Discuss a garden" },
+    { role: "assistant", content: "A private vector database can help." },
+  ]);
+  assert.equal(conversations.listConversations({ query: "VECTOR DATABASE" })[0]?.id, other.id);
+  assert.equal(conversations.listConversations({ query: "tiny local", projectId: project.id })[0]?.id, created.id);
+  assert.equal(conversations.listConversations({ query: "garden", projectId: project.id }).length, 0);
+  assert.equal(conversations.setConversationPinned(created.id, true)?.pinned, true);
+  assert.equal(conversations.listConversations()[0]?.id, created.id);
+
   assert.equal(conversations.updateProject(project.id, "Tiny local app")?.name, "Tiny local app");
   assert.equal(conversations.deleteProject(project.id), true);
   assert.equal(conversations.getConversation(created.id)?.projectId, null);
 
   assert.equal(conversations.deleteConversation(created.id), true);
+  assert.equal(conversations.deleteConversation(other.id), true);
   assert.equal(conversations.getConversation(created.id), null);
 });

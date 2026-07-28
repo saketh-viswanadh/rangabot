@@ -7,6 +7,9 @@ All notable released changes will be documented here using
 
 ### Added
 
+- Local conversation search across titles and message content, scoped to the
+  selected project when applicable.
+- Persistent conversation pinning with pinned chats sorted above recent chats.
 - A dedicated Knowledge Brief drawer with weekly intelligence cards, monthly
   archive, private-vault status and a separate Rangabot product changelog.
 - A bundled 300-item welcome library with 100 quotes, 100 jokes and 100 thoughts.
