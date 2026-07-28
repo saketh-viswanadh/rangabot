@@ -11,6 +11,14 @@ const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sql
 export interface ConversationSummary {
   id: string;
   title: string;
+  projectId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -36,7 +44,17 @@ function getDatabase() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
+  const columns = database.prepare("PRAGMA table_info(conversations)").all() as unknown as { name: string }[];
+  if (!columns.some((column) => column.name === "project_id")) {
+    database.exec("ALTER TABLE conversations ADD COLUMN project_id TEXT");
+  }
   return database;
 }
 
@@ -46,28 +64,30 @@ function parseMessages(value: string): ChatMessage[] {
 
 export function listConversations(): ConversationSummary[] {
   return getDatabase().prepare(`
-    SELECT id, title, created_at AS createdAt, updated_at AS updatedAt
+    SELECT id, title, project_id AS projectId, created_at AS createdAt, updated_at AS updatedAt
     FROM conversations
     ORDER BY updated_at DESC
   `).all() as unknown as ConversationSummary[];
 }
 
-export function createConversation(messages: ChatMessage[]): Conversation {
+export function createConversation(messages: ChatMessage[], projectId: string | null = null): Conversation {
   const now = new Date().toISOString();
   const conversation: Conversation = {
     id: randomUUID(),
     title: titleFromMessages(messages),
+    projectId,
     messages,
     createdAt: now,
     updatedAt: now,
   };
   getDatabase().prepare(`
-    INSERT INTO conversations (id, title, messages, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO conversations (id, title, messages, project_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
   `).run(
     conversation.id,
     conversation.title,
     JSON.stringify(conversation.messages),
+    conversation.projectId,
     conversation.createdAt,
     conversation.updatedAt,
   );
@@ -76,7 +96,7 @@ export function createConversation(messages: ChatMessage[]): Conversation {
 
 export function getConversation(id: string): Conversation | null {
   const row = getDatabase().prepare(`
-    SELECT id, title, messages, created_at AS createdAt, updated_at AS updatedAt
+    SELECT id, title, messages, project_id AS projectId, created_at AS createdAt, updated_at AS updatedAt
     FROM conversations WHERE id = ?
   `).get(id) as unknown as (ConversationSummary & { messages: string }) | undefined;
   return row ? { ...row, messages: parseMessages(row.messages) } : null;
@@ -94,6 +114,44 @@ export function updateConversation(id: string, messages: ChatMessage[]): Convers
 
 export function deleteConversation(id: string): boolean {
   return getDatabase().prepare("DELETE FROM conversations WHERE id = ?").run(id).changes > 0;
+}
+
+export function listProjects(): ProjectSummary[] {
+  return getDatabase().prepare(`
+    SELECT id, name, created_at AS createdAt, updated_at AS updatedAt
+    FROM projects ORDER BY updated_at DESC
+  `).all() as unknown as ProjectSummary[];
+}
+
+export function createProject(name: string): ProjectSummary {
+  const now = new Date().toISOString();
+  const project = { id: randomUUID(), name: name.trim(), createdAt: now, updatedAt: now };
+  getDatabase().prepare("INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)")
+    .run(project.id, project.name, project.createdAt, project.updatedAt);
+  return project;
+}
+
+export function updateProject(id: string, name: string): ProjectSummary | null {
+  const updatedAt = new Date().toISOString();
+  const result = getDatabase().prepare("UPDATE projects SET name = ?, updated_at = ? WHERE id = ?")
+    .run(name.trim(), updatedAt, id);
+  if (!result.changes) return null;
+  return getDatabase().prepare("SELECT id, name, created_at AS createdAt, updated_at AS updatedAt FROM projects WHERE id = ?")
+    .get(id) as unknown as ProjectSummary;
+}
+
+export function deleteProject(id: string): boolean {
+  const db = getDatabase();
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE conversations SET project_id = NULL WHERE project_id = ?").run(id);
+    const deleted = db.prepare("DELETE FROM projects WHERE id = ?").run(id).changes > 0;
+    db.exec("COMMIT");
+    return deleted;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 export function titleFromMessages(messages: ChatMessage[]): string {

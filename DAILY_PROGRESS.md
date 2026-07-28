@@ -101,3 +101,17 @@ by the chat interface until its final edge gate passes.
   and no duplicate text.
 - Kept the runtime fully local: the app never fetches welcome content from the
   internet.
+
+## 2026-07-28 — Local projects and curious Ranga
+
+- Added local SQLite project folders with create, select, rename, and delete
+  controls, plus project-filtered chat history.
+- New conversations inherit the selected project. Deleting a project safely
+  moves its chats back to All chats instead of deleting conversation history.
+- Kept project organization separate from filesystem access; projects grant no
+  permission to read a repository or folder.
+- Added extremely subtle cursor-following movement to Ranga and two infrequent
+  CSS butterflies on the empty state. Ranga makes one restrained curious tilt
+  as a butterfly passes nearby.
+- Used only lightweight CSS transforms and respected reduced-motion settings;
+  no new mascot rendering or animation assets were introduced.

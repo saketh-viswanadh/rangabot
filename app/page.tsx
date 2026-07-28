@@ -18,9 +18,11 @@ type DisplayMessage = ChatMessage & {
 type ConversationSummary = {
   id: string;
   title: string;
+  projectId: string | null;
   createdAt: string;
   updatedAt: string;
 };
+type ProjectSummary = { id: string; name: string; createdAt: string; updatedAt: string };
 
 export default function Home() {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
@@ -33,6 +35,9 @@ export default function Home() {
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [sending, setSending] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [newProjectName, setNewProjectName] = useState("");
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -52,6 +57,39 @@ export default function Home() {
       const data = (await response.json()) as { conversations: ConversationSummary[] };
       setConversations(data.conversations);
     }
+  }
+
+  async function refreshProjects() {
+    const response = await fetch("/api/projects", { cache: "no-store" });
+    if (response.ok) setProjects(((await response.json()) as { projects: ProjectSummary[] }).projects);
+  }
+
+  async function createNewProject(event: FormEvent) {
+    event.preventDefault();
+    const name = newProjectName.trim();
+    if (!name) return;
+    const response = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+    if (!response.ok) return;
+    const project = ((await response.json()) as { project: ProjectSummary }).project;
+    setProjects((current) => [project, ...current]);
+    setActiveProjectId(project.id);
+    setNewProjectName("");
+    startNewChat(project.id);
+  }
+
+  async function renameProject(project: ProjectSummary) {
+    const name = window.prompt("Rename project", project.name)?.trim();
+    if (!name || name === project.name) return;
+    const response = await fetch(`/api/projects/${project.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+    if (response.ok) await refreshProjects();
+  }
+
+  async function removeProject(project: ProjectSummary) {
+    if (!window.confirm(`Delete “${project.name}”? Its chats will move to All chats.`)) return;
+    const response = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
+    if (!response.ok) return;
+    if (activeProjectId === project.id) setActiveProjectId(null);
+    await Promise.all([refreshProjects(), refreshConversations()]);
   }
 
   async function openConversation(id: string) {
@@ -82,6 +120,7 @@ export default function Home() {
     if (["sand", "sage", "lavender"].includes(savedPalette ?? "")) setPalette(savedPalette as Palette);
     void refreshStatus();
     void refreshConversations();
+    void refreshProjects();
   }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
@@ -103,7 +142,7 @@ export default function Home() {
       const createResponse = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: storedMessages }),
+        body: JSON.stringify({ messages: storedMessages, projectId: activeProjectId }),
       });
       if (createResponse.ok) {
         const data = (await createResponse.json()) as { conversation: { id: string } };
@@ -220,10 +259,11 @@ export default function Home() {
     abortRef.current?.abort();
   }
 
-  function startNewChat() {
+  function startNewChat(projectId: string | null = activeProjectId) {
     abortRef.current?.abort();
     setMessages([]);
     setActiveConversationId(null);
+    setActiveProjectId(projectId);
     setInput("");
     setReplyTo(null);
     setWelcomeIndex((current) => (current + 1 + Math.floor(Math.random() * (welcomeLines.length - 1))) % welcomeLines.length);
@@ -235,6 +275,16 @@ export default function Home() {
   }
 
   const ready = status?.available && status.modelInstalled;
+  const visibleConversations = activeProjectId
+    ? conversations.filter((conversation) => conversation.projectId === activeProjectId)
+    : conversations;
+
+  function followCursor(event: React.PointerEvent<HTMLElement>) {
+    const x = Math.max(-1, Math.min(1, (event.clientX / window.innerWidth - .5) * 2));
+    const y = Math.max(-1, Math.min(1, (event.clientY / window.innerHeight - .5) * 2));
+    event.currentTarget.style.setProperty("--look-x", x.toFixed(2));
+    event.currentTarget.style.setProperty("--look-y", y.toFixed(2));
+  }
 
   function changeAppearance(next: Appearance) {
     setAppearance(next);
@@ -247,14 +297,24 @@ export default function Home() {
   }
 
   return (
-    <main className="app-shell" data-appearance={appearance} data-palette={palette}>
+    <main className="app-shell" data-appearance={appearance} data-palette={palette} onPointerMove={followCursor}>
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark" aria-hidden="true" /><span>Rangabot</span></div>
-        <button className="new-chat" onClick={startNewChat}>＋ New chat</button>
+        <button className="new-chat" onClick={() => startNewChat()}>＋ New chat</button>
+        <section className="projects" aria-label="Projects">
+          <div className="project-heading"><span>Projects</span><span>{projects.length}</span></div>
+          <button type="button" className={`project-row ${activeProjectId === null ? "active" : ""}`} onClick={() => { setActiveProjectId(null); startNewChat(null); }}><span>▱</span> All chats</button>
+          {projects.map((project) => <div className={`project-item ${activeProjectId === project.id ? "active" : ""}`} key={project.id}>
+            <button type="button" className="project-row" onClick={() => { setActiveProjectId(project.id); startNewChat(project.id); }}><span>▰</span>{project.name}</button>
+            <button type="button" className="project-more" onClick={() => void renameProject(project)} aria-label={`Rename ${project.name}`}>✎</button>
+            <button type="button" className="project-more" onClick={() => void removeProject(project)} aria-label={`Delete ${project.name}`}>×</button>
+          </div>)}
+          <form className="project-create" onSubmit={createNewProject}><input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="New project" maxLength={60} aria-label="New project name" /><button type="submit" disabled={!newProjectName.trim()} aria-label="Create project">＋</button></form>
+        </section>
         <nav className="history">
-          <span className="nav-label">Recent chats</span>
-          {conversations.length === 0 && <p className="history-empty">Your local conversations will appear here.</p>}
-          {conversations.map((conversation) => (
+          <span className="nav-label">{activeProjectId ? "Project chats" : "Recent chats"}</span>
+          {visibleConversations.length === 0 && <p className="history-empty">Your local conversations will appear here.</p>}
+          {visibleConversations.map((conversation) => (
             <div className={`history-row ${conversation.id === activeConversationId ? "active" : ""}`} key={conversation.id}>
               <button type="button" onClick={() => void openConversation(conversation.id)}>{conversation.title}</button>
               <button type="button" className="delete-chat" onClick={() => void removeConversation(conversation.id)} aria-label={`Delete ${conversation.title}`}>×</button>
@@ -284,7 +344,7 @@ export default function Home() {
         <div className="messages">
           {messages.length === 0 && (
             <section className="welcome-state" aria-labelledby="welcome-title">
-              <div className="welcome-orbit" aria-hidden="true" />
+              <div className="ranga-scene" aria-hidden="true"><span className="butterfly one">◆</span><span className="butterfly two">◆</span><div className="welcome-orbit" /></div>
               <span className="welcome-kicker">{welcomeLines[welcomeIndex].kind}</span>
               <h2 id="welcome-title">A fresh conversation</h2>
               <blockquote>“{welcomeLines[welcomeIndex].text}”</blockquote>

@@ -18,9 +18,10 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as { messages?: unknown };
+  const body = (await request.json()) as { messages?: unknown; projectId?: unknown };
   if (!validMessages(body.messages)) {
     return NextResponse.json({ error: "Valid messages are required." }, { status: 400 });
   }
-  return NextResponse.json({ conversation: createConversation(body.messages) }, { status: 201 });
+  const projectId = typeof body.projectId === "string" ? body.projectId : null;
+  return NextResponse.json({ conversation: createConversation(body.messages, projectId) }, { status: 201 });
 }

@@ -13,8 +13,11 @@ test.after(() => {
 });
 
 test("creates, lists, updates, opens, and deletes a local conversation", () => {
-  const created = conversations.createConversation([{ role: "user", content: "Plan a tiny local app" }]);
+  const project = conversations.createProject("Tiny app");
+  const created = conversations.createConversation([{ role: "user", content: "Plan a tiny local app" }], project.id);
   assert.equal(created.title, "Plan a tiny local app");
+  assert.equal(created.projectId, project.id);
+  assert.equal(conversations.listProjects()[0]?.name, "Tiny app");
   assert.equal(conversations.listConversations()[0]?.id, created.id);
 
   const updated = conversations.updateConversation(created.id, [
@@ -23,6 +26,10 @@ test("creates, lists, updates, opens, and deletes a local conversation", () => {
   ]);
   assert.equal(updated?.messages.length, 2);
   assert.equal(conversations.getConversation(created.id)?.messages[1]?.role, "assistant");
+
+  assert.equal(conversations.updateProject(project.id, "Tiny local app")?.name, "Tiny local app");
+  assert.equal(conversations.deleteProject(project.id), true);
+  assert.equal(conversations.getConversation(created.id)?.projectId, null);
 
   assert.equal(conversations.deleteConversation(created.id), true);
   assert.equal(conversations.getConversation(created.id), null);
