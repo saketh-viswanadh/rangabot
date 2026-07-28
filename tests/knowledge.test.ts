@@ -24,3 +24,9 @@ test("indexes and retrieves a cited local teaching passage", async () => {
   assert.equal(results[0]?.chunk, 1);
   assert.match(results[0]?.content ?? "", /try and except/);
 });
+
+test("recognizes broad teaching-capability questions instead of retrieving a random passage", () => {
+  assert.equal(knowledge.isKnowledgeCatalogQuestion("What all can you teach?"), true);
+  assert.equal(knowledge.isKnowledgeCatalogQuestion("Which topics can I learn here?"), true);
+  assert.equal(knowledge.isKnowledgeCatalogQuestion("Explain Python exceptions"), false);
+});

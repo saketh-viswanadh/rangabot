@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { streamChatWithOllama } from "@/lib/providers/ollama";
 import type { ChatMessage } from "@/lib/providers/types";
-import { searchKnowledge } from "@/lib/knowledge";
+import { buildKnowledgeCatalogAnswer, isKnowledgeCatalogQuestion, searchKnowledge } from "@/lib/knowledge";
 
 export const runtime = "nodejs";
 
@@ -32,6 +32,11 @@ export async function POST(request: Request) {
     let messages = body.messages;
     if (body.mode === "teach") {
       const question = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
+      if (isKnowledgeCatalogQuestion(question)) {
+        return new Response(buildKnowledgeCatalogAnswer(), {
+          headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff" },
+        });
+      }
       const sources = await searchKnowledge(question, 3);
       const context = sources.length
         ? sources.map((source, index) => `[Source ${index + 1}: ${source.title}, passage ${source.chunk}]\n${source.content.slice(0, 900)}`).join("\n\n")

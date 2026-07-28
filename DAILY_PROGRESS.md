@@ -132,3 +132,6 @@ by the chat interface until its final edge gate passes.
   Indra teaching answer from local passages with citations.
 - Added ingestion and retrieval tests. Private books and generated indexes stay
   excluded from Git.
+- Corrected broad questions such as “What all can you teach?” to use the vault
+  catalog and subject manifest instead of retrieving an arbitrary textbook
+  passage. The response now lists actual indexed subjects and source collections.

@@ -54,6 +54,34 @@ function getDatabase() {
 export type KnowledgeChunkInput = { id: string; ordinal: number; content: string; embedding?: number[] };
 export type KnowledgeDocumentInput = { id: string; path: string; title: string; format: string; sizeBytes: number; sha256: string; chunks: KnowledgeChunkInput[] };
 export type KnowledgeResult = { title: string; path: string; chunk: number; content: string; score: number };
+type SourceManifest = { sources?: Array<{ title?: string; subject?: string[]; difficulty?: string }> };
+
+export function isKnowledgeCatalogQuestion(question: string) {
+  return /\b(what|which|list|show)\b.{0,35}\b(teach|learn|subjects?|topics?|knowledge|courses?)\b|\b(teach|learn)\b.{0,20}\b(available|cover|know)\b/i.test(question);
+}
+
+export function buildKnowledgeCatalogAnswer() {
+  const manifest = readSourceManifest() as SourceManifest;
+  const status = getKnowledgeStatus();
+  const subjects = [...new Set(manifest.sources?.flatMap((source) => source.subject ?? []) ?? [])];
+  const titles = manifest.sources?.map((source) => source.title).filter(Boolean) ?? [];
+  const label = (value: string) => value.replaceAll("-", " ").replace(/\b\w/g, (character) => character.toUpperCase());
+  return `# What I can teach from the local vault
+
+I currently have **${status.documents} local documents** split into **${status.chunks.toLocaleString()} searchable teaching passages**.
+
+## Available subjects
+
+${subjects.map((subject) => `- ${label(subject)}`).join("\n")}
+
+## Current source collections
+
+${titles.map((title) => `- ${title}`).join("\n")}
+
+I can explain concepts at beginner or detailed level, build examples, compare interpretations, create quizzes, and answer follow-up questions using these sources. For history and mythology, I will distinguish different versions and flag dated interpretations.
+
+My coverage is limited to what has been indexed locally. Add more textbooks to the Knowledge Vault and run \`npm run knowledge:ingest\` to expand what I can teach.`;
+}
 
 export function hashBuffer(buffer: Buffer) {
   return createHash("sha256").update(buffer).digest("hex");
