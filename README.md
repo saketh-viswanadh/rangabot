@@ -29,7 +29,7 @@ The server binds only to the local computer by default.
 - Private 4 GB Knowledge Vault with PDF, DOCX, HTML, Markdown, and text ingestion
 - Hybrid local keyword and embedding retrieval
 - Teacher Mode with passage citations and explicit evidence limits
-- Weekly and monthly Knowledge Vault update reports
+- Weekly and monthly sourced subject-intelligence briefs
 - No cloud transmission
 
 Conversation data stays in `data/rangabot.db` on this computer. The database and
@@ -56,6 +56,14 @@ interpretations instead of silently inventing an answer.
 Private source files and generated indexes are Git-ignored. The tracked
 `SOURCE_MANIFEST.json` contains only public starter-source metadata; weekly and
 monthly reports describe meaningful changes without publishing book content.
+
+Ask **“What’s new in data science this week?”** in Teacher Mode to read the
+saved local intelligence brief. These briefs cover meaningful developments in
+the subjects themselves—not Rangabot implementation work—and include dates,
+why each item matters, evidence type, source links, and indexing status. The
+current data-science pack adds official NumPy 2.5, pandas, scikit-learn, and
+DuckDB learning/release material. Briefs are indexed too, so they remain
+available offline after the weekly source check.
 
 ## Next milestones
 

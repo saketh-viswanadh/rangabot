@@ -9,6 +9,8 @@ const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sql
 
 export const knowledgeRoot = resolve(process.cwd(), "data", "knowledge");
 export const knowledgeInbox = resolve(knowledgeRoot, "inbox");
+export const knowledgeWeeklyBrief = resolve(knowledgeRoot, "NEW_THIS_WEEK.md");
+export const knowledgeMonthlyBrief = resolve(knowledgeRoot, "NEW_THIS_MONTH.md");
 export const knowledgeDatabasePath = resolve(knowledgeRoot, "indexes", "knowledge.db");
 let activeKnowledgeDatabasePath = knowledgeDatabasePath;
 export const knowledgeBudgetBytes = Number(process.env.KNOWLEDGE_BUDGET_BYTES ?? 4 * 1024 ** 3);
@@ -58,6 +60,21 @@ type SourceManifest = { sources?: Array<{ title?: string; subject?: string[]; di
 
 export function isKnowledgeCatalogQuestion(question: string) {
   return /\b(what|which|list|show)\b.{0,35}\b(teach|learn|subjects?|topics?|knowledge|courses?)\b|\b(teach|learn)\b.{0,20}\b(available|cover|know)\b/i.test(question);
+}
+
+export function isKnowledgeNewsQuestion(question: string) {
+  return /\b(what(?:'s| is)? new|latest|recent|new developments?|this (?:week|month)|current (?:news|developments?|updates?))\b/i.test(question);
+}
+
+export function buildKnowledgeNewsAnswer(question: string) {
+  const wantsMonth = /\b(month|monthly|july)\b/i.test(question);
+  const path = wantsMonth ? knowledgeMonthlyBrief : knowledgeWeeklyBrief;
+  const period = wantsMonth ? "monthly" : "weekly";
+  try {
+    return `${readFileSync(path, "utf8").trim()}\n\n---\nThis is Rangabot's locally saved ${period} subject brief. Source links identify where each development was verified; items marked **indexed** can also be explored offline in Teacher Mode.`;
+  } catch {
+    return `No ${period} subject brief has been saved locally yet. The vault updater should only create one after finding a meaningful, source-verified development.`;
+  }
 }
 
 export function buildKnowledgeCatalogAnswer() {
@@ -196,6 +213,12 @@ export function listInboxFiles() {
   return readdirSync(knowledgeInbox, { withFileTypes: true })
     .filter((entry) => entry.isFile() && supported.has(extname(entry.name).toLowerCase()))
     .map((entry) => resolve(knowledgeInbox, entry.name));
+}
+
+export function listKnowledgeFiles() {
+  return [...listInboxFiles(), ...[knowledgeWeeklyBrief, knowledgeMonthlyBrief].filter((path) => {
+    try { return statSync(path).isFile(); } catch { return false; }
+  })];
 }
 
 export function readSourceManifest() {

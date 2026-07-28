@@ -30,3 +30,10 @@ test("recognizes broad teaching-capability questions instead of retrieving a ran
   assert.equal(knowledge.isKnowledgeCatalogQuestion("Which topics can I learn here?"), true);
   assert.equal(knowledge.isKnowledgeCatalogQuestion("Explain Python exceptions"), false);
 });
+
+test("recognizes subject news questions without confusing teaching questions", () => {
+  assert.equal(knowledge.isKnowledgeNewsQuestion("What's new in data science this week?"), true);
+  assert.equal(knowledge.isKnowledgeNewsQuestion("Tell me the latest AI model developments"), true);
+  assert.equal(knowledge.isKnowledgeNewsQuestion("Explain the pandas string dtype"), false);
+  assert.match(knowledge.buildKnowledgeNewsAnswer("What's new this week?"), /Data science intelligence brief/);
+});

@@ -135,3 +135,18 @@ by the chat interface until its final edge gate passes.
 - Corrected broad questions such as “What all can you teach?” to use the vault
   catalog and subject manifest instead of retrieving an arbitrary textbook
   passage. The response now lists actual indexed subjects and source collections.
+
+## 2026-07-28 — Data-science vault and subject intelligence
+
+- Replaced the weekly/monthly Rangabot setup changelog with a sourced data-science
+  intelligence brief about real developments in libraries and ML systems.
+- Added event date, significance, evidence class, direct source, and vault status
+  requirements, plus explicit handling for preprints and benchmark claims.
+- Added official NumPy 2.5, pandas, scikit-learn, and DuckDB material. The vault
+  now contains 23 documents and 2,350 locally searchable passages at about 59 MB.
+- Indexed the weekly and monthly briefs and added deterministic Teacher Mode
+  routing for questions such as “What’s new in data science this week?”
+- Updated the recurring weekly routine so subject briefs never contain bot code,
+  branch, installation, storage, or indexing changelog entries.
+- Added regression tests for subject-news detection and confirmed private source
+  material remains excluded from Git.

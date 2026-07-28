@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { load } from "cheerio";
 import mammoth from "mammoth";
-import { existingDocumentHash, getKnowledgeStatus, hashBuffer, listInboxFiles, saveKnowledgeDocument } from "../lib/knowledge.ts";
+import { existingDocumentHash, getKnowledgeStatus, hashBuffer, listKnowledgeFiles, saveKnowledgeDocument } from "../lib/knowledge.ts";
 
 function normalizeText(text: string) {
   return text.replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
@@ -58,7 +58,7 @@ async function embedChunks(chunks: string[]) {
   }
 }
 
-for (const path of listInboxFiles()) {
+for (const path of listKnowledgeFiles()) {
   const buffer = await readFile(path);
   const status = getKnowledgeStatus();
   if (status.usedBytes + buffer.length > status.budgetBytes) throw new Error(`Knowledge budget exceeded before importing ${basename(path)}`);

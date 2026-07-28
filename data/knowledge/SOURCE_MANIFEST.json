@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "budgetBytes": 4294967296,
-  "updatedAt": "2026-07-28T00:00:00Z",
+  "updatedAt": "2026-07-28T07:40:00Z",
   "sources": [
     {
       "id": "python-tutorial",
@@ -22,6 +22,50 @@
       "license": "Apache-2.0",
       "retrievedAt": "2026-07-28",
       "subject": ["pyspark", "spark", "sql", "data-engineering"],
+      "difficulty": "beginner-to-advanced",
+      "updatePolicy": "weekly-version-check"
+    },
+    {
+      "id": "numpy-2.5-user-guide",
+      "title": "NumPy 2.5 User Guide",
+      "author": "NumPy Developers",
+      "url": "https://numpy.org/doc/2.5/numpy-user.pdf",
+      "license": "BSD-3-Clause documentation",
+      "retrievedAt": "2026-07-28",
+      "subject": ["data-science", "numpy", "python", "numerical-computing"],
+      "difficulty": "beginner-to-advanced",
+      "updatePolicy": "weekly-version-check"
+    },
+    {
+      "id": "pandas-release-notes",
+      "title": "pandas Release Notes",
+      "author": "pandas Development Team",
+      "url": "https://pandas.pydata.org/docs/whatsnew/",
+      "license": "BSD-3-Clause documentation",
+      "retrievedAt": "2026-07-28",
+      "subject": ["data-science", "pandas", "python", "data-wrangling"],
+      "difficulty": "intermediate-to-advanced",
+      "updatePolicy": "weekly-version-check"
+    },
+    {
+      "id": "scikit-learn-user-guide",
+      "title": "scikit-learn User Guide and Release Notes",
+      "author": "scikit-learn Developers",
+      "url": "https://scikit-learn.org/stable/user_guide.html",
+      "license": "BSD-3-Clause documentation",
+      "retrievedAt": "2026-07-28",
+      "subject": ["data-science", "machine-learning", "scikit-learn", "python"],
+      "difficulty": "beginner-to-advanced",
+      "updatePolicy": "weekly-version-check"
+    },
+    {
+      "id": "duckdb-documentation",
+      "title": "DuckDB Documentation and 1.5 Release Guide",
+      "author": "DuckDB Foundation and DuckDB Labs",
+      "url": "https://duckdb.org/docs/stable/",
+      "license": "MIT documentation repository",
+      "retrievedAt": "2026-07-28",
+      "subject": ["data-science", "sql", "duckdb", "analytics", "data-engineering"],
       "difficulty": "beginner-to-advanced",
       "updatePolicy": "weekly-version-check"
     },
