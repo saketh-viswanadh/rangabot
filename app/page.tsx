@@ -31,7 +31,8 @@ type AllowedRepository = { id: string; name: string; path: string; addedAt: stri
 type CodeSearchResult = { path: string; line: number; excerpt: string };
 type CodePreview = { path: string; startLine: number; focusLine: number; lines: string[] };
 type AttachedCodeContext = { repositoryId: string; repositoryName: string; path: string; line: number; startLine: number; endLine: number; characterCount: number };
-type KnowledgeStatus = { usedBytes: number; budgetBytes: number; documents: number; chunks: number };
+type KnowledgeSourceState = { name: string; status: "indexed" | "pending" | "incompatible"; detail: string; chunks: number };
+type KnowledgeStatus = { usedBytes: number; budgetBytes: number; documents: number; chunks: number; incompatible: number; pending: number; sources: KnowledgeSourceState[] };
 type KnowledgeUpdates = { week: string; month: string; changelog: string; weekUpdatedAt: string | null };
 type KnowledgeTab = "discover" | "vault" | "updates";
 
@@ -820,6 +821,12 @@ export default function Home() {
                   <div><strong>{knowledgeStatus ? `${(knowledgeStatus.usedBytes / 1024 ** 2).toFixed(0)} MB` : "—"}</strong><span>Local storage</span></div>
                 </div>
                 {knowledgeStatus && <><progress value={knowledgeStatus.usedBytes} max={knowledgeStatus.budgetBytes} aria-label="Knowledge Vault storage used" /><p>{((knowledgeStatus.usedBytes / knowledgeStatus.budgetBytes) * 100).toFixed(1)}% of the private 4 GB budget used.</p></>}
+                {knowledgeStatus && (knowledgeStatus.incompatible > 0 || knowledgeStatus.pending > 0) && <div className="vault-source-list" aria-label="Knowledge sources needing attention">
+                  <div className="vault-source-heading"><strong>Needs attention</strong><span>{knowledgeStatus.incompatible} incompatible · {knowledgeStatus.pending} pending</span></div>
+                  {knowledgeStatus.sources.filter((source) => source.status !== "indexed").map((source) => <div className={`vault-source ${source.status}`} key={source.name}>
+                    <span>{source.status}</span><div><strong>{source.name}</strong><small>{source.detail}</small></div>
+                  </div>)}
+                </div>}
                 <div className="vault-note"><strong>Private by design</strong><p>Documents, passages, embeddings and retrieval stay on this computer. Add material to <code>data/knowledge/inbox/</code> and run <code>npm run knowledge:ingest</code>.</p></div>
               </section>}
               {knowledgeTab === "updates" && <div className="knowledge-markdown changelog"><MarkdownMessage content={knowledgeUpdates?.changelog ?? "No Rangabot changelog is available yet."} /></div>}

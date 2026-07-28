@@ -24,6 +24,7 @@
 - [x] Local project folders with project-scoped chat history
 - [x] Private 4 GB Knowledge Vault with incremental local document ingestion
 - [x] Hybrid keyword and embedding retrieval with Teacher Mode citations
+- [x] Portable hash-based vault synchronization, extraction-quality gates, scanned-PDF detection, query cleanup, title-aware hybrid reranking, and cross-subject retrieval tests
 - [x] Weekly and monthly sourced subject-intelligence briefs
 - [x] Deterministic Teacher Mode answers for current-awareness questions
 - [x] Automatic local-vault lookup for relevant Smart-mode questions
@@ -106,5 +107,6 @@
   ingestion and product work are deliberately excluded. Each item must include
   a date, significance, direct source, evidence class, and local indexing state.
 - Smart mode automatically retrieves local evidence for informational questions
-  and visibly identifies vault-backed answers. Teacher Mode stays citation-first
-  and evidence-bound; Local-only mode never performs vault retrieval.
+  and visibly identifies vault-backed answers. Teacher Mode stays citation-first,
+  separating vault evidence from downloaded-model background; Local-only mode
+  never performs vault retrieval.

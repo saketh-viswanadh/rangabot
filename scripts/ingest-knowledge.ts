@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { load } from "cheerio";
 import mammoth from "mammoth";
-import { existingDocumentHash, getKnowledgeStatus, hashBuffer, listKnowledgeFiles, saveKnowledgeDocument } from "../lib/knowledge.ts";
+import { clearKnowledgeSourceIssue, existingDocumentHash, getKnowledgeStatus, hashBuffer, indexedDocumentUsefulCharacters, listKnowledgeFiles, recordKnowledgeSourceIssue, relinkKnowledgeDocumentByHash, removeKnowledgeDocumentByPath, removeKnowledgeDocumentsNotIn, removeKnowledgeSourceIssuesNotIn, saveKnowledgeDocument } from "../lib/knowledge.ts";
 
 function normalizeText(text: string) {
   return text.replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
@@ -31,7 +31,12 @@ async function extractText(path: string, buffer: Buffer) {
 }
 
 function chunkText(text: string, target = 1_200, overlap = 180) {
-  const paragraphs = text.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
+  const paragraphs = text.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean).flatMap((part) => {
+    if (part.length <= target * 1.5) return [part];
+    const pieces = [];
+    for (let start = 0; start < part.length; start += target - overlap) pieces.push(part.slice(start, start + target));
+    return pieces;
+  });
   const chunks: string[] = [];
   let current = "";
   for (const paragraph of paragraphs) {
@@ -42,6 +47,10 @@ function chunkText(text: string, target = 1_200, overlap = 180) {
   }
   if (current) chunks.push(current);
   return chunks.filter((chunk) => chunk.length >= 80);
+}
+
+function usefulCharacterCount(text: string) {
+  return text.replace(/\[Page\s+\d+\]/gi, "").match(/[\p{L}\p{N}]/gu)?.length ?? 0;
 }
 
 async function embedChunks(chunks: string[]) {
@@ -58,30 +67,60 @@ async function embedChunks(chunks: string[]) {
   }
 }
 
-for (const path of listKnowledgeFiles()) {
+const knowledgeFiles = listKnowledgeFiles();
+const failures: string[] = [];
+for (const path of knowledgeFiles) {
   const buffer = await readFile(path);
   const status = getKnowledgeStatus();
   if (status.usedBytes + buffer.length > status.budgetBytes) throw new Error(`Knowledge budget exceeded before importing ${basename(path)}`);
   const sha256 = hashBuffer(buffer);
-  if (existingDocumentHash(path) === sha256) {
+  const title = basename(path, extname(path)).replaceAll(/[_-]+/g, " ");
+  const format = extname(path).slice(1).toLowerCase();
+  if (existingDocumentHash(path) === sha256 && indexedDocumentUsefulCharacters(path) >= 200) {
+    clearKnowledgeSourceIssue(path);
     console.log(`unchanged  ${basename(path)}`);
     continue;
   }
+  if (relinkKnowledgeDocumentByHash({ path, title, format, sizeBytes: buffer.length, sha256 })) {
+    if (indexedDocumentUsefulCharacters(path) >= 200) {
+      clearKnowledgeSourceIssue(path);
+      console.log(`relocated  ${basename(path)}`);
+      continue;
+    }
+    console.log(`repairing  ${basename(path)} after detecting an unusable prior extraction`);
+  }
   const text = await extractText(path, buffer);
+  const minimumUsefulCharacters = format === "pdf" ? 500 : 80;
+  if (usefulCharacterCount(text) < minimumUsefulCharacters) {
+    removeKnowledgeDocumentByPath(path);
+    const message = `${basename(path)} contains too little extractable text${format === "pdf" ? "; it appears scanned and needs local OCR first" : ""}`;
+    failures.push(message);
+    recordKnowledgeSourceIssue(path, sha256, message);
+    console.error(`skipped    ${message}`);
+    continue;
+  }
   const rawChunks = chunkText(text);
   const embeddings = await embedChunks(rawChunks);
   const id = randomUUID();
   saveKnowledgeDocument({
     id,
     path,
-    title: basename(path, extname(path)).replaceAll(/[_-]+/g, " "),
-    format: extname(path).slice(1).toLowerCase(),
+    title,
+    format,
     sizeBytes: buffer.length,
     sha256,
     chunks: rawChunks.map((content, ordinal) => ({ id: randomUUID(), ordinal: ordinal + 1, content, ...(embeddings?.[ordinal] ? { embedding: embeddings[ordinal] } : {}) })),
   });
+  clearKnowledgeSourceIssue(path);
   console.log(`indexed    ${basename(path)} (${rawChunks.length} chunks${embeddings ? ", embedded" : ", keyword-only"})`);
 }
 
+const removed = removeKnowledgeDocumentsNotIn(knowledgeFiles);
+removeKnowledgeSourceIssuesNotIn(knowledgeFiles);
+for (const path of removed) console.log(`removed    stale index entry ${path}`);
+
 const finalStatus = getKnowledgeStatus();
 console.log(`vault      ${finalStatus.documents} documents, ${finalStatus.chunks} chunks, ${(finalStatus.usedBytes / 1024 ** 2).toFixed(1)} MB / ${(finalStatus.budgetBytes / 1024 ** 3).toFixed(1)} GB`);
+if (failures.length) {
+  console.warn(`attention  ${failures.length} incompatible source${failures.length === 1 ? "" : "s"} skipped; compatible sources remain searchable`);
+}

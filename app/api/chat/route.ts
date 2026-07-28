@@ -5,7 +5,7 @@ import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatal
 import { formatCodeContext, isCodeContextRequest } from "@/lib/code-context";
 import { getAllowedRepository } from "@/lib/repositories";
 import { previewRepositoryFile } from "@/lib/repository-search";
-import { buildWordConversationPrompt, buildWordDraftPrompt, createWordArtifact, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, shouldPlanWordDocument, validateWordDraftForBrief, type WordDocumentBrief } from "@/lib/word-documents";
+import { buildConversationSummaryFallback, buildWordConversationPrompt, buildWordDraftPrompt, buildWordSourceTranscript, createWordArtifact, isWordConversationSummaryRequest, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, shouldPlanWordDocument, validateWordDraftForBrief, type WordDocumentBrief } from "@/lib/word-documents";
 import { buildRamayanaStoryCollection } from "@/lib/story-packs/ramayana";
 
 export const runtime = "nodejs";
@@ -31,6 +31,19 @@ async function generateStoryCollection(brief: WordDocumentBrief) {
     { role: "user", content: buildWordDraftPrompt(brief) },
   ]);
   return validateWordDraftForBrief(brief, parseWordDraft(raw));
+}
+
+async function generateConversationSummary(brief: WordDocumentBrief, messages: ChatMessage[]) {
+  const summaryBrief: WordDocumentBrief = { ...brief, documentType: "report", sourceNotes: buildWordSourceTranscript(messages) };
+  try {
+    const raw = await completeJsonWithOllama([
+      { role: "system", content: "You are Rangabot's local conversation editor. Synthesize the substantive discussion into a faithful, readable summary. Omit document-creation instructions and never invent decisions. Return valid JSON only." },
+      { role: "user", content: buildWordDraftPrompt(summaryBrief) },
+    ]);
+    return { brief: summaryBrief, draft: validateWordDraftForBrief(summaryBrief, parseWordDraft(raw)) };
+  } catch {
+    return { brief: summaryBrief, draft: buildConversationSummaryFallback(messages, summaryBrief) };
+  }
 }
 
 export async function POST(request: Request) {
@@ -62,11 +75,15 @@ export async function POST(request: Request) {
         { role: "system", content: "You are Rangabot's local Word-document planner. Gather missing requirements conversationally, then produce faithful structured document content. Return valid JSON only." },
         { role: "user", content: `${buildWordConversationPrompt(body.messages)}${localCodeContext ? `\n\n${localCodeContext}` : ""}` },
       ]);
-      const conversationSource = body.messages.filter((message) => message.role === "user").map((message) => message.content).join("\n\n");
+      const conversationSource = buildWordSourceTranscript(body.messages);
+      const summarizesConversation = isWordConversationSummaryRequest(body.messages);
       let plan;
       try {
         const brief = parseWordBriefFromPlan(rawPlan, conversationSource);
-        if (brief?.documentType === "story-collection") {
+        if (brief && summarizesConversation) {
+          const summary = await generateConversationSummary(brief, body.messages);
+          plan = { action: "create" as const, ...summary };
+        } else if (brief?.documentType === "story-collection") {
           plan = { action: "create" as const, brief, draft: await generateStoryCollection(brief) };
         } else {
           plan = parseWordDocumentPlan(rawPlan, conversationSource);
@@ -77,7 +94,10 @@ export async function POST(request: Request) {
           { role: "user", content: `Required actions are {"action":"ask","question":"..."} or {"action":"create","brief":{"title":"...","documentType":"report|proposal|meeting-notes|technical-brief|guide|article|story-collection","audience":"...","purpose":"...","tone":"professional|executive|friendly|technical|warm|playful","sourceNotes":"..."},"draft":{"subtitle":"...","executiveSummary":"...","sections":[{"heading":"...","paragraphs":["..."],"bullets":[]}],"assumptions":[]}}. Creative requests must contain finished reader-facing content, never planning notes or a report about the requested content.\n\nInvalid plan:\n${rawPlan.slice(0, 16_000)}\n\nConversation facts:\n${conversationSource.slice(-12_000)}` },
         ]);
         const repairedBrief = parseWordBriefFromPlan(repairedPlan, conversationSource);
-        if (repairedBrief?.documentType === "story-collection") {
+        if (repairedBrief && summarizesConversation) {
+          const summary = await generateConversationSummary(repairedBrief, body.messages);
+          plan = { action: "create" as const, ...summary };
+        } else if (repairedBrief?.documentType === "story-collection") {
           plan = { action: "create" as const, brief: repairedBrief, draft: await generateStoryCollection(repairedBrief) };
         } else {
           plan = parseWordDocumentPlan(repairedPlan, conversationSource);
@@ -114,15 +134,15 @@ export async function POST(request: Request) {
           headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff", "X-Rangabot-Knowledge": "used" },
         });
       }
-      const sources = await searchKnowledge(question, 3);
+      const sources = await searchKnowledge(question, 5);
       const context = sources.length
-        ? sources.map((source, index) => `[Source ${index + 1}: ${source.title}, passage ${source.chunk}]\n${source.content.slice(0, 900)}`).join("\n\n")
+        ? sources.map((source, index) => `[Source ${index + 1}: ${source.title}, passage ${source.chunk}]\n${source.content.slice(0, 1100)}`).join("\n\n")
         : "No matching passage was found in the local Knowledge Vault.";
       const history = body.messages.slice(0, -1);
       const teacherMode = body.mode === "teach";
       messages = [
         { role: "system", content: teacherMode
-          ? "You are Rangabot in Teacher Mode. Use only the supplied local passages for factual claims. Teach simply, then add detail. Cite every factual paragraph as [Source 1], [Source 2], or [Source 3]. Never claim that the local vault is unavailable when passages are supplied. If the passages are insufficient, state exactly what is missing. Distinguish historical interpretations and mythology variants."
+          ? "You are Rangabot in Teacher Mode. Teach simply, then add detail. Treat relevant local passages as the primary evidence and cite every vault-derived factual paragraph using its applicable [Source N] label. Ignore irrelevant passages instead of discussing their irrelevance. You may add stable background knowledge from your downloaded local model when the passages have gaps, but label it clearly as Local model background and never present it as source-verified or current. State material evidence gaps precisely. Distinguish historical interpretations and mythology variants."
           : "You are Rangabot using an automatic, entirely local Knowledge Vault lookup. Use supplied passages when they help answer the question, but ignore irrelevant passages. Cite claims drawn from them as [Source 1], [Source 2], or [Source 3]. You may use your own local-model knowledge for gaps, but clearly distinguish it from cited vault evidence and never imply that it is current or source-verified." },
         ...history,
         { role: "user", content: `QUESTION:\n${question}\n\nLOCAL KNOWLEDGE VAULT PASSAGES:\n${context}\n\nAnswer the question${teacherMode ? " from these passages" : " using relevant passages where useful"} and include inline citations for vault-derived claims.` },

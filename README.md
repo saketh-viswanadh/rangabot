@@ -87,18 +87,23 @@ npm run knowledge:ingest
 The importer hashes every file, skips unchanged material, extracts text locally,
 splits it into small teaching passages, builds an SQLite FTS5 index, and creates
 embeddings through the local Ollama embedding model. PDF extraction includes
-page markers. DOCX, HTML, Markdown, and plain-text files are also supported.
+quality validation: empty HTML, image-scanned PDFs, and page-marker-only output
+are rejected rather than being advertised as searchable knowledge. Run
+`npm run knowledge:doctor` after adding sources; image-only PDFs must first be
+processed with a local OCR tool such as OCRmyPDF.
+DOCX, HTML, Markdown, and plain-text files are also supported.
 
 Select **Teacher mode** in Rangabot to retrieve relevant vault passages before
 the chat model answers. Teacher Mode is instructed to cite the numbered local
 sources, identify gaps, and preserve conflicting historical or mythological
-interpretations instead of silently inventing an answer.
+interpretations. It may add clearly labelled background from the downloaded
+local model, but never presents that material as source-verified or current.
 
 **Smart routing** also searches the vault automatically for informational and
 subject-related questions. Responses visibly show `LOCAL · KNOWLEDGE VAULT`
 when retrieval was used. Smart mode may fill evidence gaps from the downloaded
-chat model and labels vault citations; Teacher Mode remains the strict option
-when answers must stay within indexed sources.
+chat model and labels vault citations; Teacher Mode is the citation-first option
+for deeper teaching with explicit evidence boundaries.
 
 Private source files and generated indexes are Git-ignored. The tracked
 `SOURCE_MANIFEST.json` contains only public starter-source metadata; weekly and

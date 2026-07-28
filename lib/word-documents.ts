@@ -52,6 +52,11 @@ function boundedText(value: unknown, name: string, max: number) {
   return value.trim();
 }
 
+function cleanDocumentText(value: string, max: number, bullet = false) {
+  const withoutMarkdown = value.replace(/`([^`]+)`/g, "$1").replace(/\*\*([^*]+)\*\*/g, "$1").trim();
+  return (bullet ? withoutMarkdown.replace(/^\s*(?:[-*•‣◦]|\d+[.)])\s*/, "") : withoutMarkdown).slice(0, max);
+}
+
 export function validateWordBrief(value: unknown): WordDocumentBrief {
   if (!value || typeof value !== "object") throw new Error("A document brief is required.");
   const input = value as Partial<WordDocumentBrief>;
@@ -77,14 +82,18 @@ export function parseWordDraft(raw: string): WordDraft {
     const paragraphs = Array.isArray(section.paragraphs) ? section.paragraphs.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).slice(0, 8) : [];
     const bullets = Array.isArray(section.bullets) ? section.bullets.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).slice(0, 12) : [];
     if (!paragraphs.length && !bullets.length) return null;
-    return { heading: section.heading.trim().slice(0, 140), paragraphs: paragraphs.map((item) => item.trim().slice(0, 1800)), bullets: bullets.map((item) => item.trim().slice(0, 600)) };
+    return { heading: cleanDocumentText(section.heading, 140), paragraphs: paragraphs.map((item) => cleanDocumentText(item, 1800)), bullets: bullets.map((item) => cleanDocumentText(item, 600, true)) };
   }).filter((section): section is NonNullable<typeof section> => Boolean(section));
   if (sections.length < 2) throw new Error("The local model returned fewer than two substantive document sections.");
+  const generatedText = [value.subtitle, value.executiveSummary, ...sections.flatMap((section) => [section.heading, ...section.paragraphs, ...section.bullets]), ...(Array.isArray(value.assumptions) ? value.assumptions : [])]
+    .filter((item): item is string => typeof item === "string");
+  const leakedStructure = /(?:^|\s)(?:sections?|paragraphs?|bullets?|assumptions?|heading)\s*(?:['\":#\[{]|$)/i;
+  if (generatedText.some((item) => leakedStructure.test(item))) throw new Error("The local model leaked document-schema fields into the prose.");
   return {
-    subtitle: typeof value.subtitle === "string" ? value.subtitle.trim().slice(0, 240) : "",
-    executiveSummary: boundedText(value.executiveSummary, "Executive summary", 2400),
+    subtitle: typeof value.subtitle === "string" ? cleanDocumentText(value.subtitle, 240) : "",
+    executiveSummary: cleanDocumentText(boundedText(value.executiveSummary, "Executive summary", 2400), 2400),
     sections,
-    assumptions: Array.isArray(value.assumptions) ? value.assumptions.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).slice(0, 8).map((item) => item.trim().slice(0, 500)) : [],
+    assumptions: Array.isArray(value.assumptions) ? value.assumptions.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).slice(0, 8).map((item) => cleanDocumentText(item, 500, true)) : [],
   };
 }
 
@@ -172,9 +181,60 @@ export function shouldPlanWordDocument(messages: ChatMessage[]) {
   return lastIntent > lastCreated;
 }
 
+export function isWordConversationSummaryRequest(messages: ChatMessage[]) {
+  const latestUser = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
+  return /\b(summary|summari[sz]e|recap)\b/i.test(latestUser)
+    && /\b(word|docx|document|conversation|chat|discussion)\b/i.test(latestUser);
+}
+
+export function buildWordSourceTranscript(messages: ChatMessage[]) {
+  return messages.filter((message) => message.role !== "system")
+    .map((message) => `${message.role === "user" ? "User" : "Rangabot"}: ${message.content.trim()}`)
+    .join("\n\n").slice(-24_000);
+}
+
+export function buildConversationSummaryFallback(messages: ChatMessage[], brief: WordDocumentBrief): WordDraft {
+  const substantive = messages.filter((message) => message.role !== "system" && !/\b(create|make|generate|export)\b.{0,45}\b(word|docx|document)\b/i.test(message.content));
+  const userPoints = substantive.filter((message) => message.role === "user").map((message) => message.content.trim()).filter(Boolean).slice(-6);
+  const assistantPoints = substantive.filter((message) => message.role === "assistant").map((message) => message.content.trim()).filter(Boolean).slice(-8);
+  if (!userPoints.length && !assistantPoints.length) throw new Error("There is not enough conversation content to summarize yet.");
+  const explanationParagraphs: string[] = [];
+  const keyPoints: string[] = [];
+  for (const answer of assistantPoints) {
+    let paragraph: string[] = [];
+    const flushParagraph = () => {
+      const text = paragraph.join(" ").replace(/[`*_#]+/g, "").replace(/\s+/g, " ").trim();
+      if (text) explanationParagraphs.push(text.slice(0, 1800));
+      paragraph = [];
+    };
+    for (const line of answer.split("\n")) {
+      const listItem = line.match(/^\s*(?:[-*]|\d+[.)])\s+(.+)/);
+      if (listItem) {
+        flushParagraph();
+        keyPoints.push(listItem[1].replace(/[`*_#]+/g, "").trim().slice(0, 600));
+      } else if (!line.trim()) flushParagraph();
+      else paragraph.push(line.trim());
+    }
+    flushParagraph();
+  }
+  const sections: WordDraft["sections"] = [
+    { heading: "Conversation overview", paragraphs: [brief.purpose], bullets: [] },
+    { heading: "Questions and requests", paragraphs: [], bullets: userPoints.length ? userPoints : ["No separate user questions were recorded."] },
+  ];
+  if (explanationParagraphs.length) sections.push({ heading: "Key explanations and findings", paragraphs: explanationParagraphs.slice(0, 12), bullets: [] });
+  if (keyPoints.length) sections.push({ heading: "Key points", paragraphs: [], bullets: keyPoints.slice(0, 20) });
+  sections.push({ heading: "Review note", paragraphs: ["Review this summary against the original local conversation before sharing or relying on it."], bullets: [] });
+  return {
+    subtitle: `Conversation summary for ${brief.audience}`,
+    executiveSummary: `This document summarizes the substantive questions, explanations, and outcomes from the Rangabot conversation. It preserves the discussion content while leaving out document-generation instructions.`,
+    sections,
+    assumptions: [],
+  };
+}
+
 export function buildWordConversationPrompt(messages: ChatMessage[]) {
   const conversation = messages.slice(-14).map((message) => `${message.role.toUpperCase()}: ${message.content.slice(0, 2400)}`).join("\n\n").slice(-20_000);
-  return `Decide whether enough information exists to create the Word document requested in this conversation. First identify the correct genre. Use story-collection for collections of stories, including mythology for children; never force creative or educational writing into a business report. Required: a usable title, audience, purpose, document type, tone, and topic. If anything material is missing, ask exactly one concise natural follow-up question. Otherwise return a brief and a best-effort complete draft. Write finished reader-facing content, never a transcript, source-material dump, outline, or commentary about what the document should contain. Never reproduce requirement-gathering answers verbatim as sections. Return JSON only. Ask shape: {"action":"ask","question":"string"}. Create shape: {"action":"create","brief":{"title":"string","documentType":"report|proposal|meeting-notes|technical-brief|guide|article|story-collection","audience":"string","purpose":"string","tone":"professional|executive|friendly|technical|warm|playful","sourceNotes":"string"},"draft":{"subtitle":"string","executiveSummary":"string","sections":[{"heading":"string","paragraphs":["string"],"bullets":["string"]}],"assumptions":["string"]}}.\n\nCONVERSATION:\n${conversation}`;
+  return `Decide whether enough information exists to create the Word document requested in this conversation. First identify the correct genre. Use story-collection for collections of stories, including mythology for children; use report for a summary or recap of the conversation. Required: a usable title, audience, purpose, document type, tone, and topic. A request to summarize the current conversation already supplies its source material; do not ask the user to repeat it. If anything else material is missing, ask exactly one concise natural follow-up question. Otherwise return a brief and a best-effort complete draft. Write finished reader-facing content, never a raw transcript, source-material dump, outline, or commentary about what the document should contain. Never reproduce requirement-gathering answers verbatim as sections. Return JSON only. Ask shape: {"action":"ask","question":"string"}. Create shape: {"action":"create","brief":{"title":"string","documentType":"report|proposal|meeting-notes|technical-brief|guide|article|story-collection","audience":"string","purpose":"string","tone":"professional|executive|friendly|technical|warm|playful","sourceNotes":"string"},"draft":{"subtitle":"string","executiveSummary":"string","sections":[{"heading":"string","paragraphs":["string"],"bullets":["string"]}],"assumptions":["string"]}}.\n\nCONVERSATION:\n${conversation}`;
 }
 
 export function parseWordDocumentPlan(raw: string, fallbackSourceNotes = ""): WordDocumentPlan {

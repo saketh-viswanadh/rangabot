@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { getKnowledgeStatus, knowledgeDatabasePath, knowledgeInbox, knowledgeRoot } from "../lib/knowledge.ts";
+import { getKnowledgeStatus, hashBuffer, indexedDocumentUsefulCharacters, knowledgeDatabasePath, knowledgeInbox, knowledgeRoot, listIndexedKnowledgeDocuments, listKnowledgeFiles } from "../lib/knowledge.ts";
 
 const command = process.argv[2] ?? "status";
 if (command === "init") {
@@ -19,6 +19,17 @@ if (command === "init") {
     const problems = [];
     if (status.remainingBytes === 0) problems.push("storage budget exhausted");
     if (status.documents === 0) problems.push("no indexed documents; add a file and run npm run knowledge:ingest");
+    const indexed = listIndexedKnowledgeDocuments();
+    const files = listKnowledgeFiles().map((path) => ({ path, sha256: hashBuffer(readFileSync(path)) }));
+    const pending = files.filter((file) => !indexed.some((document) => document.sha256 === file.sha256));
+    const relocated = files.filter((file) => indexed.some((document) => document.sha256 === file.sha256 && document.path !== file.path));
+    const stale = indexed.filter((document) => !files.some((file) => file.sha256 === document.sha256));
+    const unreadable = indexed.filter((document) => indexedDocumentUsefulCharacters(document.path) < 200);
+    if (pending.length) problems.push(`${pending.length} unindexed file${pending.length === 1 ? "" : "s"}: ${pending.map((file) => basename(file.path)).join(", ")}`);
+    if (relocated.length) problems.push(`${relocated.length} moved file${relocated.length === 1 ? "" : "s"} need path repair`);
+    if (stale.length) problems.push(`${stale.length} stale index entr${stale.length === 1 ? "y" : "ies"}`);
+    if (unreadable.length) problems.push(`${unreadable.length} indexed source${unreadable.length === 1 ? " has" : "s have"} no usable extracted text: ${unreadable.map((document) => basename(document.path)).join(", ")}`);
+    if (pending.length || relocated.length || stale.length) console.log("ACTION: run npm run knowledge:ingest to synchronize the local index");
     console.log(problems.length ? `WARN: ${problems.join("; ")}` : "PASS: vault is initialized and searchable");
     if (problems.length) process.exitCode = 1;
   }
