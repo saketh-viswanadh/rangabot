@@ -32,6 +32,7 @@ The server binds only to the local computer by default.
 - Explicit local repository allowlisting with reversible access approval
 - On-demand scoped code search with bounded, line-numbered local file previews
 - Explicit code-preview attachment to a chat, revalidated at send time for local Ollama only
+- Prepared artifact-skill registry and quality contract, with Word documents first in the delivery backlog
 - Private 4 GB Knowledge Vault with PDF, DOCX, HTML, Markdown, and text ingestion
 - Hybrid local keyword and embedding retrieval
 - Teacher Mode with passage citations and explicit evidence limits
@@ -53,6 +54,14 @@ repository index.
 An attached preview is visibly listed above the composer before sending. Saved
 chats retain only the repository, file and line-range reference; the raw source
 preview is read again at send time and supplied only to the local Ollama model.
+
+## Artifact skills
+
+Rangabot is preparing local document, PDF, email, writing, technical
+documentation, presentation and spreadsheet abilities. These ship one at a
+time; the presence of a welcome-screen prompt does not yet mean that file export
+is implemented. See [the artifact delivery plan](docs/ARTIFACT_SKILLS.md) for the
+ordered backlog and the validation contract each ability must satisfy.
 
 ## Knowledge Vault
 

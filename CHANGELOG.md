@@ -7,6 +7,9 @@ All notable released changes will be documented here using
 
 ### Added
 
+- An ordered local artifact-skill registry, shared quality-gate contract and
+  fresh-chat entry points for email and document work. Word export is the next
+  ability and is not presented as complete yet.
 - Explicit local code attachment from a bounded preview, with a visible composer
   disclosure and saved file/line reference while raw source stays out of history.
 - On-demand local code search and bounded line-numbered previews restricted to

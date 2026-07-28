@@ -32,6 +32,14 @@
 - [x] Repository selection with an explicit filesystem allowlist
 - [x] Local code search with scoped file-context previews
 - [x] Explicit code-preview attachment with visible send scope and local-only delivery
+- [x] Artifact-skill foundation: ordered registry, shared quality contract and welcome entry points
+- [ ] A1: Professional Word document creation and editing
+- [ ] A2: Validated PDF reports and summaries
+- [ ] A3: Local email drafting and critique (no sending)
+- [ ] A4: Long-form writing studio
+- [ ] A5: Repository-grounded technical documentation and diagrams
+- [ ] A6: Presentation deck generation with visual QA
+- [ ] A7: Spreadsheet generation with formula and chart validation
 
 ## Proposed
 
@@ -76,6 +84,11 @@
 - Code attachments save only a visible repository/file/line reference in chat
   history. The server revalidates the approval and bounded preview at send time,
   strips metadata before provider delivery, and sends source only to local Ollama.
+- Artifact abilities ship one at a time as complete vertical slices. Every skill
+  shares structured-brief, content, deterministic-render, format, visual-review
+  and user-preview gates; model output cannot bypass these validations.
+- Generated artifacts and temporary renders stay under the Git-ignored
+  `data/artifacts/` directory. External sending or publishing is not implied.
 - Knowledge files and indexes remain private and Git-ignored. Only source
   metadata and update reports are versioned. Rangabot uses retrieval rather than
   changing chat-model weights, making sources inspectable and updates reversible.
