@@ -6,8 +6,10 @@
 - [x] Streaming responses and Stop generation
 - [x] Apple-inspired interface and Ranga mascot
 - [x] Minimal golden-retriever Ranga with ambient thinking-light treatment
+- [x] Pastel light/dark themes and mode-aware restrained Ranga styling
 - [x] Local SQLite conversation history: create, list, reopen, update, and delete
 - [x] Markdown and syntax-highlighted code rendering with copy controls
+- [x] Message hover affordances and reply-to-message context
 - [ ] Model management for installed models and active selection
 - [ ] Repository selection with an explicit filesystem allowlist
 - [ ] Local code search with scoped file-context previews
@@ -37,3 +39,5 @@
   pushes directly to `main` or merges automatically.
 - Assistant Markdown is rendered locally; raw HTML is not enabled. External
   links open separately, and code highlighting and copying stay in-browser.
+- Appearance preferences stay in browser-local storage. Reply references remain
+  in the local conversation record and are expanded only for the local model.

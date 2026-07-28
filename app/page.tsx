@@ -5,6 +5,8 @@ import type { ChatMessage, ProviderStatus } from "@/lib/providers/types";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 
 type Mode = "local" | "smart" | "codex";
+type Appearance = "light" | "dark";
+type Palette = "sand" | "sage" | "lavender";
 type DisplayMessage = ChatMessage & {
   id: string;
   source?: "local";
@@ -31,6 +33,9 @@ export default function Home() {
   const [welcomeIndex, setWelcomeIndex] = useState(0);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("smart");
+  const [appearance, setAppearance] = useState<Appearance>("dark");
+  const [palette, setPalette] = useState<Palette>("sand");
+  const [replyTo, setReplyTo] = useState<DisplayMessage | null>(null);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [sending, setSending] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -77,6 +82,10 @@ export default function Home() {
   }
 
   useEffect(() => {
+    const savedAppearance = localStorage.getItem("rangabot-appearance") as Appearance | null;
+    const savedPalette = localStorage.getItem("rangabot-palette") as Palette | null;
+    if (savedAppearance === "light" || savedAppearance === "dark") setAppearance(savedAppearance);
+    if (["sand", "sage", "lavender"].includes(savedPalette ?? "")) setPalette(savedPalette as Palette);
     void refreshStatus();
     void refreshConversations();
   }, []);
@@ -87,10 +96,14 @@ export default function Home() {
     const content = input.trim();
     if (!content || sending) return;
 
-    const userMessage: DisplayMessage = { id: crypto.randomUUID(), role: "user", content };
+    const reference = replyTo ? {
+      role: replyTo.role as "user" | "assistant",
+      excerpt: replyTo.content.slice(0, 160),
+    } : undefined;
+    const userMessage: DisplayMessage = { id: crypto.randomUUID(), role: "user", content, replyTo: reference };
     const assistantId = crypto.randomUUID();
     const nextMessages = [...messages, userMessage];
-    const storedMessages = nextMessages.map(({ role, content: text }) => ({ role, content: text }));
+    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}) }));
     let conversationId = activeConversationId;
     if (!conversationId) {
       const createResponse = await fetch("/api/conversations", {
@@ -113,6 +126,7 @@ export default function Home() {
       active: true,
     }]);
     setInput("");
+    setReplyTo(null);
     setSending(true);
     const abortController = new AbortController();
     abortRef.current = abortController;
@@ -126,7 +140,10 @@ export default function Home() {
         signal: abortController.signal,
         body: JSON.stringify({
           mode,
-          messages: nextMessages.map(({ role, content: text }) => ({ role, content: text })),
+          messages: nextMessages.map(({ role, content: text, replyTo: reply }) => ({
+            role,
+            content: reply ? `[Replying to ${reply.role}: “${reply.excerpt}”]\n\n${text}` : text,
+          })),
         }),
       });
       if (!response.ok) {
@@ -214,6 +231,7 @@ export default function Home() {
     setMessages([]);
     setActiveConversationId(null);
     setInput("");
+    setReplyTo(null);
     setWelcomeIndex((current) => (current + 1 + Math.floor(Math.random() * (welcomeLines.length - 1))) % welcomeLines.length);
   }
 
@@ -224,8 +242,18 @@ export default function Home() {
 
   const ready = status?.available && status.modelInstalled;
 
+  function changeAppearance(next: Appearance) {
+    setAppearance(next);
+    localStorage.setItem("rangabot-appearance", next);
+  }
+
+  function changePalette(next: Palette) {
+    setPalette(next);
+    localStorage.setItem("rangabot-palette", next);
+  }
+
   return (
-    <main className="app-shell">
+    <main className="app-shell" data-appearance={appearance} data-palette={palette}>
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark" aria-hidden="true" /><span>Rangabot</span></div>
         <button className="new-chat" onClick={startNewChat}>＋ New chat</button>
@@ -248,9 +276,15 @@ export default function Home() {
       <section className="chat-panel">
         <header>
           <div><h1>Rangabot</h1><p>Code, think, and build privately</p></div>
-          <button className={`status ${ready ? "ready" : "offline"}`} onClick={refreshStatus}>
-            <span /> {ready ? `${status.configuredModel} ready` : status?.available ? "Model not installed" : "Ollama offline"}
-          </button>
+          <div className="header-actions">
+            <div className="theme-picker" aria-label="Theme settings">
+              <button type="button" className="appearance-toggle" onClick={() => changeAppearance(appearance === "dark" ? "light" : "dark")} aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}>{appearance === "dark" ? "☀︎" : "☾"}</button>
+              {(["sand", "sage", "lavender"] as Palette[]).map((choice) => <button type="button" key={choice} className={`palette-dot ${choice} ${palette === choice ? "selected" : ""}`} onClick={() => changePalette(choice)} aria-label={`Use ${choice} palette`} />)}
+            </div>
+            <button className={`status ${ready ? "ready" : "offline"}`} onClick={refreshStatus}>
+              <span /> {ready ? `${status.configuredModel} ready` : status?.available ? "Model not installed" : "Ollama offline"}
+            </button>
+          </div>
         </header>
 
         <div className="messages">
@@ -279,6 +313,7 @@ export default function Home() {
             <article key={message.id} className={`message ${message.role} ${message.error ? "error" : ""} ${message.active ? "thinking" : ""}`}>
               {message.role === "assistant" && <div className={`avatar ${message.active ? "active" : ""}`} aria-hidden="true" />}
               <div className="message-body">
+                {message.replyTo && <div className="reply-reference"><strong>{message.replyTo.role === "assistant" ? "Rangabot" : "You"}</strong><span>{message.replyTo.excerpt}</span></div>}
                 {message.source && <span className="source">LOCAL</span>}
                 {message.content && (message.role === "assistant"
                   ? <MarkdownMessage content={message.content} />
@@ -292,6 +327,7 @@ export default function Home() {
                 {message.stopped && (
                   <div className="stopped-state" role="status"><i aria-hidden="true" /> Stopped</div>
                 )}
+                {!message.active && !message.error && <button type="button" className="reply-button" onClick={() => { setReplyTo(message); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus()); }} aria-label="Reply to this message">↩ <span>Reply</span></button>}
               </div>
             </article>
           ))}
@@ -304,6 +340,7 @@ export default function Home() {
             <span>{status?.available ? `Run: ollama pull ${status.configuredModel}` : "The app is ready and waiting for the local model service."}</span>
           </div>}
           <form className="composer" onSubmit={sendMessage}>
+            {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply">×</button></div>}
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
