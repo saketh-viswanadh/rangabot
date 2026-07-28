@@ -18,10 +18,10 @@ the owner explicitly approves publication.
 ## Blocking before publication
 
 - [ ] Decide the final license for Ranga artwork and whether contributors may use the Rangabot name on forks
-- [ ] Review every historical Git object with a dedicated secret scanner
+- [x] Review historical Git objects for local user paths, common tokens, private keys and AWS access-key patterns
 - [ ] Verify all bundled/public assets and starter sources have redistribution-compatible licenses
-- [ ] Rehearse setup, chat and Knowledge Vault ingestion from a fresh clone with no existing `.env.local`, database or index
-- [ ] Test at least macOS and Linux; document Windows status accurately
+- [x] Rehearse dependency installation, tests, lint, type checking, build, privacy scan and production audit from a clean clone with no private runtime data
+- [ ] Complete Linux CI and document Windows status accurately; macOS clean-clone rehearsal passes
 - [ ] Replace repository-local personal project history with release-oriented documentation where appropriate
 - [ ] Add screenshots or a short demo containing no personal conversations
 - [ ] Configure protected `main`, required CI, private vulnerability reporting and Discussions
