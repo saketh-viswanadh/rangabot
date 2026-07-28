@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { deleteConversation, getConversation, updateConversation } from "@/lib/conversations";
+import { deleteConversation, getConversation, setConversationPinned, updateConversation } from "@/lib/conversations";
 import type { ChatMessage } from "@/lib/providers/types";
 
 export const runtime = "nodejs";
@@ -36,5 +36,16 @@ export async function PUT(request: Request, context: RouteContext) {
 export async function DELETE(_request: Request, context: RouteContext) {
   return deleteConversation((await context.params).id)
     ? new Response(null, { status: 204 })
+    : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+}
+
+export async function PATCH(request: Request, context: RouteContext) {
+  const body = (await request.json()) as { pinned?: unknown };
+  if (typeof body.pinned !== "boolean") {
+    return NextResponse.json({ error: "A boolean pinned value is required." }, { status: 400 });
+  }
+  const conversation = setConversationPinned((await context.params).id, body.pinned);
+  return conversation
+    ? NextResponse.json({ conversation })
     : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
 }

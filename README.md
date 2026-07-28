@@ -26,7 +26,7 @@ The server binds only to the local computer by default.
 - Ollama availability and model detection
 - Streaming local Ollama chat responses
 - Stop generation control
-- Local SQLite conversation history with reopen and delete controls
+- Local SQLite conversation history with reopen, search, pin and delete controls
 - Markdown responses, GitHub-style tables, syntax-highlighted code, and copy controls
 - Local project folders and project-scoped chats
 - Private 4 GB Knowledge Vault with PDF, DOCX, HTML, Markdown, and text ingestion

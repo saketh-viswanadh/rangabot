@@ -13,8 +13,11 @@ function validMessages(value: unknown): value is ChatMessage[] {
   ));
 }
 
-export function GET() {
-  return NextResponse.json({ conversations: listConversations() });
+export function GET(request: Request) {
+  const parameters = new URL(request.url).searchParams;
+  const query = (parameters.get("query") ?? "").slice(0, 120);
+  const projectId = parameters.get("projectId");
+  return NextResponse.json({ conversations: listConversations({ query, projectId }) });
 }
 
 export async function POST(request: Request) {

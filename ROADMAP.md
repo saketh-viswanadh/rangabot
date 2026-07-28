@@ -16,6 +16,7 @@
 - [x] Minimal golden-retriever Ranga with ambient thinking-light treatment
 - [x] Pastel light/dark themes and mode-aware restrained Ranga styling
 - [x] Local SQLite conversation history: create, list, reopen, update, and delete
+- [x] Project-aware local conversation search and persistent pinning
 - [x] Markdown and syntax-highlighted code rendering with copy controls
 - [x] Message hover affordances and reply-to-message context
 - [x] Offline welcome library with 100 quotes, 100 jokes and 100 thoughts, a 60-item no-repeat window, and weekly quality review
@@ -32,7 +33,6 @@
 
 ## Proposed
 
-- Conversation search and pinning
 - Export or import a conversation as a local Markdown file
 - Automated local evaluation fixtures for comparing smaller models
 - Page-aware source previews and subject-specific retrieval evaluation suites
