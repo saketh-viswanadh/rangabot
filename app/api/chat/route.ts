@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { streamChatWithOllama } from "@/lib/providers/ollama";
 import type { ChatMessage } from "@/lib/providers/types";
+import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatalogQuestion, isKnowledgeNewsQuestion, searchKnowledge, shouldAutoSearchKnowledge } from "@/lib/knowledge";
 
 export const runtime = "nodejs";
 
@@ -28,12 +29,42 @@ export async function POST(request: Request) {
       );
     }
 
-    const stream = await streamChatWithOllama(body.messages);
+    let messages = body.messages;
+    const question = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
+    const usesVault = body.mode === "teach" || (body.mode === "smart" && shouldAutoSearchKnowledge(question));
+    if (usesVault) {
+      if (isKnowledgeCatalogQuestion(question)) {
+        return new Response(buildKnowledgeCatalogAnswer(), {
+          headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff", "X-Rangabot-Knowledge": "used" },
+        });
+      }
+      if (isKnowledgeNewsQuestion(question)) {
+        return new Response(buildKnowledgeNewsAnswer(question), {
+          headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff", "X-Rangabot-Knowledge": "used" },
+        });
+      }
+      const sources = await searchKnowledge(question, 3);
+      const context = sources.length
+        ? sources.map((source, index) => `[Source ${index + 1}: ${source.title}, passage ${source.chunk}]\n${source.content.slice(0, 900)}`).join("\n\n")
+        : "No matching passage was found in the local Knowledge Vault.";
+      const history = body.messages.slice(0, -1);
+      const teacherMode = body.mode === "teach";
+      messages = [
+        { role: "system", content: teacherMode
+          ? "You are Rangabot in Teacher Mode. Use only the supplied local passages for factual claims. Teach simply, then add detail. Cite every factual paragraph as [Source 1], [Source 2], or [Source 3]. Never claim that the local vault is unavailable when passages are supplied. If the passages are insufficient, state exactly what is missing. Distinguish historical interpretations and mythology variants."
+          : "You are Rangabot using an automatic, entirely local Knowledge Vault lookup. Use supplied passages when they help answer the question, but ignore irrelevant passages. Cite claims drawn from them as [Source 1], [Source 2], or [Source 3]. You may use your own local-model knowledge for gaps, but clearly distinguish it from cited vault evidence and never imply that it is current or source-verified." },
+        ...history,
+        { role: "user", content: `QUESTION:\n${question}\n\nLOCAL KNOWLEDGE VAULT PASSAGES:\n${context}\n\nAnswer the question${teacherMode ? " from these passages" : " using relevant passages where useful"} and include inline citations for vault-derived claims.` },
+      ];
+    }
+
+    const stream = await streamChatWithOllama(messages);
     return new Response(stream, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         "X-Content-Type-Options": "nosniff",
+        "X-Rangabot-Knowledge": usesVault ? "used" : "not-used",
       },
     });
   } catch (error) {

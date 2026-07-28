@@ -115,3 +115,51 @@ by the chat interface until its final edge gate passes.
   as a butterfly passes nearby.
 - Used only lightweight CSS transforms and respected reduced-motion settings;
   no new mascot rendering or animation assets were introduced.
+
+## 2026-07-28 — Local Knowledge Vault and Teacher Mode
+
+- Built a private 4 GB Knowledge Vault with incremental hashing, SQLite FTS5,
+  local embeddings, storage accounting, and PDF/DOCX/HTML/Markdown/text parsing.
+- Installed the 274 MB `nomic-embed-text` model locally through Ollama and
+  indexed 14 starter documents into 1,577 embedded teaching passages.
+- Added official Python tutorial material, official Spark/PySpark material, and
+  public-domain Indian, Greek/Roman, and Egyptian mythology starter texts with
+  license metadata and editorial warnings for dated interpretations.
+- Added Teacher Mode, hybrid retrieval, strict evidence instructions, inline
+  source citations, and explicit behavior when local evidence is insufficient.
+- Added visible New this week and New this month reports plus vault storage use.
+- Verified retrieval against Python exception handling and exercised a complete
+  Indra teaching answer from local passages with citations.
+- Added ingestion and retrieval tests. Private books and generated indexes stay
+  excluded from Git.
+- Corrected broad questions such as “What all can you teach?” to use the vault
+  catalog and subject manifest instead of retrieving an arbitrary textbook
+  passage. The response now lists actual indexed subjects and source collections.
+
+## 2026-07-28 — Data-science vault and subject intelligence
+
+- Replaced the weekly/monthly Rangabot setup changelog with a sourced data-science
+  intelligence brief about real developments in libraries and ML systems.
+- Added event date, significance, evidence class, direct source, and vault status
+  requirements, plus explicit handling for preprints and benchmark claims.
+- Added official NumPy 2.5, pandas, scikit-learn, and DuckDB material. The vault
+  now contains 23 documents and 2,350 locally searchable passages at about 59 MB.
+- Indexed the weekly and monthly briefs and added deterministic Teacher Mode
+  routing for questions such as “What’s new in data science this week?”
+- Updated the recurring weekly routine so subject briefs never contain bot code,
+  branch, installation, storage, or indexing changelog entries.
+- Added regression tests for subject-news detection and confirmed private source
+  material remains excluded from Git.
+
+## 2026-07-28 — Automatic local knowledge in Smart mode
+
+- Made Smart mode automatically search the local Knowledge Vault for questions,
+  explanations, comparisons, and recognized vault subjects.
+- Kept greetings and lightweight conversation out of retrieval to avoid needless
+  embedding work and irrelevant textbook context.
+- Added a visible `LOCAL · KNOWLEDGE VAULT` response label whenever retrieval is
+  used, while preserving the stricter citation-only behavior of Teacher Mode.
+- Smart answers may use downloaded-model knowledge for gaps but must distinguish
+  it from cited local evidence. Nothing is transmitted outside the computer.
+- Added regression coverage for informational, subject-specific, and conversational
+  routing examples.

@@ -7,12 +7,16 @@
     "build": "next build",
     "start": "next start --hostname 127.0.0.1",
     "test": "node --test --experimental-strip-types tests/*.test.ts",
+    "knowledge:ingest": "node --experimental-strip-types scripts/ingest-knowledge.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "cheerio": "^1.2.0",
     "highlight.js": "^11.11.1",
+    "mammoth": "^1.12.0",
     "next": "^16.0.0",
+    "pdfjs-dist": "^6.1.200",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",

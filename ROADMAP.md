@@ -12,6 +12,12 @@
 - [x] Message hover affordances and reply-to-message context
 - [x] Varied offline welcome rotation with quotes, jokes, and original thoughts
 - [x] Local project folders with project-scoped chat history
+- [x] Private 4 GB Knowledge Vault with incremental local document ingestion
+- [x] Hybrid keyword and embedding retrieval with Teacher Mode citations
+- [x] Weekly and monthly sourced subject-intelligence briefs
+- [x] Deterministic Teacher Mode answers for current-awareness questions
+- [x] Automatic local-vault lookup for relevant Smart-mode questions
+- [x] Initial data-science pack: NumPy, pandas, scikit-learn, and DuckDB
 - [ ] Model management for installed models and active selection
 - [ ] Repository selection with an explicit filesystem allowlist
 - [ ] Local code search with scoped file-context previews
@@ -21,6 +27,11 @@
 - Conversation search and pinning
 - Export or import a conversation as a local Markdown file
 - Automated local evaluation fixtures for comparing smaller models
+- Page-aware source previews and subject-specific retrieval evaluation suites
+- Expand the data-science pack with statistics, visualization, experimentation,
+  feature engineering, and responsible evaluation material under clear licenses
+- Add research-triage lanes for peer-reviewed work, preprints, efficient models,
+  and history/archaeology discoveries without mixing evidence levels
 
 ## Needs user decision
 
@@ -47,3 +58,12 @@
   runtime network request; additions require attribution and duplicate checks.
 - Projects currently organize local chats only. Selecting a project never grants
   filesystem access; repository attachment remains a separate allowlist flow.
+- Knowledge files and indexes remain private and Git-ignored. Only source
+  metadata and update reports are versioned. Rangabot uses retrieval rather than
+  changing chat-model weights, making sources inspectable and updates reversible.
+- Weekly/monthly reports describe external subject developments only. Internal
+  ingestion and product work are deliberately excluded. Each item must include
+  a date, significance, direct source, evidence class, and local indexing state.
+- Smart mode automatically retrieves local evidence for informational questions
+  and visibly identifies vault-backed answers. Teacher Mode stays citation-first
+  and evidence-bound; Local-only mode never performs vault retrieval.
