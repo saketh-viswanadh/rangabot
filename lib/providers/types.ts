@@ -3,6 +3,10 @@ export type ChatRole = "user" | "assistant" | "system";
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  replyTo?: {
+    role: "user" | "assistant";
+    excerpt: string;
+  };
 }
 
 export interface ProviderStatus {

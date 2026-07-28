@@ -63,3 +63,55 @@ Next approved item: Markdown and syntax-highlighted code rendering with copy con
 - Added focused tests for inline-versus-block code and language detection.
 
 Next approved item: model management and active local model selection.
+
+## 2026-07-28 — Golden Ranga and illuminated thinking
+
+- Replaced the colorful tiger mascot with a minimal charcoal golden-retriever
+  shadow, using a restrained warm-gold outline for clarity at small sizes.
+- Added quiet idle breathing and blink motion, plus a focused processing loop
+  while the local model responds.
+- Redesigned the active assistant bubble with a moving multicolor light edge
+  and an internal light runner inspired by modern ambient voice interfaces.
+- Added a synchronized gold-and-blue mascot glow that stops with generation.
+
+The optional full directional pet atlas remains under visual QA and is not used
+by the chat interface until its final edge gate passes.
+
+## 2026-07-28 — Pastel themes and message replies
+
+- Added persistent light and dark appearance modes with sand, sage, and
+  lavender pastel palettes instead of reducing themes to white or black.
+- Reworked surfaces, bubbles, controls, and text around shared contrast-aware
+  color tokens, and made Ranga's golden tone respond to the selected palette.
+- Simplified Ranga to a static illustration with one slow, restrained breathing
+  motion; active generation no longer swaps to a busy running sprite.
+- Added a subtle message-row hover treatment and an accessible Reply action.
+- Added a cancellable reply preview in the composer, a quoted reference in the
+  sent message, and local-model context explaining which message is referenced.
+- Browser QA covered dark sand, light lavender, long conversations, and reply
+  selection without horizontal layout movement.
+
+## 2026-07-28 — Expanded welcome collection
+
+- Expanded the offline new-chat rotation from four entries to 27 short quotes,
+  developer jokes, and original Rangabot thoughts.
+- Moved the collection into a dedicated typed module so daily additions stay
+  reviewable and do not clutter the chat interface.
+- Added a test requiring all three categories, at least 24 entries, short copy,
+  and no duplicate text.
+- Kept the runtime fully local: the app never fetches welcome content from the
+  internet.
+
+## 2026-07-28 — Local projects and curious Ranga
+
+- Added local SQLite project folders with create, select, rename, and delete
+  controls, plus project-filtered chat history.
+- New conversations inherit the selected project. Deleting a project safely
+  moves its chats back to All chats instead of deleting conversation history.
+- Kept project organization separate from filesystem access; projects grant no
+  permission to read a repository or folder.
+- Added extremely subtle cursor-following movement to Ranga and two infrequent
+  CSS butterflies on the empty state. Ranga makes one restrained curious tilt
+  as a butterfly passes nearby.
+- Used only lightweight CSS transforms and respected reduced-motion settings;
+  no new mascot rendering or animation assets were introduced.
