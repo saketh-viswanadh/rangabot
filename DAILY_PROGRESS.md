@@ -76,3 +76,17 @@ Next approved item: model management and active local model selection.
 
 The optional full directional pet atlas remains under visual QA and is not used
 by the chat interface until its final edge gate passes.
+
+## 2026-07-28 — Pastel themes and message replies
+
+- Added persistent light and dark appearance modes with sand, sage, and
+  lavender pastel palettes instead of reducing themes to white or black.
+- Reworked surfaces, bubbles, controls, and text around shared contrast-aware
+  color tokens, and made Ranga's golden tone respond to the selected palette.
+- Simplified Ranga to a static illustration with one slow, restrained breathing
+  motion; active generation no longer swaps to a busy running sprite.
+- Added a subtle message-row hover treatment and an accessible Reply action.
+- Added a cancellable reply preview in the composer, a quoted reference in the
+  sent message, and local-model context explaining which message is referenced.
+- Browser QA covered dark sand, light lavender, long conversations, and reply
+  selection without horizontal layout movement.
