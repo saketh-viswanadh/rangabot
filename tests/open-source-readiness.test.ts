@@ -18,6 +18,12 @@ test("publishes usable model choices with hardware and license guidance", () => 
   assert.ok((registry.embeddingModels?.length ?? 0) >= 1);
 });
 
+test("validation never deletes the live Next.js output directory", () => {
+  const cleaner = readFileSync("scripts/clean-generated.ts", "utf8");
+  assert.doesNotMatch(cleaner, /rmSync\(generated\s*,\s*\{\s*recursive:\s*true/);
+  assert.match(cleaner, /stale duplicate Next\.js type/);
+});
+
 test("keeps private runtime and Knowledge Vault material ignored", () => {
   const ignore = readFileSync(".gitignore", "utf8");
   for (const entry of [".env.local", "data/*.db", "data/knowledge/inbox/", "data/knowledge/indexes/", "data/knowledge/backups/"]) {
