@@ -70,6 +70,28 @@ header p { color: var(--muted); font-size: 12px; margin: 0; }
 .avatar.active { background-image: url("/ranga/ranga-running.gif"); }
 .source { display: block; color: #8e8e93; font-size: 9px; font-weight: 650; letter-spacing: .06em; margin-bottom: 4px; }
 .message p { white-space: pre-wrap; line-height: 1.42; font-size: 14px; letter-spacing: -.005em; margin: 0; }
+.markdown-content { min-width: 0; font-size: 14px; line-height: 1.52; overflow-wrap: anywhere; }
+.markdown-content > :first-child { margin-top: 0; }.markdown-content > :last-child { margin-bottom: 0; }
+.markdown-content p { white-space: normal; line-height: inherit; margin: 0 0 10px; }
+.markdown-content h1, .markdown-content h2, .markdown-content h3 { line-height: 1.2; letter-spacing: -.02em; margin: 18px 0 8px; }
+.markdown-content h1 { font-size: 20px; }.markdown-content h2 { font-size: 17px; }.markdown-content h3 { font-size: 15px; }
+.markdown-content ul, .markdown-content ol { margin: 8px 0 12px; padding-left: 22px; }
+.markdown-content li { margin: 4px 0; }.markdown-content li > p { margin: 0; }
+.markdown-content a { color: #64b5ff; text-decoration: none; }.markdown-content a:hover { text-decoration: underline; }
+.markdown-content blockquote { color: #c7c7cc; border-left: 3px solid #636366; margin: 12px 0; padding-left: 12px; }
+.markdown-content hr { border: 0; border-top: .5px solid #ffffff24; margin: 16px 0; }
+.markdown-content :not(pre) > code { color: #ffcc7a; background: #ffffff12; border: .5px solid #ffffff14; border-radius: 6px; padding: 1px 5px; font-family: "SFMono-Regular", Consolas, monospace; font-size: .88em; }
+.markdown-content table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 12px 0; }
+.markdown-content th, .markdown-content td { border: .5px solid #ffffff20; padding: 7px 9px; text-align: left; white-space: nowrap; }
+.markdown-content th { background: #ffffff0d; font-weight: 600; }
+.code-block { width: min(620px, 72vw); max-width: 100%; overflow: hidden; background: #111113; border: .5px solid #ffffff1c; border-radius: 12px; margin: 11px 0; }
+.code-toolbar { display: flex; align-items: center; justify-content: space-between; color: #8e8e93; background: #1c1c1e; border-bottom: .5px solid #ffffff17; padding: 7px 10px; font-size: 10px; text-transform: lowercase; }
+.code-toolbar button { border: 0; color: #aeaeb2; background: transparent; cursor: pointer; padding: 2px 4px; }.code-toolbar button:hover { color: #fff; }
+.code-block pre { margin: 0; max-width: 100%; overflow-x: auto; padding: 13px; }
+.code-block code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; line-height: 1.55; white-space: pre; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal { color: #ff7ab2; }.hljs-string, .hljs-attribute { color: #ff8170; }
+.hljs-title, .hljs-function, .hljs-section { color: #82d2ce; }.hljs-number, .hljs-symbol { color: #d9c97c; }
+.hljs-comment, .hljs-quote { color: #7f8c8d; font-style: italic; }.hljs-variable, .hljs-template-variable { color: #c8a1ff; }
 .message-activity { display: flex; align-items: center; gap: 7px; color: #aeaeb2; font-size: 10px; margin-top: 7px; }
 .thinking-dots { display: inline-flex; align-items: center; gap: 3px; height: 9px; }
 .thinking-dots i { width: 5px; height: 5px; border-radius: 50%; background: #aeaeb2; animation: message-dot 1.15s ease-in-out infinite; }

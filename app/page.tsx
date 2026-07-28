@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import type { ChatMessage, ProviderStatus } from "@/lib/providers/types";
+import { MarkdownMessage } from "@/components/MarkdownMessage";
 
 type Mode = "local" | "smart" | "codex";
 type DisplayMessage = ChatMessage & {
@@ -279,7 +280,9 @@ export default function Home() {
               {message.role === "assistant" && <div className={`avatar ${message.active ? "active" : ""}`} aria-hidden="true" />}
               <div className="message-body">
                 {message.source && <span className="source">LOCAL</span>}
-                {message.content && <p>{message.content}</p>}
+                {message.content && (message.role === "assistant"
+                  ? <MarkdownMessage content={message.content} />
+                  : <p>{message.content}</p>)}
                 {message.active && (
                   <div className="message-activity" role="status" aria-label="Rangabot is thinking">
                     <span className="thinking-dots" aria-hidden="true"><i /><i /><i /></span>
