@@ -9,7 +9,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/saketh-viswanadh/local-model-with-routing-capabilities.git"
+    "url": "https://github.com/saketh-viswanadh/rangabot.git"
   },
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
