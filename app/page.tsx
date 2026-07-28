@@ -11,6 +11,12 @@ type DisplayMessage = ChatMessage & {
   active?: boolean;
   stopped?: boolean;
 };
+type ConversationSummary = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
 const welcomeLines = [
   { text: "The best way to predict the future is to invent it.", credit: "Alan Kay", kind: "QUOTE" },
@@ -26,6 +32,8 @@ export default function Home() {
   const [mode, setMode] = useState<Mode>("smart");
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [sending, setSending] = useState(false);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -38,7 +46,39 @@ export default function Home() {
     }
   }
 
-  useEffect(() => { void refreshStatus(); }, []);
+  async function refreshConversations() {
+    const response = await fetch("/api/conversations", { cache: "no-store" });
+    if (response.ok) {
+      const data = (await response.json()) as { conversations: ConversationSummary[] };
+      setConversations(data.conversations);
+    }
+  }
+
+  async function openConversation(id: string) {
+    if (sending) return;
+    const response = await fetch(`/api/conversations/${id}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const data = (await response.json()) as { conversation: { messages: ChatMessage[] } };
+    setMessages(data.conversation.messages.map((message) => ({
+      ...message,
+      id: crypto.randomUUID(),
+      source: message.role === "assistant" ? "local" : undefined,
+    })));
+    setActiveConversationId(id);
+  }
+
+  async function removeConversation(id: string) {
+    if (sending) return;
+    const response = await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+    if (!response.ok) return;
+    if (activeConversationId === id) startNewChat();
+    await refreshConversations();
+  }
+
+  useEffect(() => {
+    void refreshStatus();
+    void refreshConversations();
+  }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   async function sendMessage(event: FormEvent) {
@@ -49,6 +89,21 @@ export default function Home() {
     const userMessage: DisplayMessage = { id: crypto.randomUUID(), role: "user", content };
     const assistantId = crypto.randomUUID();
     const nextMessages = [...messages, userMessage];
+    const storedMessages = nextMessages.map(({ role, content: text }) => ({ role, content: text }));
+    let conversationId = activeConversationId;
+    if (!conversationId) {
+      const createResponse = await fetch("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: storedMessages }),
+      });
+      if (createResponse.ok) {
+        const data = (await createResponse.json()) as { conversation: { id: string } };
+        conversationId = data.conversation.id;
+        setActiveConversationId(conversationId);
+        void refreshConversations();
+      }
+    }
     setMessages((current) => [...current, userMessage, {
       id: assistantId,
       role: "assistant",
@@ -60,6 +115,8 @@ export default function Home() {
     setSending(true);
     const abortController = new AbortController();
     abortRef.current = abortController;
+    let generatedContent = "";
+    let finalAssistant: ChatMessage | null = null;
 
     try {
       const response = await fetch("/api/chat", {
@@ -86,6 +143,7 @@ export default function Home() {
         const chunk = decoder.decode(value, { stream: true });
         if (!chunk) continue;
         receivedContent = true;
+        generatedContent += chunk;
         setMessages((current) => current.map((message) => (
           message.id === assistantId ? { ...message, content: message.content + chunk, active: true } : message
         )));
@@ -93,13 +151,21 @@ export default function Home() {
       const finalChunk = decoder.decode();
       if (finalChunk) {
         receivedContent = true;
+        generatedContent += finalChunk;
         setMessages((current) => current.map((message) => (
           message.id === assistantId ? { ...message, content: message.content + finalChunk, active: true } : message
         )));
       }
       if (!receivedContent) throw new Error("The local model returned an empty response.");
+      finalAssistant = { role: "assistant", content: generatedContent };
     } catch (error) {
       const stopped = abortController.signal.aborted;
+      finalAssistant = {
+        role: "assistant",
+        content: stopped
+          ? generatedContent || "No response was generated."
+          : error instanceof Error ? error.message : "The request failed.",
+      };
       setMessages((current) => current.map((message) => {
         if (message.id !== assistantId) return message;
         if (stopped) {
@@ -127,6 +193,14 @@ export default function Home() {
       )));
       setSending(false);
       abortRef.current = null;
+      if (conversationId && finalAssistant) {
+        await fetch(`/api/conversations/${conversationId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: [...storedMessages, finalAssistant] }),
+        });
+        void refreshConversations();
+      }
     }
   }
 
@@ -137,6 +211,7 @@ export default function Home() {
   function startNewChat() {
     abortRef.current?.abort();
     setMessages([]);
+    setActiveConversationId(null);
     setInput("");
     setWelcomeIndex((current) => (current + 1 + Math.floor(Math.random() * (welcomeLines.length - 1))) % welcomeLines.length);
   }
@@ -153,12 +228,15 @@ export default function Home() {
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark" aria-hidden="true" /><span>Rangabot</span></div>
         <button className="new-chat" onClick={startNewChat}>＋ New chat</button>
-        <nav>
-          <span className="nav-label">Workspace</span>
-          <button className="nav-item active">Chat</button>
-          <button className="nav-item" disabled>Projects <em>Soon</em></button>
-          <button className="nav-item" disabled>Models <em>Soon</em></button>
-          <button className="nav-item" disabled>Tools <em>Soon</em></button>
+        <nav className="history">
+          <span className="nav-label">Recent chats</span>
+          {conversations.length === 0 && <p className="history-empty">Your local conversations will appear here.</p>}
+          {conversations.map((conversation) => (
+            <div className={`history-row ${conversation.id === activeConversationId ? "active" : ""}`} key={conversation.id}>
+              <button type="button" onClick={() => void openConversation(conversation.id)}>{conversation.title}</button>
+              <button type="button" className="delete-chat" onClick={() => void removeConversation(conversation.id)} aria-label={`Delete ${conversation.title}`}>×</button>
+            </div>
+          ))}
         </nav>
         <div className="privacy-card">
           <span className="shield">◆</span>
