@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname } from "node:path";
 
 const tracked = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], { encoding: "utf8" }).split(/\r?\n/).filter(Boolean);
@@ -27,6 +27,7 @@ const sensitivePatterns = [
 ];
 const contentProblems: string[] = [];
 for (const path of tracked) {
+  if (!existsSync(path)) continue;
   if (!textExtensions.has(extname(path)) || statSync(path).size > 1_000_000) continue;
   const content = readFileSync(path, "utf8");
   for (const candidate of sensitivePatterns) if (candidate.pattern.test(content)) contentProblems.push(`${path}: ${candidate.name}`);

@@ -32,7 +32,7 @@ The server binds only to the local computer by default.
 - Explicit local repository allowlisting with reversible access approval
 - On-demand scoped code search with bounded, line-numbered local file previews
 - Explicit code-preview attachment to a chat, revalidated at send time for local Ollama only
-- Local Word Studio for structured, model-assisted DOCX creation, validation, rendered previews and download
+- Conversational Word creation with local requirement gathering, DOCX validation, rendered previews and download
 - Private 4 GB Knowledge Vault with PDF, DOCX, HTML, Markdown, and text ingestion
 - Hybrid local keyword and embedding retrieval
 - Teacher Mode with passage citations and explicit evidence limits
@@ -57,12 +57,15 @@ preview is read again at send time and supplied only to the local Ollama model.
 
 ## Artifact skills
 
-Rangabot now creates new `.docx` files through Word Studio. A structured brief is
-drafted by the configured local Ollama model, rendered with deterministic styles,
-stored under `data/artifacts/`, validated, and previewed locally when LibreOffice
-and Poppler are installed. Existing-file editing and the remaining artifact
-abilities are separate backlog items. See [the artifact delivery
-plan](docs/ARTIFACT_SKILLS.md) for the ordered backlog and quality contract.
+Rangabot now creates new `.docx` files through normal chat. Ask it to make a Word
+document at any point; it remembers the active document request, asks one natural
+follow-up at a time for missing requirements, then creates the file from the
+conversation. The configured local Ollama model produces the structured draft,
+while deterministic code applies styles, stores the artifact under
+`data/artifacts/`, validates it, and renders local previews when LibreOffice and
+Poppler are installed. Existing-file editing and the remaining artifact abilities
+are separate backlog items. See [the artifact delivery plan](docs/ARTIFACT_SKILLS.md)
+for the ordered backlog and quality contract.
 
 Run `npm run setup` to initialize the private artifact directory and
 `npm run doctor` to check whether optional Word page-preview tools are available.

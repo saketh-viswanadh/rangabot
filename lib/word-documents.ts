@@ -17,6 +17,7 @@ import {
   TextRun,
   WidthType,
 } from "docx";
+import type { ChatMessage } from "./providers/types";
 
 export type WordDocumentBrief = {
   title: string;
@@ -33,6 +34,10 @@ export type WordDraft = {
   sections: Array<{ heading: string; paragraphs: string[]; bullets: string[] }>;
   assumptions: string[];
 };
+
+export type WordDocumentPlan =
+  | { action: "ask"; question: string }
+  | { action: "create"; brief: WordDocumentBrief; draft: WordDraft };
 
 export type QualityCheck = { id: string; label: string; status: "passed" | "warning"; detail: string };
 export type WordArtifact = { id: string; title: string; filename: string; previewPages: number; checks: QualityCheck[] };
@@ -67,12 +72,13 @@ export function parseWordDraft(raw: string): WordDraft {
   const value = JSON.parse(raw) as Partial<WordDraft>;
   if (!value || typeof value !== "object" || !Array.isArray(value.sections) || value.sections.length < 2 || value.sections.length > 10) throw new Error("The local model returned an invalid document structure.");
   const sections = value.sections.map((section) => {
-    if (!section || typeof section.heading !== "string" || !section.heading.trim()) throw new Error("Every document section needs a heading.");
+    if (!section || typeof section.heading !== "string" || !section.heading.trim()) return null;
     const paragraphs = Array.isArray(section.paragraphs) ? section.paragraphs.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).slice(0, 8) : [];
     const bullets = Array.isArray(section.bullets) ? section.bullets.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).slice(0, 12) : [];
-    if (!paragraphs.length && !bullets.length) throw new Error("Every document section needs content.");
+    if (!paragraphs.length && !bullets.length) return null;
     return { heading: section.heading.trim().slice(0, 140), paragraphs: paragraphs.map((item) => item.trim().slice(0, 1800)), bullets: bullets.map((item) => item.trim().slice(0, 600)) };
-  });
+  }).filter((section): section is NonNullable<typeof section> => Boolean(section));
+  if (sections.length < 2) throw new Error("The local model returned fewer than two substantive document sections.");
   return {
     subtitle: typeof value.subtitle === "string" ? value.subtitle.trim().slice(0, 240) : "",
     executiveSummary: boundedText(value.executiveSummary, "Executive summary", 2400),
@@ -83,6 +89,55 @@ export function parseWordDraft(raw: string): WordDraft {
 
 export function buildWordDraftPrompt(brief: WordDocumentBrief) {
   return `Create a polished ${brief.documentType} for ${brief.audience}. Purpose: ${brief.purpose}. Tone: ${brief.tone}. Use only the supplied notes for factual claims; do not invent names, numbers, dates, sources, or project behavior. Return JSON only with this shape: {"subtitle":"string","executiveSummary":"string","sections":[{"heading":"string","paragraphs":["string"],"bullets":["string"]}],"assumptions":["string"]}. Use 3-6 useful sections, concise paragraphs, and bullets only when they improve scanning. Source notes:\n${brief.sourceNotes}`;
+}
+
+export function buildFallbackWordDraft(brief: WordDocumentBrief): WordDraft {
+  const facts = brief.sourceNotes.split(/(?<=[.!?])\s+|\n+/).map((item) => item.trim()).filter((item) => (
+    Boolean(item)
+    && !/\b(create|make|generate|export)\b.{0,45}\b(word|docx|document)\b/i.test(item)
+    && !/^create the document now[.!]?$/i.test(item)
+  )).slice(0, 12);
+  return {
+    subtitle: `${brief.documentType.replaceAll("-", " ")} for ${brief.audience}`,
+    executiveSummary: `${brief.purpose} This document is intended for ${brief.audience}.`,
+    sections: [
+      { heading: "Purpose and audience", paragraphs: [brief.purpose, `Intended audience: ${brief.audience}.`], bullets: [] },
+      { heading: "Source material", paragraphs: [], bullets: facts.length ? facts : [brief.sourceNotes] },
+      { heading: "Review before use", paragraphs: ["Confirm the factual claims, assumptions, and final layout against the original conversation before using or sharing this document."], bullets: [] },
+    ],
+    assumptions: [],
+  };
+}
+
+export function shouldPlanWordDocument(messages: ChatMessage[]) {
+  const latestUser = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
+  if (/\b(create|make|generate|export|prepare|write)\b.{0,45}\b(word|docx|document)\b/i.test(latestUser) || /\b(word|docx|document)\b.{0,45}\b(create|make|generate|export)\b/i.test(latestUser)) return true;
+  const lastCreated = messages.findLastIndex((message) => Boolean(message.wordArtifact));
+  const lastIntent = messages.findLastIndex((message) => message.artifactIntent === "word");
+  return lastIntent > lastCreated;
+}
+
+export function buildWordConversationPrompt(messages: ChatMessage[]) {
+  const conversation = messages.slice(-14).map((message) => `${message.role.toUpperCase()}: ${message.content.slice(0, 2400)}`).join("\n\n").slice(-20_000);
+  return `Decide whether enough information exists to create a professional Word document from this conversation. Required: a usable title, audience, purpose, document type, tone, and factual source material. If anything material is missing, ask exactly one concise natural follow-up question. Otherwise create the document plan and draft using only conversation facts. Never invent names, numbers, dates, citations, decisions, or project behavior. Return JSON only. Ask shape: {"action":"ask","question":"string"}. Create shape: {"action":"create","brief":{"title":"string","documentType":"report|proposal|meeting-notes|technical-brief","audience":"string","purpose":"string","tone":"professional|executive|friendly|technical","sourceNotes":"string"},"draft":{"subtitle":"string","executiveSummary":"string","sections":[{"heading":"string","paragraphs":["string"],"bullets":["string"]}],"assumptions":["string"]}}.\n\nCONVERSATION:\n${conversation}`;
+}
+
+export function parseWordDocumentPlan(raw: string, fallbackSourceNotes = ""): WordDocumentPlan {
+  const value = JSON.parse(raw) as { action?: unknown; question?: unknown; brief?: unknown; draft?: unknown };
+  if (value.action === "ask") return { action: "ask", question: boundedText(value.question, "Follow-up question", 500) };
+  if (value.action === "create") {
+    const brief = value.brief && typeof value.brief === "object" ? { ...(value.brief as Record<string, unknown>) } : {};
+    if (typeof brief.sourceNotes !== "string" || !brief.sourceNotes.trim()) brief.sourceNotes = fallbackSourceNotes.slice(-20_000);
+    const validatedBrief = validateWordBrief(brief);
+    let draft: WordDraft;
+    try {
+      draft = parseWordDraft(JSON.stringify(value.draft));
+    } catch {
+      draft = buildFallbackWordDraft(validatedBrief);
+    }
+    return { action: "create", brief: validatedBrief, draft };
+  }
+  throw new Error("The local model returned an invalid document action.");
 }
 
 function contentParagraph(text: string) {

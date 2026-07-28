@@ -31,7 +31,8 @@ deterministic format and preview gates.
 
 ### A1 — Professional Word document creation — available
 
-- Create new `.docx` files from a structured brief.
+- Gather a structured brief naturally within the existing chat.
+- Create the `.docx` only when the user asks and required context is sufficient.
 - Provide report, proposal, meeting-note and technical-document templates.
 - Validate document structure and render pages for visual inspection.
 - Show a local preview and quality report before download.

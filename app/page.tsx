@@ -6,7 +6,6 @@ import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { appendWelcomeHistory, chooseWelcomeIndex, parseWelcomeHistory, welcomeLines } from "@/lib/welcome-content";
 import { isNearMessageBottom } from "@/lib/message-scroll";
 import { parseKnowledgeBrief } from "@/lib/knowledge-brief";
-import { WordStudio } from "@/components/WordStudio";
 
 type Mode = "local" | "smart" | "teach" | "codex";
 type Appearance = "light" | "dark";
@@ -54,7 +53,6 @@ export default function Home() {
   const [repositoryPath, setRepositoryPath] = useState("");
   const [repositoryMessage, setRepositoryMessage] = useState("");
   const [repositoryPanelOpen, setRepositoryPanelOpen] = useState(false);
-  const [wordStudioOpen, setWordStudioOpen] = useState(false);
   const [selectedRepository, setSelectedRepository] = useState<AllowedRepository | null>(null);
   const [codeQuery, setCodeQuery] = useState("");
   const [codeResults, setCodeResults] = useState<CodeSearchResult[]>([]);
@@ -389,7 +387,7 @@ export default function Home() {
     const userMessage: DisplayMessage = { id: crypto.randomUUID(), role: "user", content, replyTo: reference, codeContext };
     const assistantId = crypto.randomUUID();
     const nextMessages = [...messages, userMessage];
-    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply, codeContext: code }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}), ...(code ? { codeContext: code } : {}) }));
+    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply, codeContext: code, artifactIntent, wordArtifact }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}), ...(code ? { codeContext: code } : {}), ...(artifactIntent ? { artifactIntent } : {}), ...(wordArtifact ? { wordArtifact } : {}) }));
     let conversationId = activeConversationId;
     if (!conversationId) {
       const createResponse = await fetch("/api/conversations", {
@@ -419,6 +417,8 @@ export default function Home() {
     abortRef.current = abortController;
     let generatedContent = "";
     let finalAssistant: ChatMessage | null = null;
+    let responseArtifactIntent: ChatMessage["artifactIntent"];
+    let responseWordArtifact: ChatMessage["wordArtifact"];
 
     try {
       const response = await fetch("/api/chat", {
@@ -428,9 +428,11 @@ export default function Home() {
         body: JSON.stringify({
           mode,
           ...(codeContextForRequest ? { codeContext: { repositoryId: codeContextForRequest.repositoryId, path: codeContextForRequest.path, line: codeContextForRequest.line } } : {}),
-          messages: nextMessages.map(({ role, content: text, replyTo: reply }) => ({
+          messages: nextMessages.map(({ role, content: text, replyTo: reply, artifactIntent, wordArtifact }) => ({
             role,
             content: reply ? `[Replying to ${reply.role}: “${reply.excerpt}”]\n\n${text}` : text,
+            ...(artifactIntent ? { artifactIntent } : {}),
+            ...(wordArtifact ? { wordArtifact } : {}),
           })),
         }),
       });
@@ -440,6 +442,18 @@ export default function Home() {
       }
       setAttachedCodeContext(null);
       if (!response.body) throw new Error("The local model returned no response stream.");
+      responseArtifactIntent = response.headers.get("X-Rangabot-Artifact-Intent") === "word" ? "word" : undefined;
+      const encodedArtifact = response.headers.get("X-Rangabot-Word-Artifact");
+      if (encodedArtifact) {
+        try {
+          responseWordArtifact = JSON.parse(decodeURIComponent(encodedArtifact)) as ChatMessage["wordArtifact"];
+        } catch {
+          responseWordArtifact = undefined;
+        }
+      }
+      if (responseArtifactIntent || responseWordArtifact) {
+        setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, artifactIntent: responseArtifactIntent, wordArtifact: responseWordArtifact } : message));
+      }
       const knowledgeUsed = response.headers.get("X-Rangabot-Knowledge") === "used";
       if (knowledgeUsed) {
         setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, knowledgeUsed: true } : message));
@@ -468,7 +482,7 @@ export default function Home() {
         )));
       }
       if (!receivedContent) throw new Error("The local model returned an empty response.");
-      finalAssistant = { role: "assistant", content: generatedContent };
+      finalAssistant = { role: "assistant", content: generatedContent, ...(responseArtifactIntent ? { artifactIntent: responseArtifactIntent } : {}), ...(responseWordArtifact ? { wordArtifact: responseWordArtifact } : {}) };
     } catch (error) {
       const stopped = abortController.signal.aborted;
       finalAssistant = {
@@ -690,7 +704,7 @@ export default function Home() {
                   <span><strong>Write an email</strong><small>Draft it locally in the right tone</small></span>
                   <i aria-hidden="true">›</i>
                 </button>
-                <button type="button" onClick={() => setWordStudioOpen(true)}>
+                <button type="button" onClick={() => chooseStarter("I want to create a professional Word document. Please ask me what you need before creating it: ")}>
                   <span className="starter-icon document" aria-hidden="true">▤</span>
                   <span><strong>Create a Word document</strong><small>Draft, validate and preview locally</small></span>
                   <i aria-hidden="true">›</i>
@@ -704,6 +718,7 @@ export default function Home() {
               <div className="message-body">
                 {message.replyTo && <div className="reply-reference"><strong>{message.replyTo.role === "assistant" ? "Rangabot" : "You"}</strong><span>{message.replyTo.excerpt}</span></div>}
                 {message.codeContext && <div className="message-code-reference"><strong>Attached code</strong><span>{message.codeContext.repository} · {message.codeContext.path} · lines {message.codeContext.startLine}–{message.codeContext.endLine}</span></div>}
+                {message.wordArtifact && <div className="chat-word-artifact"><span aria-hidden="true">W</span><div><strong>{message.wordArtifact.title}</strong><small>{message.wordArtifact.filename} · {message.wordArtifact.previewPages} rendered page{message.wordArtifact.previewPages === 1 ? "" : "s"}</small><nav><a href={`/api/artifacts/word/${message.wordArtifact.id}/document`}>Download .docx</a>{message.wordArtifact.previewPages > 0 && <a href={`/api/artifacts/word/${message.wordArtifact.id}/preview/1`} target="_blank" rel="noreferrer">Review preview</a>}</nav></div></div>}
                 {message.source && <span className="source">LOCAL{message.knowledgeUsed ? " · KNOWLEDGE VAULT" : ""}</span>}
                 {message.content && (message.role === "assistant"
                   ? <MarkdownMessage content={message.content} />
@@ -843,7 +858,6 @@ export default function Home() {
           </aside>
         </div>
       )}
-      {wordStudioOpen && <WordStudio onClose={() => setWordStudioOpen(false)} />}
     </main>
   );
 }

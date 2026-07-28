@@ -3,6 +3,13 @@ export type ChatRole = "user" | "assistant" | "system";
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  artifactIntent?: "word";
+  wordArtifact?: {
+    id: string;
+    title: string;
+    filename: string;
+    previewPages: number;
+  };
   codeContext?: {
     repository: string;
     path: string;

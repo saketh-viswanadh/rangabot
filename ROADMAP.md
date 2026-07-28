@@ -33,7 +33,7 @@
 - [x] Local code search with scoped file-context previews
 - [x] Explicit code-preview attachment with visible send scope and local-only delivery
 - [x] Artifact-skill foundation: ordered registry, shared quality contract and welcome entry points
-- [x] A1: Professional Word document creation with structured briefs, validation and rendered previews
+- [x] A1: Conversational Word creation with requirement gathering, validation and rendered previews
 - [ ] A1b: Safe editing of user-selected existing Word documents
 - [ ] A2: Validated PDF reports and summaries
 - [ ] A3: Local email drafting and critique (no sending)
@@ -90,9 +90,10 @@
   and user-preview gates; model output cannot bypass these validations.
 - Generated artifacts and temporary renders stay under the Git-ignored
   `data/artifacts/` directory. External sending or publishing is not implied.
-- Word Studio uses the configured local Ollama model only for structured drafting.
-  File construction, styles, numbering, validation and optional LibreOffice page
-  rendering are deterministic server-side steps. User review remains mandatory.
+- Word creation happens inside ordinary chat. A persisted local intent marker lets
+  Rangabot ask follow-up questions across turns; when requirements are sufficient,
+  the local model returns a bounded plan and deterministic code constructs,
+  validates and renders the file. User review remains mandatory.
 - Knowledge files and indexes remain private and Git-ignored. Only source
   metadata and update reports are versioned. Rangabot uses retrieval rather than
   changing chat-model weights, making sources inspectable and updates reversible.
