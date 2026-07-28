@@ -29,6 +29,20 @@
 - [x] Deterministic Teacher Mode answers for current-awareness questions
 - [x] Automatic local-vault lookup for relevant Smart-mode questions
 - [x] Initial data-science pack: NumPy, pandas, scikit-learn, and DuckDB
+- [ ] Learning Core 1: Hierarchical ingestion that preserves book, chapter,
+  section, heading, page, and passage relationships
+- [ ] Learning Core 2: Conversation-aware query planning and multi-source
+  retrieval across books, local-model knowledge, and relevant chat history
+- [ ] Learning Core 3: Evidence synthesis that compares, connects, deduplicates,
+  and preserves disagreements before composing an original explanation
+- [ ] Learning Core 4: Inspectable local memory for user preferences, proficiency,
+  corrections, learning progress, and approved conclusions
+- [ ] Learning Core 5: Draft, grounding review, and revision with visible separation
+  between vault evidence, local-model background, and unresolved uncertainty
+- [ ] Learning Core 6: Feedback capture and regression evaluation proving that
+  changes improve synthesis, teaching quality, citations, and completeness
+- [ ] Learning Core 7: Rebuildable cross-book concept summaries and relationships
+  that update incrementally when compatible sources are added or removed
 - [ ] Model management for installed models and active selection
 - [x] Repository selection with an explicit filesystem allowlist
 - [x] Local code search with scoped file-context previews
@@ -47,6 +61,8 @@
 ## Proposed
 
 - Automated local evaluation fixtures for comparing smaller models
+- Optional reviewed fine-tuning dataset export after the Learning Core is mature;
+  conversations must never modify model weights automatically
 - Page-aware source previews and subject-specific retrieval evaluation suites
 - Expand the data-science pack with statistics, visualization, experimentation,
   feature engineering, and responsible evaluation material under clear licenses
@@ -103,6 +119,17 @@
 - Knowledge files and indexes remain private and Git-ignored. Only source
   metadata and update reports are versioned. Rangabot uses retrieval rather than
   changing chat-model weights, making sources inspectable and updates reversible.
+- Rangabot's Learning Core will treat retrieval as evidence gathering rather than
+  the final product. Answers must synthesize relevant vault material, downloaded-
+  model background, and conversation context into a fresh explanation suited to
+  the user's intent and level.
+- Persistent learning must remain local, inspectable, editable, deletable, and
+  provenance-aware. User statements are classified as preferences, personal
+  context, progress, corrections, or candidate knowledge; they are never silently
+  promoted to universal facts.
+- Continuous improvement means measured improvement: feedback creates reviewable
+  signals and regression cases, while automatic self-training and unreviewed
+  model-weight changes remain out of scope.
 - Weekly/monthly reports describe external subject developments only. Internal
   ingestion and product work are deliberately excluded. Each item must include
   a date, significance, direct source, evidence class, and local indexing state.

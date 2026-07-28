@@ -1,5 +1,48 @@
 # Daily progress
 
+## Next approved milestone — Rangabot Learning Core
+
+Rangabot will grow from a retrieval-assisted chatbot into a local knowledge
+synthesizer. Retrieval remains an internal evidence tool; the user-facing result
+must be an original, context-aware explanation built from the downloaded model,
+multiple compatible books, and the relevant conversation.
+
+### Approved capability backlog
+
+1. Preserve document hierarchy during ingestion: book, chapter, section,
+   heading, page, and passage.
+2. Plan each knowledge request using its intent, subject, conversation context,
+   and the user's demonstrated level.
+3. Gather and rerank evidence across multiple books, then identify overlap,
+   complementary explanations, and genuine source disagreements.
+4. Synthesize a coherent answer using both cited vault evidence and clearly
+   labelled local-model background instead of reproducing retrieved passages.
+5. Add inspectable local learning memory for preferences, proficiency, progress,
+   corrections, and user-approved conclusions.
+6. Run a separate grounding and completeness review before returning important
+   answers, revising weak drafts when necessary.
+7. Build reusable cross-book concept summaries and relationships that can be
+   regenerated whenever the vault changes.
+8. Capture explicit feedback and corrections as reviewable quality signals and
+   regression fixtures so improvement is measured rather than assumed.
+
+### Learning and safety contract
+
+- All source processing, memories, evaluations, and synthesis remain local.
+- Every durable learned item records its origin, confidence, and update time.
+- Conflicting interpretations remain visible rather than being silently merged.
+- Users can inspect, edit, export, reject, and delete learned memories.
+- Adding books updates the knowledge layer; it does not automatically retrain or
+  mutate model weights.
+- Fine-tuning may later be offered only from a reviewed, explicitly approved
+  dataset with evaluation and rollback.
+
+### First implementation slice
+
+Start with hierarchical ingestion and source-aware multi-book retrieval. This is
+the required foundation for later concept synthesis, persistent memory, and
+quality evaluation, and it can be validated without changing model weights.
+
 ## 2026-07-28 — Knowledge Vault retrieval repair
 
 - Found that the live index still referenced the pre-rename `/wan/` folder and migrated 23 records by content hash without duplicating their chunks.
