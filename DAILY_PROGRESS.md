@@ -41,3 +41,14 @@ Next recommended item: persist conversation history locally with SQLite.
 - Replaced the generic letter mark with Ranga in the sidebar, new-chat welcome, and assistant messages.
 - Kept motion purposeful: Ranga animates gently on the welcome screen and runs only while the model is actively thinking.
 - Added a complete version 2 sprite atlas for future expressions, movement, and directional interactions.
+
+## 2026-07-28 — Local conversation history
+
+- Added SQLite-backed local conversation persistence using Node's built-in
+  database API, with no external service or runtime dependency.
+- Added recent-chat navigation with create, reopen, update, and delete behavior.
+- Kept the database under the Git-ignored `data/` directory so personal chats
+  cannot be committed accidentally.
+- Added a database lifecycle test covering the full local CRUD flow.
+
+Next approved item: Markdown and syntax-highlighted code rendering with copy controls.
