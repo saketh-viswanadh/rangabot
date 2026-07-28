@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync as Database } from "node:sqlite";
 import type { ChatMessage } from "./providers/types";
+
+const serverRequire = createRequire(resolve(process.cwd(), "package.json"));
+const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sqlite");
 
 export interface ConversationSummary {
   id: string;
@@ -17,7 +21,7 @@ export interface Conversation extends ConversationSummary {
 
 const defaultDatabasePath = resolve(process.cwd(), "data", "rangabot.db");
 let databasePath = defaultDatabasePath;
-let database: DatabaseSync | undefined;
+let database: Database | undefined;
 
 function getDatabase() {
   if (database) return database;
