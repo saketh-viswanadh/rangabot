@@ -1,7 +1,7 @@
 # Open-source launch checklist
 
-Repository visibility must not change until every blocking item is complete and
-the owner explicitly approves publication.
+Repository visibility changed to public on 2026-07-28 after every blocking
+content gate passed and the owner explicitly approved publication.
 
 ## Completed foundation
 
@@ -21,13 +21,14 @@ the owner explicitly approves publication.
 - [x] Review historical Git objects for local user paths, common tokens, private keys and AWS access-key patterns
 - [x] Verify all bundled/public assets and starter sources have redistribution-compatible licenses or remain metadata-only local downloads
 - [x] Rehearse dependency installation, tests, lint, type checking, build, privacy scan and production audit from a clean clone with no private runtime data
-- [ ] Validate Linux and Windows in CI, and pass the macOS clean-clone rehearsal
+- [x] Validate Linux and Windows in CI, and pass the macOS clean-clone rehearsal
 - [x] Replace repository-local personal project history with release-oriented documentation where appropriate
 - [x] Add screenshots or a short demo containing no personal conversations
-- [ ] Configure protected `main`, required CI, private vulnerability reporting and Discussions
-- [ ] Review the complete public diff and obtain explicit repository-owner approval
+- [x] Configure protected `main`, required CI, private vulnerability reporting and Discussions
+- [x] Review the complete public diff and obtain explicit repository-owner approval
 
 ## Visibility change
 
-Changing GitHub visibility is an external publication action. It is intentionally
-not automated by Rangabot scripts or CI.
+Changing GitHub visibility is an external publication action. It remains
+intentionally outside Rangabot scripts and CI. The owner-approved launch was
+performed manually after PR #15 passed Linux and Windows validation.
