@@ -6,7 +6,7 @@
 - [x] Streaming responses and Stop generation
 - [x] Apple-inspired interface and Ranga mascot
 - [x] Local SQLite conversation history: create, list, reopen, update, and delete
-- [ ] Markdown and syntax-highlighted code rendering with copy controls
+- [x] Markdown and syntax-highlighted code rendering with copy controls
 - [ ] Model management for installed models and active selection
 - [ ] Repository selection with an explicit filesystem allowlist
 - [ ] Local code search with scoped file-context previews
@@ -34,3 +34,5 @@
   the computer.
 - Daily work uses dated branches and draft pull requests. Automation never
   pushes directly to `main` or merges automatically.
+- Assistant Markdown is rendered locally; raw HTML is not enabled. External
+  links open separately, and code highlighting and copying stay in-browser.

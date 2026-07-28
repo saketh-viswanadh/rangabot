@@ -52,3 +52,14 @@ Next recommended item: persist conversation history locally with SQLite.
 - Added a database lifecycle test covering the full local CRUD flow.
 
 Next approved item: Markdown and syntax-highlighted code rendering with copy controls.
+
+## 2026-07-28 — Rich coding responses
+
+- Added local Markdown rendering for headings, lists, links, quotes, dividers,
+  inline code, and GitHub-style tables.
+- Added syntax highlighting for fenced code blocks with language labels and
+  one-click Copy controls.
+- Kept raw HTML disabled and opened external links separately.
+- Added focused tests for inline-versus-block code and language detection.
+
+Next approved item: model management and active local model selection.

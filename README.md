@@ -21,6 +21,7 @@ The server binds only to the local computer by default.
 - Streaming local Ollama chat responses
 - Stop generation control
 - Local SQLite conversation history with reopen and delete controls
+- Markdown responses, GitHub-style tables, syntax-highlighted code, and copy controls
 - No cloud transmission
 
 Conversation data stays in `data/rangabot.db` on this computer. The database and
@@ -28,7 +29,7 @@ its journal files are excluded from Git.
 
 ## Next milestones
 
-- Markdown and syntax-highlighted code rendering
+- Model management and active model selection
 - Repository selection and local code search
 - Cloud handoff preview and approval
 - Model registry, evaluation, updates, and rollback
