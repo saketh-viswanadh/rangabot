@@ -29,5 +29,5 @@ All notable released changes will be documented here using
 - Validation cleanup now removes only stale duplicate generated type files and
   never deletes a live development server's `.next` runtime output.
 
-[Unreleased]: https://github.com/saketh-viswanadh/local-model-with-routing-capabilities/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/saketh-viswanadh/local-model-with-routing-capabilities/releases/tag/v0.1.0
+[Unreleased]: https://github.com/saketh-viswanadh/rangabot/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/saketh-viswanadh/rangabot/releases/tag/v0.1.0
