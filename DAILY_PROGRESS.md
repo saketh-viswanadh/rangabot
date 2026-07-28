@@ -1,5 +1,15 @@
 # Daily progress
 
+## 2026-07-28 — Visible textbook-ingestion progress
+
+- Added per-source progress before reading each Knowledge Vault file.
+- Added visible extraction size, passage count, and embedding-batch progress for
+  large textbooks.
+- Added a two-minute timeout per Ollama embedding batch so ingestion cannot wait
+  forever on an unresponsive local model.
+- Compatible files fall back to a keyword-searchable index when embeddings are
+  temporarily unavailable; rerunning ingestion can add embeddings later.
+
 ## Next approved milestone — Rangabot Learning Core
 
 Rangabot will grow from a retrieval-assisted chatbot into a local knowledge

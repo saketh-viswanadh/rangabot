@@ -7,7 +7,10 @@ Self-service ingestion flow:
 1. Add PDF, DOCX, HTML, Markdown, or plain-text files to `inbox/`.
 2. Run `npm run knowledge:ingest` from the Rangabot project directory.
 3. The importer extracts and normalizes text locally, skips unchanged files,
-   then builds keyword and embedding indexes under `indexes/`.
+   then builds keyword and embedding indexes under `indexes/`. It reports the
+   active source, extraction, passage count, and every embedding batch so large
+   textbooks do not appear stalled. If local embeddings time out, the compatible
+   book is still saved as keyword-searchable instead of failing the entire run.
 4. Use Smart mode for automatic local retrieval or Teacher mode for citation-first
    teaching that clearly separates vault evidence from local-model background.
    Source files are never uploaded.
