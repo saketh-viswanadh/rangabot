@@ -34,6 +34,7 @@
 - [x] Explicit code-preview attachment with visible send scope and local-only delivery
 - [x] Artifact-skill foundation: ordered registry, shared quality contract and welcome entry points
 - [x] A1: Conversational Word creation with requirement gathering, validation and rendered previews
+- [x] A1 quality hardening: genre-aware story documents, no planning-note fallback, content-depth gates, and a curated local Ramayana pack for reliable small-model output
 - [ ] A1b: Safe editing of user-selected existing Word documents
 - [ ] A2: Validated PDF reports and summaries
 - [ ] A3: Local email drafting and critique (no sending)
@@ -94,6 +95,10 @@
   Rangabot ask follow-up questions across turns; when requirements are sufficient,
   the local model returns a bounded plan and deterministic code constructs,
   validates and renders the file. User review remains mandatory.
+- Creative Word requests are classified by genre and must contain finished reader-facing
+  content. Story collections cannot fall back to business-report scaffolding. For the
+  initial Ramayana use case, a curated local story pack protects canonical episode facts
+  from small-model hallucinations while the model still gathers the brief conversationally.
 - Knowledge files and indexes remain private and Git-ignored. Only source
   metadata and update reports are versioned. Rangabot uses retrieval rather than
   changing chat-model weights, making sources inspectable and updates reversible.

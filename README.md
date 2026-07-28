@@ -63,7 +63,11 @@ follow-up at a time for missing requirements, then creates the file from the
 conversation. The configured local Ollama model produces the structured draft,
 while deterministic code applies styles, stores the artifact under
 `data/artifacts/`, validates it, and renders local previews when LibreOffice and
-Poppler are installed. Existing-file editing and the remaining artifact abilities
+Poppler are installed. Creative requests use genre-aware layouts and must contain
+finished reader-facing content; planning notes and generic source-material
+fallbacks are rejected. A curated local Ramayana story pack provides dependable
+child-friendly plot facts when smaller models cannot safely retell the episodes.
+Existing-file editing and the remaining artifact abilities
 are separate backlog items. See [the artifact delivery plan](docs/ARTIFACT_SKILLS.md)
 for the ordered backlog and quality contract.
 

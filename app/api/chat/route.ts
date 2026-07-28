@@ -5,7 +5,8 @@ import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatal
 import { formatCodeContext, isCodeContextRequest } from "@/lib/code-context";
 import { getAllowedRepository } from "@/lib/repositories";
 import { previewRepositoryFile } from "@/lib/repository-search";
-import { buildWordConversationPrompt, createWordArtifact, parseWordDocumentPlan, shouldPlanWordDocument } from "@/lib/word-documents";
+import { buildWordConversationPrompt, buildWordDraftPrompt, createWordArtifact, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, shouldPlanWordDocument, validateWordDraftForBrief, type WordDocumentBrief } from "@/lib/word-documents";
+import { buildRamayanaStoryCollection } from "@/lib/story-packs/ramayana";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,18 @@ function validMessages(value: unknown): value is ChatMessage[] {
       && candidate.content.trim().length > 0
       && candidate.content.length <= 50_000;
   });
+}
+
+async function generateStoryCollection(brief: WordDocumentBrief) {
+  const isRamayana = /ramayana/i.test(`${brief.title} ${brief.purpose} ${brief.sourceNotes}`);
+  if (isRamayana) {
+    return buildRamayanaStoryCollection(brief);
+  }
+  const raw = await completeJsonWithOllama([
+    { role: "system", content: "You are Rangabot's local children's author. Write complete, vivid, age-appropriate stories—not summaries, outlines, planning notes, or a report. Return valid JSON only." },
+    { role: "user", content: buildWordDraftPrompt(brief) },
+  ]);
+  return validateWordDraftForBrief(brief, parseWordDraft(raw));
 }
 
 export async function POST(request: Request) {
@@ -52,13 +65,23 @@ export async function POST(request: Request) {
       const conversationSource = body.messages.filter((message) => message.role === "user").map((message) => message.content).join("\n\n");
       let plan;
       try {
-        plan = parseWordDocumentPlan(rawPlan, conversationSource);
+        const brief = parseWordBriefFromPlan(rawPlan, conversationSource);
+        if (brief?.documentType === "story-collection") {
+          plan = { action: "create" as const, brief, draft: await generateStoryCollection(brief) };
+        } else {
+          plan = parseWordDocumentPlan(rawPlan, conversationSource);
+        }
       } catch {
         const repairedPlan = await completeJsonWithOllama([
           { role: "system", content: "Repair the supplied Word-document plan into the required JSON shape. Preserve only supported facts. Return JSON only, with at least two substantive sections when action is create." },
-          { role: "user", content: `Required actions are {"action":"ask","question":"..."} or {"action":"create","brief":{"title":"...","documentType":"report|proposal|meeting-notes|technical-brief","audience":"...","purpose":"...","tone":"professional|executive|friendly|technical","sourceNotes":"..."},"draft":{"subtitle":"...","executiveSummary":"...","sections":[{"heading":"...","paragraphs":["..."],"bullets":[]}],"assumptions":[]}}.\n\nInvalid plan:\n${rawPlan.slice(0, 16_000)}\n\nConversation facts:\n${conversationSource.slice(-12_000)}` },
+          { role: "user", content: `Required actions are {"action":"ask","question":"..."} or {"action":"create","brief":{"title":"...","documentType":"report|proposal|meeting-notes|technical-brief|guide|article|story-collection","audience":"...","purpose":"...","tone":"professional|executive|friendly|technical|warm|playful","sourceNotes":"..."},"draft":{"subtitle":"...","executiveSummary":"...","sections":[{"heading":"...","paragraphs":["..."],"bullets":[]}],"assumptions":[]}}. Creative requests must contain finished reader-facing content, never planning notes or a report about the requested content.\n\nInvalid plan:\n${rawPlan.slice(0, 16_000)}\n\nConversation facts:\n${conversationSource.slice(-12_000)}` },
         ]);
-        plan = parseWordDocumentPlan(repairedPlan, conversationSource);
+        const repairedBrief = parseWordBriefFromPlan(repairedPlan, conversationSource);
+        if (repairedBrief?.documentType === "story-collection") {
+          plan = { action: "create" as const, brief: repairedBrief, draft: await generateStoryCollection(repairedBrief) };
+        } else {
+          plan = parseWordDocumentPlan(repairedPlan, conversationSource);
+        }
       }
       if (plan.action === "ask") {
         return new Response(plan.question, {

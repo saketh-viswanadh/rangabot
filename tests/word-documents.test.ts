@@ -3,7 +3,8 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { buildFallbackWordDraft, buildWordConversationPrompt, buildWordDraftPrompt, createWordArtifact, parseWordDocumentPlan, parseWordDraft, resetArtifactsRootForTests, resolveArtifactFile, setArtifactsRootForTests, shouldPlanWordDocument, validateWordBrief } from "../lib/word-documents.ts";
+import { assembleStoryCollectionDraft, buildFallbackWordDraft, buildStoryPartPrompt, buildWordConversationPrompt, buildWordDraftPrompt, createWordArtifact, parseStoryDraftPart, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, resetArtifactsRootForTests, resolveArtifactFile, setArtifactsRootForTests, shouldPlanWordDocument, validateWordBrief, validateWordDraftForBrief } from "../lib/word-documents.ts";
+import { buildRamayanaStoryCollection } from "../lib/story-packs/ramayana.ts";
 
 const brief = {
   title: "Analytics operating brief",
@@ -17,7 +18,7 @@ const brief = {
 test("validates a bounded structured Word brief", () => {
   assert.deepEqual(validateWordBrief(brief), brief);
   assert.throws(() => validateWordBrief({ ...brief, title: "" }), /Title is required/);
-  assert.match(buildWordDraftPrompt(brief), /do not invent names, numbers, dates, sources, or project behavior/i);
+  assert.match(buildWordDraftPrompt(brief), /do not fabricate citations, quotations, dates, or disputed details/i);
 });
 
 test("rejects malformed model drafts and bounds valid content", () => {
@@ -55,6 +56,43 @@ test("starts and continues Word creation inside normal chat", () => {
   ]), true);
   assert.equal(shouldPlanWordDocument([{ role: "user", content: "Explain Word embeddings." }]), false);
   assert.match(buildWordConversationPrompt([{ role: "user", content: "Use only these facts." }]), /exactly one concise natural follow-up question/i);
+  assert.match(buildWordConversationPrompt([{ role: "user", content: "Write interesting Ramayana stories for kids." }]), /story-collection/i);
+});
+
+test("requires finished stories and never substitutes planning scaffolding", () => {
+  const storyBrief = {
+    title: "Adventures from the Ramayana",
+    documentType: "story-collection" as const,
+    audience: "Children aged 10-12",
+    purpose: "Share engaging Ramayana stories about loyalty",
+    tone: "warm" as const,
+    sourceNotes: "Ramayana stories for children; simplify the language.",
+  };
+  assert.match(buildWordDraftPrompt(storyBrief), /actual story collection, not a report/i);
+  assert.throws(() => buildFallbackWordDraft(storyBrief), /will not replace missing stories/i);
+  assert.throws(() => validateWordDraftForBrief(storyBrief, {
+    subtitle: "A report for children",
+    executiveSummary: "This report describes stories.",
+    sections: [
+      { heading: "Purpose and audience", paragraphs: ["For children."], bullets: [] },
+      { heading: "Source material", paragraphs: [], bullets: ["ramayana"] },
+    ],
+    assumptions: [],
+  }), /planning scaffolding/i);
+  const rawPlan = JSON.stringify({ action: "create", brief: { ...storyBrief, sourceNotes: "" }, draft: {} });
+  assert.equal(parseWordBriefFromPlan(rawPlan, "Conversation stays private.")?.sourceNotes, "Conversation stays private.");
+  assert.match(buildStoryPartPrompt(storyBrief, "Bharata guards Rama's throne", "Bharata placed Rama's sandals on the throne."), /Do not invent a character's death/i);
+  const storyText = Array.from({ length: 130 }, (_, index) => `word${index}`).join(" ");
+  const part = parseStoryDraftPart(JSON.stringify({ title: "The Sandals on the Throne", paragraphs: [storyText], reflection: "What makes a promise important?" }));
+  const collection = assembleStoryCollectionDraft(storyBrief, [part, { ...part, title: "Two" }, { ...part, title: "Three" }, { ...part, title: "Four" }]);
+  assert.equal(collection.sections.length, 4);
+  assert.equal(collection.sections[0].bullets[0].startsWith("Think about it:"), true);
+  const ramayana = buildRamayanaStoryCollection(storyBrief);
+  const storyContent = JSON.stringify(ramayana);
+  assert.match(storyContent, /Bharata.*sandals/i);
+  assert.match(storyContent, /Jatayu.*wounded/i);
+  assert.doesNotMatch(storyContent, /Jatayu.*rescued Sita/i);
+  assert.doesNotMatch(storyContent, /Rama.*sacrificed himself/i);
 });
 
 test("parses either a conversational follow-up or a complete document plan", () => {
