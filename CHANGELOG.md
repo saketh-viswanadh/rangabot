@@ -7,6 +7,8 @@ All notable released changes will be documented here using
 
 ### Added
 
+- Local Markdown conversation export and restore, including exact recovery of
+  message roles, code blocks and reply references.
 - Local conversation search across titles and message content, scoped to the
   selected project when applicable.
 - Persistent conversation pinning with pinned chats sorted above recent chats.
@@ -18,6 +20,8 @@ All notable released changes will be documented here using
 
 ### Fixed
 
+- Unpinned conversation controls remain subtly visible instead of only appearing
+  during hover, making the pin action discoverable.
 - Streaming responses no longer force the reader to the bottom after they
   intentionally scroll upward.
 
