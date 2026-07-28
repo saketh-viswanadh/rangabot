@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 
-type Check = { name: string; ok: boolean; detail: string };
+type Check = { name: string; ok: boolean; detail: string; required?: boolean };
 const checks: Check[] = [];
 const envPath = resolve(".env.local");
 if (existsSync(envPath)) {
@@ -14,6 +15,10 @@ const major = Number(process.versions.node.split(".")[0]);
 checks.push({ name: "Node.js", ok: major >= 24, detail: `v${process.versions.node}; Rangabot requires Node 24+` });
 checks.push({ name: "Environment", ok: existsSync(envPath), detail: existsSync(envPath) ? ".env.local found" : "Run npm run setup or copy .env.example" });
 checks.push({ name: "Knowledge inbox", ok: existsSync(resolve("data/knowledge/inbox")), detail: "data/knowledge/inbox" });
+checks.push({ name: "Artifact output", ok: existsSync(resolve("data/artifacts")), detail: "data/artifacts; run npm run setup if missing" });
+const officeAvailable = spawnSync("soffice", ["--version"], { stdio: "ignore" }).status === 0;
+const popplerAvailable = spawnSync("pdftoppm", ["-v"], { stdio: "ignore" }).status === 0;
+checks.push({ name: "Word preview", ok: officeAvailable && popplerAvailable, required: false, detail: officeAvailable && popplerAvailable ? "LibreOffice and Poppler available" : "optional; install LibreOffice and Poppler for rendered page previews" });
 
 try {
   const response = await fetch(`${process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434"}/api/tags`, { signal: AbortSignal.timeout(2_500) });
@@ -27,4 +32,4 @@ try {
 }
 
 for (const check of checks) console.log(`${check.ok ? "PASS" : "WARN"}  ${check.name}: ${check.detail}`);
-if (checks.some((check) => !check.ok)) process.exitCode = 1;
+if (checks.some((check) => !check.ok && check.required !== false)) process.exitCode = 1;

@@ -1,4 +1,4 @@
-export type ArtifactSkillStatus = "foundation" | "next" | "backlog";
+export type ArtifactSkillStatus = "available" | "next" | "backlog";
 
 export type ArtifactSkill = {
   id: "word" | "pdf" | "email" | "writing" | "technical-docs" | "slides" | "spreadsheet";
@@ -18,7 +18,7 @@ export const artifactQualityGates = [
 ] as const;
 
 export const artifactSkills: ArtifactSkill[] = [
-  { id: "word", name: "Professional Word documents", outcome: "Create and edit polished DOCX files", status: "next", dependsOn: [] },
+  { id: "word", name: "Professional Word documents", outcome: "Create polished DOCX files with rendered previews", status: "available", dependsOn: [] },
   { id: "pdf", name: "PDF reports", outcome: "Create validated printable reports and summaries", status: "backlog", dependsOn: ["word"] },
   { id: "email", name: "Email drafting", outcome: "Draft clear local emails without sending them", status: "backlog", dependsOn: [] },
   { id: "writing", name: "Writing studio", outcome: "Plan, draft, revise and critique long-form writing", status: "backlog", dependsOn: [] },

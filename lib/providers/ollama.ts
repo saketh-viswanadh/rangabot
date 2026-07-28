@@ -42,6 +42,23 @@ interface OllamaStreamChunk {
   error?: string;
 }
 
+export async function completeJsonWithOllama(messages: ChatMessage[]): Promise<string> {
+  const response = await ollamaFetch("/api/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      model: configuredModel,
+      messages: messages.map(({ role, content }) => ({ role, content })),
+      format: "json",
+      stream: false,
+    }),
+  });
+  if (!response.ok) throw new Error(`Ollama request failed (${response.status}): ${await response.text()}`);
+  const data = (await response.json()) as { message?: { content?: string } };
+  const content = data.message?.content?.trim();
+  if (!content) throw new Error("Ollama returned an empty document draft.");
+  return content;
+}
+
 export async function streamChatWithOllama(messages: ChatMessage[]): Promise<ReadableStream<Uint8Array>> {
   const response = await ollamaFetch("/api/chat", {
     method: "POST",

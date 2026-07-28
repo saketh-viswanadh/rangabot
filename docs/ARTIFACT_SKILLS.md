@@ -29,12 +29,19 @@ deterministic format and preview gates.
 - Fresh-chat entry points for email and document work.
 - Private output location: `data/artifacts/` (Git ignored).
 
-### A1 — Professional Word documents — next
+### A1 — Professional Word document creation — available
 
-- Create and edit `.docx` files from a structured brief.
+- Gather a structured brief naturally within the existing chat.
+- Create the `.docx` only when the user asks and required context is sufficient.
 - Provide report, proposal, meeting-note and technical-document templates.
 - Validate document structure and render pages for visual inspection.
 - Show a local preview and quality report before download.
+
+### A1b — Existing Word document editing — next candidate
+
+- Upload or select a `.docx` through an explicit local flow.
+- Preserve the original and apply bounded, trackable changes.
+- Re-run structural, privacy and rendered-page validation before download.
 
 ### A2 — PDF reports
 

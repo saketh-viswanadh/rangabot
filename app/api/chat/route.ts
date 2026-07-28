@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { streamChatWithOllama } from "@/lib/providers/ollama";
+import { completeJsonWithOllama, streamChatWithOllama } from "@/lib/providers/ollama";
 import type { ChatMessage } from "@/lib/providers/types";
 import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatalogQuestion, isKnowledgeNewsQuestion, searchKnowledge, shouldAutoSearchKnowledge } from "@/lib/knowledge";
 import { formatCodeContext, isCodeContextRequest } from "@/lib/code-context";
 import { getAllowedRepository } from "@/lib/repositories";
 import { previewRepositoryFile } from "@/lib/repository-search";
+import { buildWordConversationPrompt, createWordArtifact, parseWordDocumentPlan, shouldPlanWordDocument } from "@/lib/word-documents";
 
 export const runtime = "nodejs";
 
@@ -41,6 +42,39 @@ export async function POST(request: Request) {
       if (!repository) return NextResponse.json({ error: "That folder is no longer approved." }, { status: 400 });
       const preview = previewRepositoryFile(repository, body.codeContext.path, body.codeContext.line);
       localCodeContext = formatCodeContext(repository, preview);
+    }
+
+    if (shouldPlanWordDocument(body.messages)) {
+      const rawPlan = await completeJsonWithOllama([
+        { role: "system", content: "You are Rangabot's local Word-document planner. Gather missing requirements conversationally, then produce faithful structured document content. Return valid JSON only." },
+        { role: "user", content: `${buildWordConversationPrompt(body.messages)}${localCodeContext ? `\n\n${localCodeContext}` : ""}` },
+      ]);
+      const conversationSource = body.messages.filter((message) => message.role === "user").map((message) => message.content).join("\n\n");
+      let plan;
+      try {
+        plan = parseWordDocumentPlan(rawPlan, conversationSource);
+      } catch {
+        const repairedPlan = await completeJsonWithOllama([
+          { role: "system", content: "Repair the supplied Word-document plan into the required JSON shape. Preserve only supported facts. Return JSON only, with at least two substantive sections when action is create." },
+          { role: "user", content: `Required actions are {"action":"ask","question":"..."} or {"action":"create","brief":{"title":"...","documentType":"report|proposal|meeting-notes|technical-brief","audience":"...","purpose":"...","tone":"professional|executive|friendly|technical","sourceNotes":"..."},"draft":{"subtitle":"...","executiveSummary":"...","sections":[{"heading":"...","paragraphs":["..."],"bullets":[]}],"assumptions":[]}}.\n\nInvalid plan:\n${rawPlan.slice(0, 16_000)}\n\nConversation facts:\n${conversationSource.slice(-12_000)}` },
+        ]);
+        plan = parseWordDocumentPlan(repairedPlan, conversationSource);
+      }
+      if (plan.action === "ask") {
+        return new Response(plan.question, {
+          headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff", "X-Rangabot-Artifact-Intent": "word" },
+        });
+      }
+      const artifact = await createWordArtifact(plan.brief, plan.draft);
+      const reference = { id: artifact.id, title: artifact.title, filename: artifact.filename, previewPages: artifact.previewPages };
+      return new Response(`I created **${artifact.title}** locally from our conversation. Review the rendered preview and source-grounding warning before using it.\n\n[Download the Word document](/api/artifacts/word/${artifact.id}/document)`, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "X-Content-Type-Options": "nosniff",
+          "X-Rangabot-Word-Artifact": encodeURIComponent(JSON.stringify(reference)),
+        },
+      });
     }
 
     let messages = body.messages;

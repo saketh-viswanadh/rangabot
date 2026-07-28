@@ -57,6 +57,6 @@ if (existsSync(envPath)) {
   console.log("\nCreated private .env.local configuration.");
 }
 
-for (const directory of ["data/knowledge/inbox", "data/knowledge/indexes", "data/knowledge/processed", "data/knowledge/backups"]) mkdirSync(resolve(directory), { recursive: true });
+for (const directory of ["data/artifacts", "data/knowledge/inbox", "data/knowledge/indexes", "data/knowledge/processed", "data/knowledge/backups"]) mkdirSync(resolve(directory), { recursive: true });
 console.log("Initialized the private Knowledge Vault.");
 console.log("\nNext: add documents to data/knowledge/inbox, run npm run knowledge:ingest, then npm run dev.\n");
