@@ -8,6 +8,7 @@ node_modules/
 .DS_Store
 data/*.db
 data/*.db-*
+data/repositories.json
 data/knowledge/inbox/
 data/knowledge/processed/
 data/knowledge/indexes/

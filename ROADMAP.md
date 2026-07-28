@@ -29,7 +29,7 @@
 - [x] Automatic local-vault lookup for relevant Smart-mode questions
 - [x] Initial data-science pack: NumPy, pandas, scikit-learn, and DuckDB
 - [ ] Model management for installed models and active selection
-- [ ] Repository selection with an explicit filesystem allowlist
+- [x] Repository selection with an explicit filesystem allowlist
 - [ ] Local code search with scoped file-context previews
 
 ## Proposed
@@ -67,6 +67,8 @@
   when quality improves, and guarded by count, length, attribution and duplicate tests.
 - Projects currently organize local chats only. Selecting a project never grants
   filesystem access; repository attachment remains a separate allowlist flow.
+- Repository approvals are canonical absolute paths stored in a private local
+  registry. Revocation removes only the approval and never changes user files.
 - Knowledge files and indexes remain private and Git-ignored. Only source
   metadata and update reports are versioned. Rangabot uses retrieval rather than
   changing chat-model weights, making sources inspectable and updates reversible.

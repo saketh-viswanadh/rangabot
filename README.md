@@ -29,6 +29,7 @@ The server binds only to the local computer by default.
 - Local SQLite conversation history with reopen, search, pin, Markdown backup/restore and delete controls
 - Markdown responses, GitHub-style tables, syntax-highlighted code, and copy controls
 - Local project folders and project-scoped chats
+- Explicit local repository allowlisting with reversible access approval
 - Private 4 GB Knowledge Vault with PDF, DOCX, HTML, Markdown, and text ingestion
 - Hybrid local keyword and embedding retrieval
 - Teacher Mode with passage citations and explicit evidence limits
@@ -40,6 +41,10 @@ The server binds only to the local computer by default.
 
 Conversation data stays in `data/rangabot.db` on this computer. The database and
 its journal files are excluded from Git.
+
+Repository approvals stay in the private, Git-ignored
+`data/repositories.json` file. Adding a repository records only its canonical
+folder path; this milestone does not read or index repository files yet.
 
 ## Knowledge Vault
 
