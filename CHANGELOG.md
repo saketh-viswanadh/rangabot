@@ -9,6 +9,9 @@ All notable released changes will be documented here using
 
 - A dedicated Knowledge Brief drawer with weekly intelligence cards, monthly
   archive, private-vault status and a separate Rangabot product changelog.
+- A bundled 300-item welcome library with 100 quotes, 100 jokes and 100 thoughts.
+- A browser-local 60-item recent-history window to prevent welcome messages from
+  repeating across new chats and page reloads.
 
 ### Fixed
 
