@@ -4,6 +4,8 @@ A beautiful, local-first assistant for private chat, coding, brainstorming and
 teaching from your own documents. Rangabot uses downloaded Ollama models and a
 local Knowledge Vault; cloud handoff remains disabled.
 
+![Rangabot Teacher Mode using synthetic local-vault content](docs/media/rangabot-dark-teacher.png)
+
 ## First run
 
 1. Install Node.js 24+ and [Ollama](https://ollama.com/).
@@ -86,12 +88,17 @@ available offline after the weekly source check.
 
 ## Contributing
 
-Rangabot is being prepared for community development. Read
+Rangabot welcomes community development. Read
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), the
 [architecture](docs/architecture.md), [privacy model](docs/privacy.md), and
 [model guide](docs/models.md). Run `npm run check` before submitting a pull
 request. Codex is optional; all required maintenance paths are normal scripts,
 documentation and GitHub workflows.
+
+CI validates Linux and Windows on every pull request; macOS is covered by the
+documented clean-clone release rehearsal. Starter-source licensing and the
+local-download-only policy are documented in
+[docs/source-licensing.md](docs/source-licensing.md).
 
 Source code and documentation use Apache-2.0. Original Ranga artwork uses CC BY
 4.0 with attribution. The Rangabot naming policy is documented in

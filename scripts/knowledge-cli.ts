@@ -24,7 +24,7 @@ if (command === "init") {
   }
 } else if (command === "validate") {
   const manifest = JSON.parse(readFileSync(resolve(knowledgeRoot, "SOURCE_MANIFEST.json"), "utf8")) as { sources?: Array<Record<string, unknown>> };
-  const required = ["id", "title", "author", "url", "license", "retrievedAt", "subject", "difficulty", "updatePolicy"];
+  const required = ["id", "title", "author", "url", "license", "licenseUrl", "distributionPolicy", "retrievedAt", "subject", "difficulty", "updatePolicy"];
   const problems = (manifest.sources ?? []).flatMap((source, index) => required.filter((field) => source[field] === undefined).map((field) => `source ${index + 1} missing ${field}`));
   if (problems.length) {
     problems.forEach((problem) => console.error(`FAIL: ${problem}`));

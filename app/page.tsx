@@ -133,6 +133,33 @@ export default function Home() {
     void refreshProjects();
     void refreshKnowledge();
   }, []);
+  useEffect(() => {
+    const parameters = new URLSearchParams(window.location.search);
+    if (parameters.get("demo") !== "knowledge") return;
+    setAppearance(parameters.get("theme") === "light" ? "light" : "dark");
+    setPalette("sage");
+    const question: DisplayMessage = {
+      id: "demo-question",
+      role: "user",
+      content: "What changed in NumPy 2.5 for local data science work?",
+    };
+    const step = parameters.get("step") ?? "answer";
+    if (step === "question") {
+      setMessages([question]);
+      return;
+    }
+    if (step === "thinking") {
+      setMessages([question, { id: "demo-thinking", role: "assistant", content: "", source: "local", active: true, knowledgeUsed: true }]);
+      return;
+    }
+    setMessages([question, {
+      id: "demo-answer",
+      role: "assistant",
+      source: "local",
+      knowledgeUsed: true,
+      content: "NumPy 2.5 raises the Python baseline to 3.12+, removes distutils, improves free-threading support, and adds Array API-compatible descending sorts. For an upgrade, test packaging and sorting behavior against your real workloads. [Source 1]",
+    }]);
+  }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   async function sendMessage(event: FormEvent) {
