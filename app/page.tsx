@@ -14,6 +14,7 @@ type DisplayMessage = ChatMessage & {
   error?: boolean;
   active?: boolean;
   stopped?: boolean;
+  knowledgeUsed?: boolean;
 };
 type ConversationSummary = {
   id: string;
@@ -194,6 +195,10 @@ export default function Home() {
         throw new Error(data.error ?? "Request failed");
       }
       if (!response.body) throw new Error("The local model returned no response stream.");
+      const knowledgeUsed = response.headers.get("X-Rangabot-Knowledge") === "used";
+      if (knowledgeUsed) {
+        setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, knowledgeUsed: true } : message));
+      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -384,7 +389,7 @@ export default function Home() {
               {message.role === "assistant" && <div className={`avatar ${message.active ? "active" : ""}`} aria-hidden="true" />}
               <div className="message-body">
                 {message.replyTo && <div className="reply-reference"><strong>{message.replyTo.role === "assistant" ? "Rangabot" : "You"}</strong><span>{message.replyTo.excerpt}</span></div>}
-                {message.source && <span className="source">LOCAL</span>}
+                {message.source && <span className="source">LOCAL{message.knowledgeUsed ? " · KNOWLEDGE VAULT" : ""}</span>}
                 {message.content && (message.role === "assistant"
                   ? <MarkdownMessage content={message.content} />
                   : <p>{message.content}</p>)}
@@ -430,7 +435,7 @@ export default function Home() {
                 <option value="teach">Teacher mode</option>
                 <option value="codex">Codex</option>
               </select>
-              <span className="route-note">{mode === "codex" ? "Cloud handoff not enabled" : mode === "teach" ? "Uses your local Knowledge Vault" : "Stays on this computer"}</span>
+              <span className="route-note">{mode === "codex" ? "Cloud handoff not enabled" : mode === "teach" ? "Strict vault teaching with citations" : mode === "smart" ? "Automatically uses local knowledge" : "Stays on this computer"}</span>
               {sending ? (
                 <button className="stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating">■</button>
               ) : (

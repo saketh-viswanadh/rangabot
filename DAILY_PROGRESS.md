@@ -150,3 +150,16 @@ by the chat interface until its final edge gate passes.
   branch, installation, storage, or indexing changelog entries.
 - Added regression tests for subject-news detection and confirmed private source
   material remains excluded from Git.
+
+## 2026-07-28 — Automatic local knowledge in Smart mode
+
+- Made Smart mode automatically search the local Knowledge Vault for questions,
+  explanations, comparisons, and recognized vault subjects.
+- Kept greetings and lightweight conversation out of retrieval to avoid needless
+  embedding work and irrelevant textbook context.
+- Added a visible `LOCAL · KNOWLEDGE VAULT` response label whenever retrieval is
+  used, while preserving the stricter citation-only behavior of Teacher Mode.
+- Smart answers may use downloaded-model knowledge for gaps but must distinguish
+  it from cited local evidence. Nothing is transmitted outside the computer.
+- Added regression coverage for informational, subject-specific, and conversational
+  routing examples.

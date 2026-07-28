@@ -37,3 +37,11 @@ test("recognizes subject news questions without confusing teaching questions", (
   assert.equal(knowledge.isKnowledgeNewsQuestion("Explain the pandas string dtype"), false);
   assert.match(knowledge.buildKnowledgeNewsAnswer("What's new this week?"), /Data science intelligence brief/);
 });
+
+test("auto-searches the vault for informational Smart-mode questions", () => {
+  assert.equal(knowledge.shouldAutoSearchKnowledge("How do Python modules work?"), true);
+  assert.equal(knowledge.shouldAutoSearchKnowledge("Compare NumPy arrays and Python lists"), true);
+  assert.equal(knowledge.shouldAutoSearchKnowledge("Tell me about Egyptian mythology"), true);
+  assert.equal(knowledge.shouldAutoSearchKnowledge("Hey!"), false);
+  assert.equal(knowledge.shouldAutoSearchKnowledge("Thanks"), false);
+});

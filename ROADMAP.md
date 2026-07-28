@@ -16,6 +16,7 @@
 - [x] Hybrid keyword and embedding retrieval with Teacher Mode citations
 - [x] Weekly and monthly sourced subject-intelligence briefs
 - [x] Deterministic Teacher Mode answers for current-awareness questions
+- [x] Automatic local-vault lookup for relevant Smart-mode questions
 - [x] Initial data-science pack: NumPy, pandas, scikit-learn, and DuckDB
 - [ ] Model management for installed models and active selection
 - [ ] Repository selection with an explicit filesystem allowlist
@@ -63,3 +64,6 @@
 - Weekly/monthly reports describe external subject developments only. Internal
   ingestion and product work are deliberately excluded. Each item must include
   a date, significance, direct source, evidence class, and local indexing state.
+- Smart mode automatically retrieves local evidence for informational questions
+  and visibly identifies vault-backed answers. Teacher Mode stays citation-first
+  and evidence-bound; Local-only mode never performs vault retrieval.

@@ -66,6 +66,14 @@ export function isKnowledgeNewsQuestion(question: string) {
   return /\b(what(?:'s| is)? new|latest|recent|new developments?|this (?:week|month)|current (?:news|developments?|updates?))\b/i.test(question);
 }
 
+export function shouldAutoSearchKnowledge(question: string) {
+  const normalized = question.trim();
+  if (normalized.length < 8) return false;
+  if (/^(hi|hello|hey|thanks|thank you|good (?:morning|afternoon|evening))[!. ]*$/i.test(normalized)) return false;
+  return /\?|^(?:what|why|when|where|who|which|how|explain|define|compare|summarize|teach|tell me about|help me understand)\b/i.test(normalized)
+    || /\b(?:python|numpy|pandas|sql|spark|pyspark|databricks|snowflake|data science|machine learning|\bai\b|models?|statistics|visuali[sz]ation|history|mythology|algorithm)\b/i.test(normalized);
+}
+
 export function buildKnowledgeNewsAnswer(question: string) {
   const wantsMonth = /\b(month|monthly|july)\b/i.test(question);
   const path = wantsMonth ? knowledgeMonthlyBrief : knowledgeWeeklyBrief;

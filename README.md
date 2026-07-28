@@ -29,6 +29,7 @@ The server binds only to the local computer by default.
 - Private 4 GB Knowledge Vault with PDF, DOCX, HTML, Markdown, and text ingestion
 - Hybrid local keyword and embedding retrieval
 - Teacher Mode with passage citations and explicit evidence limits
+- Automatic local Knowledge Vault lookup for informational questions in Smart mode
 - Weekly and monthly sourced subject-intelligence briefs
 - No cloud transmission
 
@@ -52,6 +53,12 @@ Select **Teacher mode** in Rangabot to retrieve relevant vault passages before
 the chat model answers. Teacher Mode is instructed to cite the numbered local
 sources, identify gaps, and preserve conflicting historical or mythological
 interpretations instead of silently inventing an answer.
+
+**Smart routing** also searches the vault automatically for informational and
+subject-related questions. Responses visibly show `LOCAL · KNOWLEDGE VAULT`
+when retrieval was used. Smart mode may fill evidence gaps from the downloaded
+chat model and labels vault citations; Teacher Mode remains the strict option
+when answers must stay within indexed sources.
 
 Private source files and generated indexes are Git-ignored. The tracked
 `SOURCE_MANIFEST.json` contains only public starter-source metadata; weekly and
