@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { streamChatWithOllama } from "@/lib/providers/ollama";
 import type { ChatMessage } from "@/lib/providers/types";
+import { searchKnowledge } from "@/lib/knowledge";
 
 export const runtime = "nodejs";
 
@@ -28,7 +29,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const stream = await streamChatWithOllama(body.messages);
+    let messages = body.messages;
+    if (body.mode === "teach") {
+      const question = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
+      const sources = await searchKnowledge(question, 3);
+      const context = sources.length
+        ? sources.map((source, index) => `[Source ${index + 1}: ${source.title}, passage ${source.chunk}]\n${source.content.slice(0, 900)}`).join("\n\n")
+        : "No matching passage was found in the local Knowledge Vault.";
+      const history = body.messages.slice(0, -1);
+      messages = [
+        { role: "system", content: "You are Rangabot in Teacher Mode. Use only the supplied local passages for factual claims. Teach simply, then add detail. Cite every factual paragraph as [Source 1], [Source 2], or [Source 3]. Never claim that the local vault is unavailable when passages are supplied. If the passages are insufficient, state exactly what is missing. Distinguish historical interpretations and mythology variants." },
+        ...history,
+        { role: "user", content: `QUESTION:\n${question}\n\nLOCAL KNOWLEDGE VAULT PASSAGES:\n${context}\n\nAnswer the question from these passages and include inline source citations.` },
+      ];
+    }
+
+    const stream = await streamChatWithOllama(messages);
     return new Response(stream, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",

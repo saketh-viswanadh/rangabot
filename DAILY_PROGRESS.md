@@ -115,3 +115,20 @@ by the chat interface until its final edge gate passes.
   as a butterfly passes nearby.
 - Used only lightweight CSS transforms and respected reduced-motion settings;
   no new mascot rendering or animation assets were introduced.
+
+## 2026-07-28 — Local Knowledge Vault and Teacher Mode
+
+- Built a private 4 GB Knowledge Vault with incremental hashing, SQLite FTS5,
+  local embeddings, storage accounting, and PDF/DOCX/HTML/Markdown/text parsing.
+- Installed the 274 MB `nomic-embed-text` model locally through Ollama and
+  indexed 14 starter documents into 1,577 embedded teaching passages.
+- Added official Python tutorial material, official Spark/PySpark material, and
+  public-domain Indian, Greek/Roman, and Egyptian mythology starter texts with
+  license metadata and editorial warnings for dated interpretations.
+- Added Teacher Mode, hybrid retrieval, strict evidence instructions, inline
+  source citations, and explicit behavior when local evidence is insufficient.
+- Added visible New this week and New this month reports plus vault storage use.
+- Verified retrieval against Python exception handling and exercised a complete
+  Indra teaching answer from local passages with citations.
+- Added ingestion and retrieval tests. Private books and generated indexes stay
+  excluded from Git.

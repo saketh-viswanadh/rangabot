@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "budgetBytes": 4294967296,
+  "updatedAt": "2026-07-28T00:00:00Z",
+  "sources": [
+    {
+      "id": "python-tutorial",
+      "title": "Python 3 Tutorial",
+      "author": "Python Software Foundation",
+      "url": "https://docs.python.org/3/tutorial/",
+      "license": "PSF-2.0 documentation license",
+      "retrievedAt": "2026-07-28",
+      "subject": ["python", "software-development"],
+      "difficulty": "beginner-to-intermediate",
+      "updatePolicy": "weekly-version-check"
+    },
+    {
+      "id": "apache-spark-docs",
+      "title": "Apache Spark and PySpark Documentation",
+      "author": "Apache Software Foundation",
+      "url": "https://spark.apache.org/docs/latest/",
+      "license": "Apache-2.0",
+      "retrievedAt": "2026-07-28",
+      "subject": ["pyspark", "spark", "sql", "data-engineering"],
+      "difficulty": "beginner-to-advanced",
+      "updatePolicy": "weekly-version-check"
+    },
+    {
+      "id": "indian-myth-and-legend",
+      "title": "Indian Myth and Legend",
+      "author": "Donald A. Mackenzie",
+      "url": "https://www.gutenberg.org/ebooks/47228",
+      "license": "Public domain in the USA; verify local jurisdiction",
+      "retrievedAt": "2026-07-28",
+      "subject": ["indian-mythology", "history", "comparative-religion"],
+      "difficulty": "general",
+      "updatePolicy": "checksum-only",
+      "editorialNote": "A historical secondary source with period terminology and interpretations; Teacher Mode must identify it as one account, not a single canonical authority."
+    },
+    {
+      "id": "greek-roman-myths",
+      "title": "Myths and Legends of Ancient Greece and Rome",
+      "author": "E. M. Berens",
+      "url": "https://www.gutenberg.org/ebooks/22381",
+      "license": "Public domain in the USA; verify local jurisdiction",
+      "retrievedAt": "2026-07-28",
+      "subject": ["greek-mythology", "roman-mythology", "history"],
+      "difficulty": "general",
+      "updatePolicy": "checksum-only",
+      "editorialNote": "A historical retelling; compare with primary texts and modern scholarship as the vault grows."
+    },
+    {
+      "id": "ancient-egypt-myths",
+      "title": "Myths and Legends of Ancient Egypt",
+      "author": "Lewis Spence",
+      "url": "https://www.gutenberg.org/ebooks/43662",
+      "license": "Public domain in the USA; verify local jurisdiction",
+      "retrievedAt": "2026-07-28",
+      "subject": ["egyptian-mythology", "ancient-history", "comparative-religion"],
+      "difficulty": "general",
+      "updatePolicy": "checksum-only",
+      "editorialNote": "Early twentieth-century scholarship; Teacher Mode must flag dated interpretations and distinguish them from current Egyptology."
+    }
+  ]
+}

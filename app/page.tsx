@@ -5,7 +5,7 @@ import type { ChatMessage, ProviderStatus } from "@/lib/providers/types";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { welcomeLines } from "@/lib/welcome-content";
 
-type Mode = "local" | "smart" | "codex";
+type Mode = "local" | "smart" | "teach" | "codex";
 type Appearance = "light" | "dark";
 type Palette = "sand" | "sage" | "lavender";
 type DisplayMessage = ChatMessage & {
@@ -23,6 +23,7 @@ type ConversationSummary = {
   updatedAt: string;
 };
 type ProjectSummary = { id: string; name: string; createdAt: string; updatedAt: string };
+type KnowledgeStatus = { usedBytes: number; budgetBytes: number; documents: number; chunks: number };
 
 export default function Home() {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
@@ -38,6 +39,8 @@ export default function Home() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState("");
+  const [knowledgeStatus, setKnowledgeStatus] = useState<KnowledgeStatus | null>(null);
+  const [knowledgeUpdates, setKnowledgeUpdates] = useState<{ week: string; month: string } | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -62,6 +65,12 @@ export default function Home() {
   async function refreshProjects() {
     const response = await fetch("/api/projects", { cache: "no-store" });
     if (response.ok) setProjects(((await response.json()) as { projects: ProjectSummary[] }).projects);
+  }
+
+  async function refreshKnowledge() {
+    const [statusResponse, updatesResponse] = await Promise.all([fetch("/api/knowledge/status", { cache: "no-store" }), fetch("/api/knowledge/updates", { cache: "no-store" })]);
+    if (statusResponse.ok) setKnowledgeStatus(await statusResponse.json());
+    if (updatesResponse.ok) setKnowledgeUpdates(await updatesResponse.json());
   }
 
   async function createNewProject(event: FormEvent) {
@@ -121,6 +130,7 @@ export default function Home() {
     void refreshStatus();
     void refreshConversations();
     void refreshProjects();
+    void refreshKnowledge();
   }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
@@ -311,6 +321,12 @@ export default function Home() {
           </div>)}
           <form className="project-create" onSubmit={createNewProject}><input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="New project" maxLength={60} aria-label="New project name" /><button type="submit" disabled={!newProjectName.trim()} aria-label="Create project">＋</button></form>
         </section>
+        <details className="knowledge-card">
+          <summary><span>Knowledge Vault</span><small>{knowledgeStatus ? `${knowledgeStatus.documents} docs · ${(knowledgeStatus.usedBytes / 1024 ** 2).toFixed(0)} MB` : "Loading…"}</small></summary>
+          <div className="knowledge-report"><strong>New this week</strong><p>{knowledgeUpdates?.week.replace(/^#.*\n+|^##.*\n+/gm, "").trim() ?? "No report yet."}</p></div>
+          <div className="knowledge-report"><strong>New this month</strong><p>{knowledgeUpdates?.month.replace(/^#.*\n+|^##.*\n+/gm, "").trim() ?? "No report yet."}</p></div>
+          {knowledgeStatus && <progress value={knowledgeStatus.usedBytes} max={knowledgeStatus.budgetBytes} aria-label="Knowledge Vault storage used" />}
+        </details>
         <nav className="history">
           <span className="nav-label">{activeProjectId ? "Project chats" : "Recent chats"}</span>
           {visibleConversations.length === 0 && <p className="history-empty">Your local conversations will appear here.</p>}
@@ -411,9 +427,10 @@ export default function Home() {
               <select value={mode} onChange={(event) => setMode(event.target.value as Mode)} aria-label="Routing mode">
                 <option value="local">Local only</option>
                 <option value="smart">Smart routing</option>
+                <option value="teach">Teacher mode</option>
                 <option value="codex">Codex</option>
               </select>
-              <span className="route-note">{mode === "codex" ? "Cloud handoff not enabled" : "Stays on this computer"}</span>
+              <span className="route-note">{mode === "codex" ? "Cloud handoff not enabled" : mode === "teach" ? "Uses your local Knowledge Vault" : "Stays on this computer"}</span>
               {sending ? (
                 <button className="stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating">■</button>
               ) : (
