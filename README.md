@@ -32,7 +32,7 @@ The server binds only to the local computer by default.
 - Explicit local repository allowlisting with reversible access approval
 - On-demand scoped code search with bounded, line-numbered local file previews
 - Explicit code-preview attachment to a chat, revalidated at send time for local Ollama only
-- Prepared artifact-skill registry and quality contract, with Word documents first in the delivery backlog
+- Local Word Studio for structured, model-assisted DOCX creation, validation, rendered previews and download
 - Private 4 GB Knowledge Vault with PDF, DOCX, HTML, Markdown, and text ingestion
 - Hybrid local keyword and embedding retrieval
 - Teacher Mode with passage citations and explicit evidence limits
@@ -57,11 +57,17 @@ preview is read again at send time and supplied only to the local Ollama model.
 
 ## Artifact skills
 
-Rangabot is preparing local document, PDF, email, writing, technical
-documentation, presentation and spreadsheet abilities. These ship one at a
-time; the presence of a welcome-screen prompt does not yet mean that file export
-is implemented. See [the artifact delivery plan](docs/ARTIFACT_SKILLS.md) for the
-ordered backlog and the validation contract each ability must satisfy.
+Rangabot now creates new `.docx` files through Word Studio. A structured brief is
+drafted by the configured local Ollama model, rendered with deterministic styles,
+stored under `data/artifacts/`, validated, and previewed locally when LibreOffice
+and Poppler are installed. Existing-file editing and the remaining artifact
+abilities are separate backlog items. See [the artifact delivery
+plan](docs/ARTIFACT_SKILLS.md) for the ordered backlog and quality contract.
+
+Run `npm run setup` to initialize the private artifact directory and
+`npm run doctor` to check whether optional Word page-preview tools are available.
+DOCX creation still works when those tools are absent, but Rangabot will show a
+visual-review warning instead of claiming that page rendering passed.
 
 ## Knowledge Vault
 

@@ -6,6 +6,7 @@ import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { appendWelcomeHistory, chooseWelcomeIndex, parseWelcomeHistory, welcomeLines } from "@/lib/welcome-content";
 import { isNearMessageBottom } from "@/lib/message-scroll";
 import { parseKnowledgeBrief } from "@/lib/knowledge-brief";
+import { WordStudio } from "@/components/WordStudio";
 
 type Mode = "local" | "smart" | "teach" | "codex";
 type Appearance = "light" | "dark";
@@ -53,6 +54,7 @@ export default function Home() {
   const [repositoryPath, setRepositoryPath] = useState("");
   const [repositoryMessage, setRepositoryMessage] = useState("");
   const [repositoryPanelOpen, setRepositoryPanelOpen] = useState(false);
+  const [wordStudioOpen, setWordStudioOpen] = useState(false);
   const [selectedRepository, setSelectedRepository] = useState<AllowedRepository | null>(null);
   const [codeQuery, setCodeQuery] = useState("");
   const [codeResults, setCodeResults] = useState<CodeSearchResult[]>([]);
@@ -688,9 +690,9 @@ export default function Home() {
                   <span><strong>Write an email</strong><small>Draft it locally in the right tone</small></span>
                   <i aria-hidden="true">›</i>
                 </button>
-                <button type="button" onClick={() => chooseStarter("Help me create or improve this document. Ask what format, audience, purpose, and source material I have: ")}>
+                <button type="button" onClick={() => setWordStudioOpen(true)}>
                   <span className="starter-icon document" aria-hidden="true">▤</span>
-                  <span><strong>Create or edit a document</strong><small>Prepare content before file export</small></span>
+                  <span><strong>Create a Word document</strong><small>Draft, validate and preview locally</small></span>
                   <i aria-hidden="true">›</i>
                 </button>
               </div>
@@ -841,6 +843,7 @@ export default function Home() {
           </aside>
         </div>
       )}
+      {wordStudioOpen && <WordStudio onClose={() => setWordStudioOpen(false)} />}
     </main>
   );
 }

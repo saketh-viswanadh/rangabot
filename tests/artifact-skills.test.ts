@@ -4,8 +4,9 @@ import { artifactQualityGates, artifactSkills, nextArtifactSkill } from "../lib/
 
 test("keeps artifact abilities ordered and independently identifiable", () => {
   assert.equal(new Set(artifactSkills.map((skill) => skill.id)).size, artifactSkills.length);
-  assert.equal(artifactSkills.filter((skill) => skill.status === "next").length, 1);
-  assert.equal(nextArtifactSkill()?.id, "word");
+  assert.equal(artifactSkills.filter((skill) => skill.status === "available").map((skill) => skill.id).includes("word"), true);
+  assert.equal(artifactSkills.filter((skill) => skill.status === "next").length <= 1, true);
+  assert.equal(nextArtifactSkill(), null);
   for (const skill of artifactSkills) {
     assert.equal(skill.dependsOn.every((dependency) => artifactSkills.some((candidate) => candidate.id === dependency)), true);
   }

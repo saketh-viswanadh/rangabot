@@ -7,6 +7,9 @@ All notable released changes will be documented here using
 
 ### Added
 
+- Word Studio for creating new professional `.docx` files from a structured
+  brief using local Ollama drafting, deterministic formatting, private storage,
+  format checks, rendered page previews and a visible quality report.
 - An ordered local artifact-skill registry, shared quality-gate contract and
   fresh-chat entry points for email and document work. Word export is the next
   ability and is not presented as complete yet.
