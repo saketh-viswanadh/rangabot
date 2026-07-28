@@ -7,6 +7,8 @@ All notable released changes will be documented here using
 
 ### Added
 
+- An explicit local repository allowlist with canonical-path validation and
+  revocation that never modifies the selected folder.
 - Local Markdown conversation export and restore, including exact recovery of
   message roles, code blocks and reply references.
 - Local conversation search across titles and message content, scoped to the

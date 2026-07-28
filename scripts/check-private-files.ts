@@ -6,6 +6,7 @@ const tracked = execFileSync("git", ["ls-files", "--cached", "--others", "--excl
 const forbidden = [
   /^\.env(?:\.|$)(?!example$)/,
   /(?:^|\/)data\/.*\.db(?:-|$)/,
+  /(?:^|\/)data\/repositories\.json$/,
   /(?:^|\/)data\/knowledge\/(?:inbox|indexes|processed|backups)\//,
   /\.(?:sqlite|sqlite3)$/,
   /(?:^|\/)id_(?:rsa|ed25519)(?:\.|$)/,

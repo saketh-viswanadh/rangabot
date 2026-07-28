@@ -27,6 +27,7 @@ type ConversationSummary = {
   updatedAt: string;
 };
 type ProjectSummary = { id: string; name: string; createdAt: string; updatedAt: string };
+type AllowedRepository = { id: string; name: string; path: string; addedAt: string };
 type KnowledgeStatus = { usedBytes: number; budgetBytes: number; documents: number; chunks: number };
 type KnowledgeUpdates = { week: string; month: string; changelog: string; weekUpdatedAt: string | null };
 type KnowledgeTab = "discover" | "vault" | "updates";
@@ -45,6 +46,9 @@ export default function Home() {
   const [conversationSearch, setConversationSearch] = useState("");
   const [conversationTransferMessage, setConversationTransferMessage] = useState("");
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [allowedRepositories, setAllowedRepositories] = useState<AllowedRepository[]>([]);
+  const [repositoryPath, setRepositoryPath] = useState("");
+  const [repositoryMessage, setRepositoryMessage] = useState("");
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState("");
   const [knowledgeStatus, setKnowledgeStatus] = useState<KnowledgeStatus | null>(null);
@@ -83,6 +87,42 @@ export default function Home() {
   async function refreshProjects() {
     const response = await fetch("/api/projects", { cache: "no-store" });
     if (response.ok) setProjects(((await response.json()) as { projects: ProjectSummary[] }).projects);
+  }
+
+  async function refreshRepositories() {
+    const response = await fetch("/api/repositories", { cache: "no-store" });
+    const data = (await response.json()) as { repositories?: AllowedRepository[]; error?: string };
+    if (response.ok && data.repositories) setAllowedRepositories(data.repositories);
+    else setRepositoryMessage(data.error ?? "Could not read allowed folders.");
+  }
+
+  async function allowLocalRepository(event: FormEvent) {
+    event.preventDefault();
+    const path = repositoryPath.trim();
+    if (!path) return;
+    const response = await fetch("/api/repositories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    const data = (await response.json()) as { repository?: AllowedRepository; error?: string };
+    if (!response.ok || !data.repository) {
+      setRepositoryMessage(data.error ?? "Could not allow this folder.");
+      return;
+    }
+    setRepositoryPath("");
+    setRepositoryMessage(`Allowed ${data.repository.path}. No files have been read.`);
+    await refreshRepositories();
+  }
+
+  async function revokeLocalRepository(repository: AllowedRepository) {
+    const response = await fetch(`/api/repositories/${repository.id}`, { method: "DELETE" });
+    if (!response.ok) {
+      setRepositoryMessage("Could not revoke this folder.");
+      return;
+    }
+    setRepositoryMessage(`Revoked ${repository.path}. The folder was not changed.`);
+    await refreshRepositories();
   }
 
   async function refreshKnowledge() {
@@ -182,6 +222,7 @@ export default function Home() {
     setWelcomeIndex((current) => nextWelcomeIndex(current));
     void refreshStatus();
     void refreshProjects();
+    void refreshRepositories();
     void refreshKnowledge();
   }, []);
   useEffect(() => {
@@ -461,6 +502,19 @@ export default function Home() {
             <button type="button" className="project-more" onClick={() => void removeProject(project)} aria-label={`Delete ${project.name}`}>×</button>
           </div>)}
           <form className="project-create" onSubmit={createNewProject}><input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="New project" maxLength={60} aria-label="New project name" /><button type="submit" disabled={!newProjectName.trim()} aria-label="Create project">＋</button></form>
+        </section>
+        <section className="repositories" aria-label="Allowed local repositories">
+          <div className="repository-heading"><span>Local repositories</span><span>{allowedRepositories.length}</span></div>
+          {allowedRepositories.map((repository) => <div className="repository-item" key={repository.id} title={repository.path}>
+            <span aria-hidden="true">⌂</span><span><strong>{repository.name}</strong><small>{repository.path}</small></span>
+            <button type="button" onClick={() => void revokeLocalRepository(repository)} aria-label={`Revoke ${repository.name}`}>×</button>
+          </div>)}
+          <form className="repository-create" onSubmit={allowLocalRepository}>
+            <input value={repositoryPath} onChange={(event) => setRepositoryPath(event.target.value)} placeholder="/absolute/path/to/project" aria-label="Repository folder path" maxLength={1024} />
+            <button type="submit" disabled={!repositoryPath.trim()}>Allow</button>
+          </form>
+          <p className="repository-disclosure">Only approval is stored now. Rangabot will ask again before code search reads files.</p>
+          {repositoryMessage && <p className="repository-status" role="status">{repositoryMessage}</p>}
         </section>
         <button type="button" className="knowledge-launcher" onClick={() => openKnowledgeBrief()}>
           <span><strong>Knowledge Brief</strong><small>{knowledgeStatus ? `${knowledgeStatus.documents} docs · ${(knowledgeStatus.usedBytes / 1024 ** 2).toFixed(0)} MB` : "Loading…"}</small></span>
