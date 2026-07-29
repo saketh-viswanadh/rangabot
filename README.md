@@ -38,6 +38,8 @@ model server.
 - Conversational Word creation with local requirement gathering, DOCX validation, rendered previews and download
 - Private 4 GB Knowledge Vault with PDF, DOCX, HTML, Markdown, and text ingestion
 - Hybrid local keyword and embedding retrieval
+- Per-answer `HYBRID` or `KEYWORD ONLY` retrieval status, so an unavailable
+  embedding model never degrades silently
 - Teacher Mode with passage citations and explicit evidence limits
 - Automatic local Knowledge Vault lookup for informational questions in Smart mode
 - Weekly and monthly sourced subject-intelligence briefs

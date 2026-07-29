@@ -46,6 +46,17 @@ test("scores end-to-end answer concepts, grounding, and source synthesis", () =>
   assert.match(failed.failures.join(" "), /forbidden answer claim/);
 });
 
+test("rejects answers that collapse distinct technical concepts", () => {
+  const item = {
+    id: "leakage-distinction", subject: "machine-learning", difficulty: "advanced" as const, query: "What is data leakage?",
+    expectedTitlePatterns: ["machine learning"], requiredAnswerConcepts: [["leak"], ["train|test"]],
+    forbiddenAnswerPatterns: ["data leakage.{0,40}(?:is|means|known as|same as).{0,30}concept drift"],
+  };
+  const score = scoreKnowledgeAnswer(item, "Data leakage is also known as concept drift. It affects train and test data.", 1, true);
+  assert.equal(score.passed, false);
+  assert.equal(score.forbiddenClaimsFree, false);
+});
+
 test("ships exactly 60 balanced, rubric-backed evaluation questions", () => {
   const cases = loadKnowledgeEvaluationCases(resolve(process.cwd(), "data", "knowledge", "evaluations", "starter.json"));
   assert.equal(cases.length, 60);

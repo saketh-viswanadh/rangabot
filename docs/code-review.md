@@ -53,6 +53,11 @@ published. Findings are kept here so cleanup is measurable rather than implied.
   referrer leakage, and unneeded device permissions.
 - Corrected the stale pre-rename GitHub Discussions link.
 - Updated `pdfjs-dist` from 6.1.200 to 6.2.108.
+- Made embedding degradation visible per answer as `HYBRID` or `KEYWORD ONLY`.
+- Replaced direct route-level Ramayana branching with a registered story-pack
+  interface, retaining the curated safety fallback without coupling it to chat.
+- Added a strict regression that rejects the observed data-leakage/concept-drift
+  conflation. Broader entailment verification remains open below.
 
 ## Open findings
 
@@ -80,17 +85,14 @@ published. Findings are kept here so cleanup is measurable rather than implied.
    coordinates chat, retrieval, artifacts, code context, and response headers.
    These are maintainability hotspots. Split by capability before adding more
    artifact types or routing modes.
-2. Embedding failures fall back to keyword retrieval with limited diagnostics.
-   The UI should distinguish hybrid, keyword-only, and degraded retrieval per
-   answer instead of exposing only a general vault-used indicator.
-3. The Ramayana document path has a hardcoded curated special case. It is an
-   intentional safety fallback, but it is not a scalable artifact architecture.
-   Replace it with a registered, provenance-aware story-pack interface.
-4. Next.js reports a whole-project file-tracing warning through repository path
+2. The story-pack registry is an extension boundary, not a general automatic
+   provenance system. Any new pack still needs reviewed source metadata and
+   factual regression tests before registration.
+3. Next.js reports a whole-project file-tracing warning through repository path
    handling. The build succeeds, but packaging boundaries should be narrowed.
-5. The generated `next-env.d.ts` import flips between development and production
+4. The generated `next-env.d.ts` import flips between development and production
    paths. It is harmless but creates avoidable worktree noise.
-6. Full dependency audit reports development-only transitive findings through
+5. Full dependency audit reports development-only transitive findings through
    the ESLint toolchain. Production audit is clean. ESLint 10 was tested and
    rejected because the current Next React plugin fails at runtime; upgrade when
    that supported combination exists.

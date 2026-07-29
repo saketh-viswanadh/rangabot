@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { assembleStoryCollectionDraft, buildConversationSummaryFallback, buildFallbackWordDraft, buildStoryPartPrompt, buildWordConversationPrompt, buildWordDraftPrompt, buildWordSourceTranscript, createWordArtifact, isWordConversationSummaryRequest, parseStoryDraftPart, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, resetArtifactsRootForTests, resolveArtifactFile, setArtifactsRootForTests, shouldPlanWordDocument, validateWordBrief, validateWordDraftForBrief } from "../lib/word-documents.ts";
 import { buildRamayanaStoryCollection } from "../lib/story-packs/ramayana.ts";
+import { findStoryPack } from "../lib/story-packs/index.ts";
 
 const brief = {
   title: "Analytics operating brief",
@@ -132,6 +133,8 @@ test("requires finished stories and never substitutes planning scaffolding", () 
   assert.equal(collection.sections.length, 4);
   assert.equal(collection.sections[0].bullets[0].startsWith("Think about it:"), true);
   const ramayana = buildRamayanaStoryCollection(storyBrief);
+  assert.equal(findStoryPack(storyBrief)?.id, "ramayana");
+  assert.equal(findStoryPack({ ...storyBrief, title: "Animal tales", purpose: "Tell original animal stories", sourceNotes: "No source pack" }), null);
   const storyContent = JSON.stringify(ramayana);
   assert.match(storyContent, /Bharata.*sandals/i);
   assert.match(storyContent, /Jatayu.*wounded/i);

@@ -49,6 +49,7 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Local project folders with project-scoped chat history
 - [x] Private 4 GB Knowledge Vault with incremental local document ingestion
 - [x] Hybrid keyword and embedding retrieval with Teacher Mode citations
+- [x] Visible per-answer hybrid versus keyword-only retrieval diagnostics
 - [x] Portable hash-based vault synchronization, extraction-quality gates, scanned-PDF detection, query cleanup, title-aware hybrid reranking, and cross-subject retrieval tests
 - [x] Weekly and monthly sourced subject-intelligence briefs
 - [x] Deterministic Teacher Mode answers for current-awareness questions
@@ -96,7 +97,9 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Explicit code-preview attachment with visible send scope and local-only delivery
 - [x] Artifact-skill foundation: ordered registry, shared quality contract and welcome entry points
 - [x] A1: Conversational Word creation with requirement gathering, validation and rendered previews
-- [x] A1 quality hardening: genre-aware story documents, no planning-note fallback, content-depth gates, and a curated local Ramayana pack for reliable small-model output
+- [x] A1 quality hardening: genre-aware story documents, no planning-note fallback, content-depth gates, and a registered curated Ramayana story pack for reliable small-model output
+- [x] Concept-distinction regression coverage for known technical conflations,
+  beginning with data leakage versus concept drift
 - [ ] A1b: Safe editing of user-selected existing Word documents
 - [ ] A2: Validated PDF reports and summaries
 - [ ] A3: Local email drafting and critique (no sending)

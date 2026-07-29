@@ -31,6 +31,9 @@ test("indexes and retrieves a cited local teaching passage", async () => {
   assert.equal(vectorIndex.available, true);
   assert.equal(vectorIndex.vectors, 1);
   assert.equal(vectorIndex.dimensions, 3);
+  const diagnosticSearch = await knowledge.searchKnowledgeWithDiagnostics("Python runtime exceptions", 3);
+  assert.equal(diagnosticSearch.mode, "keyword-only");
+  assert.equal(diagnosticSearch.results[0]?.title, "Python lesson");
 });
 
 test("preserves heading hierarchy and page ranges while chunking", () => {

@@ -9,6 +9,12 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Per-answer retrieval diagnostics distinguish full hybrid search from the safe
+  keyword-only fallback in the chat source label and persisted history.
+- A registered story-pack interface replaces route-level Ramayana branching and
+  provides one bounded extension point for future provenance-aware collections.
+- A contradiction regression rejects answers that collapse data leakage and
+  concept drift into the same concept.
 - A severity-ranked full-tree code, privacy, dependency, documentation, and
   public-GitHub review with explicit unresolved risks.
 - Shared bounded chat validation and local-runtime configuration tests.
