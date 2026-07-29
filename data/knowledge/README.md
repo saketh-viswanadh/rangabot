@@ -14,6 +14,9 @@ Self-service ingestion flow:
    Passages retain heading/section hierarchy and PDF page ranges. The first run
    after upgrading to ingestion format v2 re-indexes older compatible sources
    once to add this metadata.
+   Semantic search uses a compact native vector table in the same private SQLite
+   database. It is rebuilt automatically from saved embeddings after source
+   changes, so a normal incremental ingest remains the only required workflow.
 4. Use Smart mode for automatic local retrieval or Teacher mode for citation-first
    teaching that clearly separates vault evidence from local-model background.
    Source files are never uploaded.
@@ -37,6 +40,7 @@ npm run knowledge:status     # report documents, passages and storage
 npm run knowledge:validate   # validate public source metadata
 npm run knowledge:backup     # save a local index snapshot
 npm run knowledge:ingest     # incrementally index changed files
+npm run knowledge:vector-index # explicitly rebuild vectors without re-ingesting
 npm run knowledge:doctor     # diagnose an empty or full vault
 npm run knowledge:rollback   # preview latest rollback; add -- --yes to confirm
 ```

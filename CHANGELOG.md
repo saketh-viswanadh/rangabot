@@ -36,6 +36,8 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - The approved Rangabot Learning Core roadmap: hierarchical book understanding,
   conversation-aware planning, multi-book synthesis, inspectable local memory,
   grounding review, cross-book concept summaries, and feedback-based evaluation.
+- A compact native `sqlite-vec` index for existing local embeddings, including
+  an explicit `knowledge:vector-index` rebuild command.
 
 ### Changed
 
@@ -53,6 +55,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   relevance threshold.
 - Subject-aware retrieval excludes books with a clearly conflicting title-level
   domain while retaining relevant and uncategorized sources for normal reranking.
+- Semantic candidates are searched in native SQLite vector storage instead of
+  parsing and comparing every JSON embedding in JavaScript. The index rebuilds
+  automatically when stale and retains the prior portable search as a fallback.
 - Knowledge answers can use five bounded, reranked passages instead of three
   shorter raw matches, improving cross-source context without flooding small
   local models.

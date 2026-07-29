@@ -3,6 +3,7 @@ import { mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { extname, resolve } from "node:path";
 import type { DatabaseSync as Database } from "node:sqlite";
+import * as sqliteVec from "sqlite-vec";
 
 const serverRequire = createRequire(resolve(process.cwd(), "package.json"));
 const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sqlite");
@@ -17,6 +18,7 @@ export const knowledgeBudgetBytes = Number(process.env.KNOWLEDGE_BUDGET_BYTES ??
 export const embeddingModel = process.env.OLLAMA_EMBED_MODEL ?? "nomic-embed-text";
 
 let database: Database | undefined;
+let nativeVectorAvailable = false;
 export const knowledgeIngestionVersion = 2;
 
 function ensureColumn(db: Database, table: string, column: string, definition: string) {
@@ -27,7 +29,14 @@ function ensureColumn(db: Database, table: string, column: string, definition: s
 function getDatabase() {
   if (database) return database;
   mkdirSync(resolve(knowledgeRoot, "indexes"), { recursive: true });
-  database = new DatabaseSync(activeKnowledgeDatabasePath);
+  database = new DatabaseSync(activeKnowledgeDatabasePath, { allowExtension: true });
+  try {
+    sqliteVec.load(database);
+    database.enableLoadExtension(false);
+    nativeVectorAvailable = true;
+  } catch {
+    nativeVectorAvailable = false;
+  }
   database.exec(`
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS documents (
@@ -61,6 +70,13 @@ function getDatabase() {
       reason TEXT NOT NULL,
       detected_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS vector_index_meta (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      model TEXT NOT NULL,
+      dimensions INTEGER NOT NULL,
+      chunk_count INTEGER NOT NULL,
+      built_at TEXT NOT NULL
+    );
   `);
   ensureColumn(database, "documents", "ingestion_version", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(database, "chunks", "heading", "TEXT");
@@ -68,6 +84,58 @@ function getDatabase() {
   ensureColumn(database, "chunks", "page_start", "INTEGER");
   ensureColumn(database, "chunks", "page_end", "INTEGER");
   return database;
+}
+
+function vectorBlob(values: number[]) {
+  return new Uint8Array(new Float32Array(values).buffer);
+}
+
+function nativeVectorTableExists(db: Database) {
+  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chunk_vectors'").get());
+}
+
+function invalidateNativeVectorIndex(db: Database) {
+  if (nativeVectorTableExists(db)) db.exec("DROP TABLE chunk_vectors");
+  db.prepare("DELETE FROM vector_index_meta WHERE id = 1").run();
+}
+
+export function rebuildKnowledgeVectorIndex() {
+  const db = getDatabase();
+  if (!nativeVectorAvailable) return { available: false, vectors: 0, dimensions: 0, rebuilt: false };
+  const rows = db.prepare("SELECT rowid, embedding FROM chunks WHERE embedding IS NOT NULL ORDER BY rowid").all() as unknown as Array<{ rowid: number; embedding: string }>;
+  if (!rows.length) return { available: true, vectors: 0, dimensions: 0, rebuilt: false };
+  const dimensions = (JSON.parse(rows[0].embedding) as number[]).length;
+  invalidateNativeVectorIndex(db);
+  db.exec(`CREATE VIRTUAL TABLE chunk_vectors USING vec0(embedding float[${dimensions}] distance_metric=cosine)`);
+  db.exec("BEGIN");
+  try {
+    const insert = db.prepare("INSERT INTO chunk_vectors(rowid, embedding) VALUES (?, ?)");
+    for (const row of rows) insert.run(BigInt(row.rowid), vectorBlob(JSON.parse(row.embedding) as number[]));
+    db.prepare("INSERT INTO vector_index_meta (id, model, dimensions, chunk_count, built_at) VALUES (1, ?, ?, ?, ?)")
+      .run(embeddingModel, dimensions, rows.length, new Date().toISOString());
+    db.exec("COMMIT");
+    return { available: true, vectors: rows.length, dimensions, rebuilt: true };
+  } catch (error) {
+    db.exec("ROLLBACK");
+    invalidateNativeVectorIndex(db);
+    throw error;
+  }
+}
+
+export function getKnowledgeVectorIndexStatus() {
+  const db = getDatabase();
+  const expected = db.prepare("SELECT COUNT(*) AS count FROM chunks WHERE embedding IS NOT NULL").get() as { count: number };
+  const meta = db.prepare("SELECT dimensions, chunk_count AS chunkCount, built_at AS builtAt FROM vector_index_meta WHERE id = 1").get() as { dimensions: number; chunkCount: number; builtAt: string } | undefined;
+  return { available: nativeVectorAvailable, expected: expected.count, indexed: nativeVectorTableExists(db) ? (meta?.chunkCount ?? 0) : 0, dimensions: meta?.dimensions ?? 0, builtAt: meta?.builtAt ?? null };
+}
+
+function ensureNativeVectorIndex(dimensions: number) {
+  if (!nativeVectorAvailable) return false;
+  const db = getDatabase();
+  const expected = db.prepare("SELECT COUNT(*) AS count FROM chunks WHERE embedding IS NOT NULL").get() as { count: number };
+  const meta = db.prepare("SELECT model, dimensions, chunk_count AS chunkCount FROM vector_index_meta WHERE id = 1").get() as { model: string; dimensions: number; chunkCount: number } | undefined;
+  if (!nativeVectorTableExists(db) || meta?.model !== embeddingModel || meta.dimensions !== dimensions || meta.chunkCount !== expected.count) rebuildKnowledgeVectorIndex();
+  return nativeVectorTableExists(db);
 }
 
 export type KnowledgeChunkInput = { id: string; ordinal: number; content: string; embedding?: number[]; heading?: string; sectionPath?: string; pageStart?: number; pageEnd?: number };
@@ -168,6 +236,7 @@ export function removeKnowledgeDocumentsNotIn(activePaths: string[]) {
   const active = new Set(activePaths);
   const stale = listIndexedKnowledgeDocuments().filter((document) => !active.has(document.path));
   if (!stale.length) return [];
+  if (nativeVectorAvailable) invalidateNativeVectorIndex(db);
   db.exec("BEGIN");
   try {
     for (const document of stale) {
@@ -187,6 +256,7 @@ export function removeKnowledgeDocumentByPath(path: string) {
   const db = getDatabase();
   const row = db.prepare("SELECT id FROM documents WHERE path = ?").get(path) as { id: string } | undefined;
   if (!row) return false;
+  if (nativeVectorAvailable) invalidateNativeVectorIndex(db);
   db.exec("BEGIN");
   try {
     db.prepare("DELETE FROM chunks_fts WHERE document_id = ?").run(row.id);
@@ -237,6 +307,7 @@ export function indexedDocumentUsefulCharacters(path: string) {
 
 export function saveKnowledgeDocument(document: KnowledgeDocumentInput) {
   const db = getDatabase();
+  if (nativeVectorAvailable) invalidateNativeVectorIndex(db);
   db.exec("BEGIN");
   try {
     const prior = db.prepare("SELECT id FROM documents WHERE path = ?").get(document.path) as { id: string } | undefined;
@@ -342,13 +413,15 @@ export async function searchKnowledge(query: string, limit = 6): Promise<Knowled
   const lexical = rows.map(({ rank: _rank, ...row }, index) => ({ ...row, lexicalScore: Math.max(.35, 1 - index / Math.max(rows.length, 1)) }));
   const queryEmbedding = process.env.KNOWLEDGE_DISABLE_EMBEDDINGS === "1" ? null : await embedQuery(query);
   if (!queryEmbedding) return diversifyKnowledgeResults(filterKnowledgeResultsBySubject(query, lexical.map(({ lexicalScore, ...result }) => ({ ...result, score: lexicalScore }))), limit);
-  const embeddedRows = getDatabase().prepare(`
+  const semanticLimit = Math.max(limit * 6, 24);
+  const nativeSemantic = nativeSemanticSearch(queryEmbedding, semanticLimit);
+  const embeddedRows = nativeSemantic ? [] : getDatabase().prepare(`
     SELECT d.title, d.path, c.ordinal AS chunk, c.content, c.heading, c.section_path AS sectionPath, c.page_start AS pageStart, c.page_end AS pageEnd, c.embedding
     FROM chunks c JOIN documents d ON d.id = c.document_id
     WHERE c.embedding IS NOT NULL
   `).all() as unknown as Array<Omit<KnowledgeResult, "score"> & { embedding: string }>;
-  const semantic = embeddedRows.map(({ embedding, ...row }) => ({ ...row, similarity: cosine(queryEmbedding, JSON.parse(embedding) as number[]) }))
-    .sort((a, b) => b.similarity - a.similarity).slice(0, Math.max(limit * 6, 24));
+  const semantic = nativeSemantic ?? embeddedRows.map(({ embedding, ...row }) => ({ ...row, similarity: cosine(queryEmbedding, JSON.parse(embedding) as number[]) }))
+    .sort((a, b) => b.similarity - a.similarity).slice(0, semanticLimit);
   const combined = new Map<string, KnowledgeResult & { lexical?: boolean; similarity?: number }>();
   for (const result of lexical) {
     const title = result.title.toLowerCase();
@@ -368,6 +441,23 @@ export async function searchKnowledge(query: string, limit = 6): Promise<Knowled
     .sort((a, b) => b.score - a.score)
     .map(({ lexical: _lexical, similarity: _similarity, ...result }) => result);
   return diversifyKnowledgeResults(filterKnowledgeResultsBySubject(query, ranked), limit);
+}
+
+function nativeSemanticSearch(queryEmbedding: number[], limit: number) {
+  try {
+    if (!ensureNativeVectorIndex(queryEmbedding.length)) return null;
+    const db = getDatabase();
+    const nearest = db.prepare(`SELECT rowid, distance FROM chunk_vectors WHERE embedding MATCH ? AND k = ${Math.max(1, Math.floor(limit))} ORDER BY distance`)
+      .all(vectorBlob(queryEmbedding)) as unknown as Array<{ rowid: number; distance: number }>;
+    const lookup = db.prepare(`SELECT d.title, d.path, c.ordinal AS chunk, c.content, c.heading, c.section_path AS sectionPath, c.page_start AS pageStart, c.page_end AS pageEnd
+      FROM chunks c JOIN documents d ON d.id = c.document_id WHERE c.rowid = ?`);
+    return nearest.flatMap((match) => {
+      const row = lookup.get(BigInt(match.rowid)) as Omit<KnowledgeResult, "score"> | undefined;
+      return row ? [{ ...row, similarity: 1 - match.distance }] : [];
+    });
+  } catch {
+    return null;
+  }
 }
 
 async function embedQuery(input: string): Promise<number[] | null> {
@@ -430,6 +520,7 @@ export function readSourceManifest() {
 export function closeKnowledgeDatabaseForTests() {
   database?.close();
   database = undefined;
+  nativeVectorAvailable = false;
 }
 
 export function setKnowledgeDatabasePathForTests(path: string) {
