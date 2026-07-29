@@ -75,8 +75,14 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Learning Core 5b: Pre-draft evidence plan, best-draft preservation,
   isolated-citation repair, conservative citation recovery, and deterministic
   vault-evidence versus local-background separation
+- [x] Learning Core 5c: Coverage-aware evidence mapping and selective escalation
+  that attempts deterministic separation before a second model generation while
+  preserving the existing grounding gate
 - [ ] Learning Core 6: Feedback capture and regression evaluation proving that
   changes improve synthesis, teaching quality, citations, and completeness
+- [ ] Learning Core 6c: Add terminology-contradiction and concept-distinction
+  regression checks, beginning with data leakage versus concept drift, without
+  weakening or replacing the existing 60-case criteria
 - [x] Learning Core 6a: Local retrieval evaluation baseline covering expected
   sources, contamination, diversity, passage locators, and latency
 - [x] Learning Core 6b: Balanced 60-question retrieval and complete-answer

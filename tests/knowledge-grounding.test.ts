@@ -39,9 +39,27 @@ Additional uncited context belongs here and is clearly separated from the retrie
   assert.equal(audit.passed, true);
 });
 
-test("revises a weak draft once and returns the grounded result", async () => {
+test("uses fast deterministic separation before requesting a second generation", async () => {
+  let calls = 0;
+  const result = await generateGroundedTeacherAnswer(
+    [{ role: "user", content: "Explain cross-validation" }],
+    sources,
+    async () => {
+      calls += 1;
+      return "Cross-validation estimates model performance on unseen data by separating training and validation observations. [Source 1]\n\nThis broader practical guidance is useful but is not covered by the retrieved passage.";
+    },
+  );
+  assert.equal(calls, 1);
+  assert.equal(result.revised, false);
+  assert.equal(result.separated, true);
+  assert.equal(result.audit.passed, true);
+  assert.match(result.answer, /## Vault-grounded answer/);
+  assert.match(result.answer, /## Local model background/);
+});
+
+test("revises a weak draft once when deterministic separation cannot establish grounding", async () => {
   const completions = [
-    "Cross-validation guarantees a perfect model every time.",
+    "This unsupported factual explanation has no usable citation and remains unreliable.",
     "Cross-validation estimates performance on unseen data by separating training and validation observations. [Source 1]",
   ];
   const result = await generateGroundedTeacherAnswer(
@@ -50,6 +68,7 @@ test("revises a weak draft once and returns the grounded result", async () => {
     async () => completions.shift() ?? "",
   );
   assert.equal(result.revised, true);
+  assert.equal(result.separated, false);
   assert.equal(result.audit.passed, true);
   assert.match(result.answer, /\[Source 1\]/);
   assert.doesNotMatch(result.answer, /Grounding note/);
@@ -124,4 +143,5 @@ test("keeps the better grounded draft when revision removes its citations", asyn
   assert.match(result.answer, /\[Source 1\]/);
   assert.equal(result.audit.passed, true);
   assert.equal(result.separated, true);
+  assert.equal(result.revised, false);
 });

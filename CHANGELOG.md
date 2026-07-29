@@ -53,6 +53,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Changed
 
+- Teacher Mode now maps each requested answer part to the strongest matching
+  passages before drafting. When a first draft fails the unchanged grounding
+  gate, Rangabot tries fast deterministic evidence/background separation before
+  spending time on a second local-model generation; revision remains available
+  only when that safe local transformation is insufficient.
 - Smart Mode and Teacher Mode now treat retrieval as evidence gathering rather
   than the final response. Vault evidence is combined with relevant conversation
   context and clearly distinguished background from the downloaded local model.

@@ -55,9 +55,11 @@ test("ships exactly 60 balanced, rubric-backed evaluation questions", () => {
 });
 
 test("builds an inspectable claim-to-source plan before Teacher Mode drafting", () => {
-  const plan = buildEvidencePlan("Compare classification and regression", [result("Statistical Learning", "/ml")]);
+  const plan = buildEvidencePlan("Compare classification and regression", [{ ...result("Statistical Learning", "/ml"), content: "Classification predicts categories while regression predicts continuous values." }]);
   assert.match(plan, /REQUIRED ANSWER COVERAGE/);
   assert.match(plan, /CLAIM-TO-SOURCE PLAN/);
   assert.match(plan, /\[Source 1\] Statistical Learning/);
+  assert.match(plan, /Compare classification and regression -> \[Source 1\]/i);
+  assert.match(plan, /Do not collapse related concepts into synonyms/);
   assert.match(plan, /End every vault-grounded factual paragraph/);
 });

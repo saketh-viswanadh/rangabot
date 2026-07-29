@@ -160,6 +160,12 @@ conservatively attaches a missing citation only when one passage has strong
 lexical support, then separates remaining content into **Vault-grounded answer**
 and **Local model background** sections. It never silently labels weakly matched
 background as vault evidence.
+
+The evidence plan also maps each requested part of a question to up to two
+matching passages. If the first draft misses the grounding threshold, Rangabot
+first tries the deterministic separation locally and rechecks the same gate. It
+requests a slower second model generation only when that safe transformation is
+not enough, preserving citation reliability while avoiding unnecessary work.
 When several books contain strong matches, Rangabot reserves evidence space for
 multiple sources and asks the model to connect their ideas rather than reciting
 each passage separately. Weak books are not included merely to create diversity.
