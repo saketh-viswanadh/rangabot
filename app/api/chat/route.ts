@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { completeJsonWithOllama, streamChatWithOllama } from "@/lib/providers/ollama";
+import { completeJsonWithOllama, completeTextWithOllama, streamChatWithOllama } from "@/lib/providers/ollama";
 import type { ChatMessage } from "@/lib/providers/types";
-import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatalogQuestion, isKnowledgeNewsQuestion, searchKnowledge, shouldAutoSearchKnowledge } from "@/lib/knowledge";
+import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatalogQuestion, isKnowledgeNewsQuestion, searchKnowledge, shouldAutoSearchKnowledge, type KnowledgeResult } from "@/lib/knowledge";
+import { generateGroundedTeacherAnswer } from "@/lib/knowledge-grounding";
 import { formatCodeContext, isCodeContextRequest } from "@/lib/code-context";
 import { getAllowedRepository } from "@/lib/repositories";
 import { previewRepositoryFile } from "@/lib/repository-search";
@@ -121,6 +122,7 @@ export async function POST(request: Request) {
     }
 
     let messages = body.messages;
+    let knowledgeSources: KnowledgeResult[] = [];
     const question = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
     const usesVault = body.mode === "teach" || (body.mode === "smart" && shouldAutoSearchKnowledge(question));
     if (usesVault) {
@@ -135,6 +137,7 @@ export async function POST(request: Request) {
         });
       }
       const sources = await searchKnowledge(question, 5);
+      knowledgeSources = sources;
       const context = sources.length
         ? sources.map((source, index) => {
           const location = [source.sectionPath, source.pageStart ? `page${source.pageEnd && source.pageEnd !== source.pageStart ? `s ${source.pageStart}-${source.pageEnd}` : ` ${source.pageStart}`}` : null].filter(Boolean).join(", ");
@@ -157,6 +160,20 @@ export async function POST(request: Request) {
       messages = messages.map((message, index) => index === lastUserIndex
         ? { role: "user", content: `${message.content}\n\n${localCodeContext}\n\nUse this code only for this answer. Mention the file and line range when relevant.` }
         : message);
+    }
+
+    if (body.mode === "teach" && usesVault) {
+      const grounded = await generateGroundedTeacherAnswer(messages, knowledgeSources, completeTextWithOllama);
+      return new Response(grounded.answer, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "X-Content-Type-Options": "nosniff",
+          "X-Rangabot-Knowledge": "used",
+          "X-Rangabot-Grounding": grounded.audit.passed ? (grounded.revised ? "revised-and-passed" : "passed") : "warning",
+          "X-Rangabot-Code-Context": localCodeContext ? "used" : "not-used",
+        },
+      });
     }
 
     const stream = await streamChatWithOllama(messages);

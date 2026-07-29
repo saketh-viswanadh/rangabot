@@ -70,6 +70,8 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   corrections, learning progress, and approved conclusions
 - [ ] Learning Core 5: Draft, grounding review, and revision with visible separation
   between vault evidence, local-model background, and unresolved uncertainty
+- [x] Learning Core 5a: Teacher Mode citation audit, one bounded local revision,
+  and a visible warning when grounding remains below the quality threshold
 - [ ] Learning Core 6: Feedback capture and regression evaluation proving that
   changes improve synthesis, teaching quality, citations, and completeness
 - [x] Learning Core 6a: Local retrieval evaluation baseline covering expected

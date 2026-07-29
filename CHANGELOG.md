@@ -41,6 +41,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - A privacy-preserving local retrieval evaluation harness with reusable starter
   cases, private vault-specific fixtures, timestamped reports, and measurable
   relevance, contamination, diversity, locator, and latency results.
+- A Teacher Mode grounding gate that audits citation coverage, citation numbers,
+  and lexical support before returning an answer, revises weak drafts once
+  locally, and warns visibly when the revision remains insufficiently grounded.
 
 ### Changed
 
@@ -61,6 +64,8 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - Semantic candidates are searched in native SQLite vector storage instead of
   parsing and comparing every JSON embedding in JavaScript. The index rebuilds
   automatically when stale and retains the prior portable search as a fallback.
+- Teacher Mode buffers its answer until the local grounding review finishes;
+  ordinary and Smart modes retain token streaming.
 - Knowledge answers can use five bounded, reranked passages instead of three
   shorter raw matches, improving cross-source context without flooding small
   local models.
