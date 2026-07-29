@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadKnowledgeEvaluationCases, scoreKnowledgeAnswer, scoreKnowledgeRetrieval, summarizeKnowledgeEvaluation } from "../lib/knowledge-evaluation.ts";
 import { resolve } from "node:path";
+import { buildEvidencePlan } from "../lib/teacher-mode.ts";
 
 const result = (title: string, path: string, score = 1) => ({ title, path, chunk: 1, content: "Evidence", score, sectionPath: "Chapter 1" });
 
@@ -51,4 +52,12 @@ test("ships exactly 60 balanced, rubric-backed evaluation questions", () => {
   assert.ok(new Set(cases.map((item) => item.subject)).size >= 10);
   assert.ok(cases.every((item) => item.requiredAnswerConcepts.length >= 3));
   assert.ok(cases.some((item) => item.minimumSources === 2));
+});
+
+test("builds an inspectable claim-to-source plan before Teacher Mode drafting", () => {
+  const plan = buildEvidencePlan("Compare classification and regression", [result("Statistical Learning", "/ml")]);
+  assert.match(plan, /REQUIRED ANSWER COVERAGE/);
+  assert.match(plan, /CLAIM-TO-SOURCE PLAN/);
+  assert.match(plan, /\[Source 1\] Statistical Learning/);
+  assert.match(plan, /End every vault-grounded factual paragraph/);
 });

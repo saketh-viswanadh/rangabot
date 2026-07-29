@@ -40,6 +40,7 @@ type AnswerEvaluationResult = ReturnType<typeof scoreKnowledgeAnswer> & {
   difficulty: string;
   query: string;
   revised: boolean;
+  separated: boolean;
   latencyMs: number;
   answer: string;
   grounding: Awaited<ReturnType<typeof generateGroundedTeacherAnswer>>["audit"] | null;
@@ -69,7 +70,7 @@ for (const [index, item] of cases.entries()) {
     const sources = await searchKnowledge(item.query, 5);
     const grounded = await generateGroundedTeacherAnswer(buildTeacherMessages(item.query, [], sources), sources, (messages) => completeTextWithOllama(messages, { timeoutMs }));
     const score = scoreKnowledgeAnswer(item, grounded.answer, countCitedSources(grounded.answer), grounded.audit.passed);
-    const result = { id: item.id, subject: item.subject, difficulty: item.difficulty, query: item.query, ...score, revised: grounded.revised, latencyMs: Math.round(performance.now() - started), grounding: grounded.audit, answer: grounded.answer };
+    const result = { id: item.id, subject: item.subject, difficulty: item.difficulty, query: item.query, ...score, revised: grounded.revised, separated: grounded.separated, latencyMs: Math.round(performance.now() - started), grounding: grounded.audit, answer: grounded.answer };
     completedResults.push(result);
     completedIds.add(item.id);
     saveCheckpoint();
@@ -77,7 +78,7 @@ for (const [index, item] of cases.entries()) {
     if (!score.passed) console.log(`  ${score.failures.join("; ")}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    errorResults.push({ id: item.id, subject: item.subject, difficulty: item.difficulty, query: item.query, passed: false, conceptCoverage: 0, forbiddenClaimsFree: true, citedSources: 0, groundingPassed: false, failures: [`evaluation error: ${message}`], revised: false, latencyMs: Math.round(performance.now() - started), grounding: null, answer: "", error: message });
+    errorResults.push({ id: item.id, subject: item.subject, difficulty: item.difficulty, query: item.query, passed: false, conceptCoverage: 0, forbiddenClaimsFree: true, citedSources: 0, groundingPassed: false, failures: [`evaluation error: ${message}`], revised: false, separated: false, latencyMs: Math.round(performance.now() - started), grounding: null, answer: "", error: message });
     console.log(`ERROR ${index + 1}/${cases.length} ${item.id}: ${message}`);
     console.log("  Continuing; rerun the same command later to retry this case from the checkpoint.");
   }
@@ -99,6 +100,7 @@ const summary = {
   groundingPassRate: average(results.map((result) => Number(result.groundingPassed))),
   forbiddenClaimsFreeRate: average(results.map((result) => Number(result.forbiddenClaimsFree))),
   revisionRate: average(results.map((result) => Number(result.revised))),
+  separationRate: average(results.map((result) => Number(result.separated))),
   averageLatencyMs: average(results.map((result) => result.latencyMs)),
   bySubject: groups("subject"),
   byDifficulty: groups("difficulty"),
@@ -111,6 +113,7 @@ console.log(`Pass rate: ${(summary.passRate * 100).toFixed(1)}% (${summary.passe
 console.log(`Required-concept coverage: ${(summary.conceptCoverage * 100).toFixed(1)}%`);
 console.log(`Grounding pass rate: ${(summary.groundingPassRate * 100).toFixed(1)}%`);
 console.log(`Revision rate: ${(summary.revisionRate * 100).toFixed(1)}%`);
+console.log(`Evidence/background separation fallback: ${(summary.separationRate * 100).toFixed(1)}%`);
 console.log(`Average latency: ${(summary.averageLatencyMs / 1000).toFixed(1)}s`);
 console.log(`Private result: ${outputPath}`);
 if (errorResults.length) {

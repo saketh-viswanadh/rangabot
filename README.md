@@ -153,6 +153,13 @@ for missing, invalid, or weakly supported citations. It revises a weak draft
 once using the same local model and displays a grounding warning if that revision
 still cannot be verified. This quality gate buffers Teacher Mode answers until
 review finishes; ordinary and Smart-mode responses continue streaming.
+Teacher Mode also builds a visible-to-the-model evidence plan before drafting:
+requested subtopics, source labels, query/source overlap, and a strict writing
+contract. If revision still mixes supported and unsupported material, Rangabot
+conservatively attaches a missing citation only when one passage has strong
+lexical support, then separates remaining content into **Vault-grounded answer**
+and **Local model background** sections. It never silently labels weakly matched
+background as vault evidence.
 When several books contain strong matches, Rangabot reserves evidence space for
 multiple sources and asks the model to connect their ideas rather than reciting
 each passage separately. Weak books are not included merely to create diversity.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { auditGroundedAnswer, buildGroundingRevisionInstruction, generateGroundedTeacherAnswer } from "../lib/knowledge-grounding.ts";
+import { auditGroundedAnswer, buildGroundingRevisionInstruction, generateGroundedTeacherAnswer, separateGroundedEvidence } from "../lib/knowledge-grounding.ts";
 
 const sources = [
   { title: "Statistics", path: "/statistics", chunk: 1, score: 1, content: "Cross-validation estimates model performance on unseen data by repeatedly separating training and validation observations." },
@@ -88,4 +88,40 @@ This stable explanation is deliberately uncited model knowledge.
 This example remains part of the explicitly labelled background section.`, sources);
   assert.equal(audit.passed, true);
   assert.equal(audit.uncitedParagraphs, 0);
+});
+
+test("separates supported vault claims from unverified model explanation", () => {
+  const separated = separateGroundedEvidence(`Cross-validation estimates performance on unseen data by separating training and validation observations. [Source 1]
+
+This uncited statement may still be useful but is not vault verified.`, sources);
+  assert.match(separated, /## Vault-grounded answer/);
+  assert.match(separated, /\[Source 1\]/);
+  assert.match(separated, /## Local model background/);
+  assert.match(separated, /not verified/);
+  assert.equal(auditGroundedAnswer(separated, sources).passed, true);
+});
+
+test("attaches an isolated source marker to the preceding factual paragraph", () => {
+  const audit = auditGroundedAnswer(`Cross-validation estimates model performance on unseen data by separating training and validation observations.
+
+[Source 1]`, sources);
+  assert.equal(audit.passed, true);
+  assert.equal(audit.citationCoverage, 1);
+});
+
+test("conservatively recovers a missing citation from strongly matching evidence", () => {
+  const separated = separateGroundedEvidence("Python catches runtime exceptions with try and except clauses.", sources);
+  assert.match(separated, /\[Source 2\]/);
+  assert.equal(auditGroundedAnswer(separated, sources).passed, true);
+});
+
+test("keeps the better grounded draft when revision removes its citations", async () => {
+  const completions = [
+    "Cross-validation estimates model performance on unseen data by separating training and validation observations. [Source 1]\n\nThis additional factual paragraph remains completely uncited and should trigger the grounding revision process.",
+    "A replacement answer that removed every useful citation and supporting detail.",
+  ];
+  const result = await generateGroundedTeacherAnswer([{ role: "user", content: "Explain cross-validation" }], sources, async () => completions.shift() ?? "");
+  assert.match(result.answer, /\[Source 1\]/);
+  assert.equal(result.audit.passed, true);
+  assert.equal(result.separated, true);
 });

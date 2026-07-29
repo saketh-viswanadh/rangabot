@@ -78,6 +78,13 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - Teacher Mode now normalizes small-model `[N]` citations, keeps nested content
   inside an explicit Local model background boundary, ignores adjacent but
   unhelpful passages, and answers the actual question before adding detail.
+- Teacher Mode now receives an explicit subtopic and claim-to-source plan before
+  drafting, retains the better-grounded version when revision regresses, joins
+  isolated citation markers to their claims, and conservatively recovers missing
+  citations only when one passage has strong lexical support.
+- Answers that remain mixed after revision are deterministically separated into
+  vault-grounded evidence and clearly disclosed local-model background instead
+  of returning an undifferentiated warning-laden draft.
 - Knowledge answers can use five bounded, reranked passages instead of three
   shorter raw matches, improving cross-source context without flooding small
   local models.
