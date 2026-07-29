@@ -54,7 +54,7 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Deterministic Teacher Mode answers for current-awareness questions
 - [x] Automatic local-vault lookup for relevant Smart-mode questions
 - [x] Initial data-science pack: NumPy, pandas, scikit-learn, and DuckDB
-- [ ] Learning Core 1: Hierarchical ingestion that preserves book, chapter,
+- [x] Learning Core 1: Hierarchical ingestion that preserves book, chapter,
   section, heading, page, and passage relationships
 - [ ] Learning Core 2: Conversation-aware query planning and multi-source
   retrieval across books, local-model knowledge, and relevant chat history
@@ -146,6 +146,10 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - Knowledge files and indexes remain private and Git-ignored. Only source
   metadata and update reports are versioned. Rangabot uses retrieval rather than
   changing chat-model weights, making sources inspectable and updates reversible.
+- Hierarchical ingestion uses a backward-compatible SQLite migration and a
+  versioned ingestion format. Existing compatible sources re-index locally once;
+  headings and PDF page ranges become searchable metadata without modifying the
+  original books.
 - Rangabot's Learning Core will treat retrieval as evidence gathering rather than
   the final product. Answers must synthesize relevant vault material, downloaded-
   model background, and conversation context into a fresh explanation suited to

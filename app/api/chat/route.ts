@@ -136,7 +136,10 @@ export async function POST(request: Request) {
       }
       const sources = await searchKnowledge(question, 5);
       const context = sources.length
-        ? sources.map((source, index) => `[Source ${index + 1}: ${source.title}, passage ${source.chunk}]\n${source.content.slice(0, 1100)}`).join("\n\n")
+        ? sources.map((source, index) => {
+          const location = [source.sectionPath, source.pageStart ? `page${source.pageEnd && source.pageEnd !== source.pageStart ? `s ${source.pageStart}-${source.pageEnd}` : ` ${source.pageStart}`}` : null].filter(Boolean).join(", ");
+          return `[Source ${index + 1}: ${source.title}${location ? `, ${location}` : ""}, passage ${source.chunk}]\n${source.content.slice(0, 1100)}`;
+        }).join("\n\n")
         : "No matching passage was found in the local Knowledge Vault.";
       const history = body.messages.slice(0, -1);
       const teacherMode = body.mode === "teach";
