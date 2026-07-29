@@ -75,6 +75,8 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - Empty HTML, image-only PDFs, and page-marker-only extractions are rejected
   instead of being advertised as searchable knowledge. `knowledge:doctor`
   reports unindexed, moved, stale, incompatible, and textless sources.
+- `knowledge:doctor` distinguishes known incompatible sources from genuinely
+  pending files, so skipped files no longer trigger a false re-ingestion action.
 - Word creation no longer turns creative requests into generic business reports
   containing purpose, audience, raw chat answers, or planning scaffolding.
 - Children's story collections require complete reader-facing stories and use a

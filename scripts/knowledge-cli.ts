@@ -21,7 +21,9 @@ if (command === "init") {
     if (status.documents === 0) problems.push("no indexed documents; add a file and run npm run knowledge:ingest");
     const indexed = listIndexedKnowledgeDocuments();
     const files = listKnowledgeFiles().map((path) => ({ path, sha256: hashBuffer(readFileSync(path)) }));
-    const pending = files.filter((file) => !indexed.some((document) => document.sha256 === file.sha256));
+    const incompatibleNames = new Set(status.sources.filter((source) => source.status === "incompatible").map((source) => source.name));
+    const incompatible = files.filter((file) => incompatibleNames.has(basename(file.path)));
+    const pending = files.filter((file) => !incompatibleNames.has(basename(file.path)) && !indexed.some((document) => document.sha256 === file.sha256));
     const relocated = files.filter((file) => indexed.some((document) => document.sha256 === file.sha256 && document.path !== file.path));
     const stale = indexed.filter((document) => !files.some((file) => file.sha256 === document.sha256));
     const unreadable = indexed.filter((document) => indexedDocumentUsefulCharacters(document.path) < 200);
@@ -32,6 +34,7 @@ if (command === "init") {
     if (unreadable.length) problems.push(`${unreadable.length} indexed source${unreadable.length === 1 ? " has" : "s have"} no usable extracted text: ${unreadable.map((document) => basename(document.path)).join(", ")}`);
     if (legacy.length) problems.push(`${legacy.length} indexed source${legacy.length === 1 ? " needs" : "s need"} the hierarchy upgrade`);
     if (pending.length || relocated.length || stale.length || legacy.length) console.log("ACTION: run npm run knowledge:ingest to synchronize the local index");
+    if (incompatible.length) console.log(`NOTICE: ${incompatible.length} incompatible file${incompatible.length === 1 ? " was" : "s were"} already examined and skipped: ${incompatible.map((file) => basename(file.path)).join(", ")}`);
     console.log(problems.length ? `WARN: ${problems.join("; ")}` : "PASS: vault is initialized and searchable");
     if (problems.length) process.exitCode = 1;
   }
