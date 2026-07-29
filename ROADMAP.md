@@ -76,6 +76,9 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   changes improve synthesis, teaching quality, citations, and completeness
 - [x] Learning Core 6a: Local retrieval evaluation baseline covering expected
   sources, contamination, diversity, passage locators, and latency
+- [x] Learning Core 6b: Balanced 60-question retrieval and complete-answer
+  benchmark with per-subject, difficulty, grounding, concept, synthesis, and
+  latency measurements
 - [ ] Learning Core 7: Rebuildable cross-book concept summaries and relationships
   that update incrementally when compatible sources are added or removed
 - [ ] Model management for installed models and active selection

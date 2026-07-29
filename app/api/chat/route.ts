@@ -3,6 +3,7 @@ import { completeJsonWithOllama, completeTextWithOllama, streamChatWithOllama } 
 import type { ChatMessage } from "@/lib/providers/types";
 import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatalogQuestion, isKnowledgeNewsQuestion, searchKnowledge, shouldAutoSearchKnowledge, type KnowledgeResult } from "@/lib/knowledge";
 import { generateGroundedTeacherAnswer } from "@/lib/knowledge-grounding";
+import { buildTeacherMessages, formatKnowledgeContext } from "@/lib/teacher-mode";
 import { formatCodeContext, isCodeContextRequest } from "@/lib/code-context";
 import { getAllowedRepository } from "@/lib/repositories";
 import { previewRepositoryFile } from "@/lib/repository-search";
@@ -138,20 +139,12 @@ export async function POST(request: Request) {
       }
       const sources = await searchKnowledge(question, 5);
       knowledgeSources = sources;
-      const context = sources.length
-        ? sources.map((source, index) => {
-          const location = [source.sectionPath, source.pageStart ? `page${source.pageEnd && source.pageEnd !== source.pageStart ? `s ${source.pageStart}-${source.pageEnd}` : ` ${source.pageStart}`}` : null].filter(Boolean).join(", ");
-          return `[Source ${index + 1}: ${source.title}${location ? `, ${location}` : ""}, passage ${source.chunk}]\n${source.content.slice(0, 1100)}`;
-        }).join("\n\n")
-        : "No matching passage was found in the local Knowledge Vault.";
       const history = body.messages.slice(0, -1);
       const teacherMode = body.mode === "teach";
-      messages = [
-        { role: "system", content: teacherMode
-          ? "You are Rangabot in Teacher Mode. Teach simply, then add detail. Treat relevant local passages as the primary evidence and cite every vault-derived factual paragraph using its applicable [Source N] label. Ignore irrelevant passages instead of discussing their irrelevance. You may add stable background knowledge from your downloaded local model when the passages have gaps, but label it clearly as Local model background and never present it as source-verified or current. State material evidence gaps precisely. Distinguish historical interpretations and mythology variants."
-          : "You are Rangabot using an automatic, entirely local Knowledge Vault lookup. Use supplied passages when they help answer the question, but ignore irrelevant passages. Cite claims drawn from them as [Source 1], [Source 2], or [Source 3]. You may use your own local-model knowledge for gaps, but clearly distinguish it from cited vault evidence and never imply that it is current or source-verified." },
+      messages = teacherMode ? buildTeacherMessages(question, history, sources) : [
+        { role: "system", content: "You are Rangabot using an automatic, entirely local Knowledge Vault lookup. Use supplied passages when they help answer the question, but ignore irrelevant passages. Cite claims drawn from them as [Source 1], [Source 2], or [Source 3]. You may use your own local-model knowledge for gaps, but clearly distinguish it from cited vault evidence and never imply that it is current or source-verified." },
         ...history,
-        { role: "user", content: `QUESTION:\n${question}\n\nLOCAL KNOWLEDGE VAULT PASSAGES:\n${context}\n\nAnswer the question${teacherMode ? " using these passages as primary evidence" : " using relevant passages where useful"}. When several sources contribute, compare and connect their ideas into one explanation rather than summarizing each passage in sequence. Preserve meaningful disagreements. Include inline citations for vault-derived claims.` },
+        { role: "user", content: `QUESTION:\n${question}\n\nLOCAL KNOWLEDGE VAULT PASSAGES:\n${formatKnowledgeContext(sources)}\n\nAnswer the question using relevant passages where useful. When several sources contribute, compare and connect their ideas into one explanation rather than summarizing each passage in sequence. Preserve meaningful disagreements. Include inline citations for vault-derived claims.` },
       ];
     }
 

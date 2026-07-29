@@ -41,6 +41,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - A privacy-preserving local retrieval evaluation harness with reusable starter
   cases, private vault-specific fixtures, timestamped reports, and measurable
   relevance, contamination, diversity, locator, and latency results.
+- A balanced 60-question benchmark spanning ten subject groups and three
+  difficulty levels, with answer-level concept, grounding, forbidden-claim,
+  cited-source synthesis, revision, and latency scoring.
 - A Teacher Mode grounding gate that audits citation coverage, citation numbers,
   and lexical support before returning an answer, revises weak drafts once
   locally, and warns visibly when the revision remains insufficiently grounded.
@@ -61,11 +64,17 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   relevance threshold.
 - Subject-aware retrieval excludes books with a clearly conflicting title-level
   domain while retaining relevant and uncategorized sources for normal reranking.
+- Subject recognition now covers implicit SQL/statistics questions and compact
+  or domain-specific source titles, raising the 60-question retrieval pass rate
+  from 85% to 90% while eliminating measured cross-subject contamination.
 - Semantic candidates are searched in native SQLite vector storage instead of
   parsing and comparing every JSON embedding in JavaScript. The index rebuilds
   automatically when stale and retains the prior portable search as a fallback.
 - Teacher Mode buffers its answer until the local grounding review finishes;
   ordinary and Smart modes retain token streaming.
+- Teacher Mode now normalizes small-model `[N]` citations, keeps nested content
+  inside an explicit Local model background boundary, ignores adjacent but
+  unhelpful passages, and answers the actual question before adding detail.
 - Knowledge answers can use five bounded, reranked passages instead of three
   shorter raw matches, improving cross-source context without flooding small
   local models.

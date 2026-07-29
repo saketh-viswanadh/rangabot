@@ -1,5 +1,30 @@
 # Daily progress
 
+## 2026-07-29 — Sixty-question RAG benchmark
+
+- Replaced the 13-question smoke test with 60 rubric-backed questions across ten
+  subject groups, three difficulty levels, and explicit cross-source tasks.
+- Added a complete Teacher Mode answer benchmark for concept coverage,
+  grounding, forbidden claims, cited-source synthesis, revisions, and latency.
+- Added per-subject and per-difficulty results while keeping answers and detailed
+  reports private and Git-ignored.
+- Established the honest retrieval baseline at 85%, then fixed implicit
+  SQL/statistics classification and compact mythology/ML source titles.
+- The same 60 questions now score 90% retrieval pass, 99.2% expected-source
+  coverage, 100% contamination-free, and 98% passage-locator coverage.
+- Remaining retrieval failures are concentrated in multi-book coverage and one
+  cross-domain statistics-plus-visualization synthesis query.
+- A ten-subject generated-answer sample initially passed 60%, with 90.8%
+  required-concept coverage, 70% grounding, 40% revision, and 61.6-second mean
+  latency on `llama3.2:3b`. This is the first honest synthesis baseline, not a
+  full 60-answer claim.
+- The sample exposed bare `[N]` citations, overly broad background-section
+  auditing, irrelevant-passage distraction, and weak evidence for a basic
+  mean-versus-median question. Citation normalization and evidence-selection
+  instructions were hardened; deterministic rescoring raised the same saved
+  sample to 80%, while targeted generation confirmed supervised learning now
+  passes and mean-versus-median remains a real unresolved quality gap.
+
 ## 2026-07-29 — Teacher Mode grounding review
 
 - Added deterministic checks for substantive citation coverage, invalid source

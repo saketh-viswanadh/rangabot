@@ -118,12 +118,25 @@ Measure retrieval quality against the local vault with:
 npm run knowledge:evaluate
 ```
 
-The starter suite checks expected-source coverage, cross-subject contamination,
-multi-source retrieval, passage locators, and latency. Detailed results are
+The 60-question starter suite spans ten subject groups and three difficulty
+levels. It checks expected-source coverage, cross-subject contamination,
+multi-source retrieval, passage locators, latency, and per-subject performance. Detailed results are
 written to a private Git-ignored directory. Contributors can add a private suite
 at `data/knowledge/evaluations/my-vault.private.json` and run it with
 `npm run knowledge:evaluate -- --file=data/knowledge/evaluations/my-vault.private.json`.
 Private evaluation files may name personal textbooks and must never be committed.
+
+Run the slower end-to-end Teacher Mode benchmark with:
+
+```bash
+npm run knowledge:evaluate:answers
+```
+
+It generates and locally reviews all 60 answers, then measures required-concept
+coverage, grounding, forbidden claims, cross-source citation synthesis, revision
+rate, and latency. Use `-- --sample=10` for one case per subject,
+`-- --limit=5`, or `-- --subject=statistics` for smaller diagnostic runs. Full
+runs can take a long time on lightweight local hardware.
 
 Select **Teacher mode** in Rangabot to retrieve relevant vault passages before
 the chat model answers. Teacher Mode is instructed to cite the numbered local

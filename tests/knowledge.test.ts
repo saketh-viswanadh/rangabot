@@ -81,6 +81,11 @@ test("rejects clearly cross-subject books while retaining uncategorized sources"
   const filtered = knowledge.filterKnowledgeResultsBySubject("compare clustering evaluation methods", candidates);
   assert.deepEqual(filtered.map((result) => result.title), ["Scikit-learn user guide", "Research notes"]);
   assert.deepEqual(knowledge.inferKnowledgeSubjects("compare Greek and Egyptian creation myths"), ["greek-mythology", "egyptian-mythology"]);
+  assert.deepEqual(knowledge.inferKnowledgeSubjects("How do GROUP BY and HAVING differ?"), ["sql"]);
+  assert.deepEqual(knowledge.inferKnowledgeSubjects("What does a p-value mean?"), ["statistics"]);
+  assert.deepEqual(knowledge.inferKnowledgeSubjects("HundredPageMachineLearning"), ["machine-learning"]);
+  assert.deepEqual(knowledge.inferKnowledgeSubjects("Shiva Purana"), ["indian-mythology"]);
+  assert.deepEqual(knowledge.inferKnowledgeSubjects("Ancient Egypt myths"), ["egyptian-mythology"]);
 });
 
 test("relinks moved sources by content hash without duplicating their chunks", () => {

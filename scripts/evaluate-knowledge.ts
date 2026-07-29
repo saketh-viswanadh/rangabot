@@ -32,5 +32,7 @@ console.log(`Expected-source coverage: ${(summary.expectedCoverage * 100).toFixe
 console.log(`Contamination-free: ${(summary.contaminationFreeRate * 100).toFixed(1)}%`);
 console.log(`Passage locator coverage: ${(summary.locatorRate * 100).toFixed(1)}%`);
 console.log(`Latency p50 / p95: ${summary.latencyP50Ms}ms / ${summary.latencyP95Ms}ms`);
+console.log("Subject pass rates:");
+for (const [subject, result] of Object.entries(summary.bySubject)) console.log(`  ${subject}: ${(result.passRate * 100).toFixed(1)}% (${result.cases} cases)`);
 console.log(`Private result: ${outputPath}`);
 if (summary.passRate < .8) process.exitCode = 1;

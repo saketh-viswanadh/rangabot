@@ -65,3 +65,27 @@ test("shows a warning when the single revision remains ungrounded", async () => 
   assert.equal(result.audit.passed, false);
   assert.match(result.answer, /Grounding note/);
 });
+
+test("normalizes a small model's bare numbered citation markers", async () => {
+  const result = await generateGroundedTeacherAnswer(
+    [{ role: "user", content: "Explain exceptions" }],
+    sources,
+    async () => "Python catches runtime exceptions with try and except clauses. [2]",
+  );
+  assert.equal(result.audit.passed, true);
+  assert.match(result.answer, /\[Source 2\]/);
+});
+
+test("treats bold subsections after Local model background as model knowledge", () => {
+  const audit = auditGroundedAnswer(`Cross-validation estimates model performance on unseen data by separating training and validation observations. [Source 1]
+
+**Local Model Background**
+
+This stable explanation is deliberately uncited model knowledge.
+
+**Example**
+
+This example remains part of the explicitly labelled background section.`, sources);
+  assert.equal(audit.passed, true);
+  assert.equal(audit.uncitedParagraphs, 0);
+});
