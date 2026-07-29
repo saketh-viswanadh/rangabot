@@ -14,6 +14,9 @@
   coverage, 100% contamination-free, and 98% passage-locator coverage.
 - Remaining retrieval failures are concentrated in multi-book coverage and one
   cross-domain statistics-plus-visualization synthesis query.
+- Hardened the long answer run after a 120-second generation timeout stopped at
+  question 8: evaluation calls now allow five minutes, checkpoint every answer,
+  continue after isolated errors, and resume only unfinished cases.
 - A ten-subject generated-answer sample initially passed 60%, with 90.8%
   required-concept coverage, 70% grounding, 40% revision, and 61.6-second mean
   latency on `llama3.2:3b`. This is the first honest synthesis baseline, not a

@@ -137,6 +137,11 @@ coverage, grounding, forbidden claims, cross-source citation synthesis, revision
 rate, and latency. Use `-- --sample=10` for one case per subject,
 `-- --limit=5`, or `-- --subject=statistics` for smaller diagnostic runs. Full
 runs can take a long time on lightweight local hardware.
+The runner allows five minutes per local generation, catches isolated failures,
+checkpoints every completed answer, and automatically resumes the same selected
+suite. If it is interrupted or a model call times out, rerun the identical
+command instead of starting over. Override the evaluation-only timeout with
+`-- --timeout-ms=600000` when exceptionally slow hardware needs ten minutes.
 
 Select **Teacher mode** in Rangabot to retrieve relevant vault passages before
 the chat model answers. Teacher Mode is instructed to cite the numbered local
