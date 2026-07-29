@@ -1,5 +1,30 @@
 # Rangabot roadmap
 
+## Current execution order
+
+The completed foundation remains documented below. New work follows this order
+unless user feedback exposes a more urgent defect:
+
+1. **Learning Core foundation** — hierarchical ingestion plus source-aware,
+   multi-book retrieval.
+2. **Knowledge synthesis** — conversation-aware planning, comparison across
+   sources, disagreement handling, and original explanations that combine cited
+   vault evidence with clearly labelled downloaded-model background.
+3. **Inspectable local learning** — preferences, proficiency, progress,
+   corrections, and approved conclusions with provenance and user controls.
+4. **Quality engine** — draft, grounding review, revision, feedback capture, and
+   regression evaluation across teaching, coding, research, and writing.
+5. **Cross-book knowledge layer** — rebuildable concept summaries and
+   relationships that update when the vault changes.
+6. **Artifact expansion** — existing Word editing, then PDF, email drafting,
+   long-form writing, technical documentation and diagrams, presentations, and
+   spreadsheets, each using the shared gold-standard validation contract.
+7. **Deferred platform work** — installed-model management, optional local
+   encryption, and any cloud/Codex handoff design.
+
+Automatic model-weight mutation is not part of this sequence. A reviewed
+fine-tuning dataset and rollback workflow remain a later proposal.
+
 ## Approved
 
 - [x] Open-source governance, security, support and contribution foundation
@@ -7,9 +32,9 @@
 - [x] Public local-model registry with hardware and upstream-license guidance
 - [x] Self-service Knowledge Vault initialization, validation, backup and rollback
 - [x] Pull-request CI and community issue templates
-- [ ] Fresh-clone and cross-platform open-source release rehearsal
+- [x] Fresh-clone and cross-platform open-source release rehearsal
 - [x] Final Ranga artwork and Rangabot branding license decision
-- [ ] Historical Git-object secret scan before visibility change
+- [x] Historical Git-object secret scan before visibility change
 - [x] Local Ollama provider behind typed interfaces
 - [x] Streaming responses and Stop generation
 - [x] Apple-inspired interface and Ranga mascot
@@ -24,16 +49,34 @@
 - [x] Local project folders with project-scoped chat history
 - [x] Private 4 GB Knowledge Vault with incremental local document ingestion
 - [x] Hybrid keyword and embedding retrieval with Teacher Mode citations
+- [x] Portable hash-based vault synchronization, extraction-quality gates, scanned-PDF detection, query cleanup, title-aware hybrid reranking, and cross-subject retrieval tests
 - [x] Weekly and monthly sourced subject-intelligence briefs
 - [x] Deterministic Teacher Mode answers for current-awareness questions
 - [x] Automatic local-vault lookup for relevant Smart-mode questions
 - [x] Initial data-science pack: NumPy, pandas, scikit-learn, and DuckDB
+- [ ] Learning Core 1: Hierarchical ingestion that preserves book, chapter,
+  section, heading, page, and passage relationships
+- [ ] Learning Core 2: Conversation-aware query planning and multi-source
+  retrieval across books, local-model knowledge, and relevant chat history
+- [x] Learning Core 2a: Relevance-gated source diversity prevents one matching
+  book from monopolizing the evidence window when other strong books contribute
+- [ ] Learning Core 3: Evidence synthesis that compares, connects, deduplicates,
+  and preserves disagreements before composing an original explanation
+- [ ] Learning Core 4: Inspectable local memory for user preferences, proficiency,
+  corrections, learning progress, and approved conclusions
+- [ ] Learning Core 5: Draft, grounding review, and revision with visible separation
+  between vault evidence, local-model background, and unresolved uncertainty
+- [ ] Learning Core 6: Feedback capture and regression evaluation proving that
+  changes improve synthesis, teaching quality, citations, and completeness
+- [ ] Learning Core 7: Rebuildable cross-book concept summaries and relationships
+  that update incrementally when compatible sources are added or removed
 - [ ] Model management for installed models and active selection
 - [x] Repository selection with an explicit filesystem allowlist
 - [x] Local code search with scoped file-context previews
 - [x] Explicit code-preview attachment with visible send scope and local-only delivery
 - [x] Artifact-skill foundation: ordered registry, shared quality contract and welcome entry points
 - [x] A1: Conversational Word creation with requirement gathering, validation and rendered previews
+- [x] A1 quality hardening: genre-aware story documents, no planning-note fallback, content-depth gates, and a curated local Ramayana pack for reliable small-model output
 - [ ] A1b: Safe editing of user-selected existing Word documents
 - [ ] A2: Validated PDF reports and summaries
 - [ ] A3: Local email drafting and critique (no sending)
@@ -45,6 +88,8 @@
 ## Proposed
 
 - Automated local evaluation fixtures for comparing smaller models
+- Optional reviewed fine-tuning dataset export after the Learning Core is mature;
+  conversations must never modify model weights automatically
 - Page-aware source previews and subject-specific retrieval evaluation suites
 - Expand the data-science pack with statistics, visualization, experimentation,
   feature engineering, and responsible evaluation material under clear licenses
@@ -94,12 +139,28 @@
   Rangabot ask follow-up questions across turns; when requirements are sufficient,
   the local model returns a bounded plan and deterministic code constructs,
   validates and renders the file. User review remains mandatory.
+- Creative Word requests are classified by genre and must contain finished reader-facing
+  content. Story collections cannot fall back to business-report scaffolding. For the
+  initial Ramayana use case, a curated local story pack protects canonical episode facts
+  from small-model hallucinations while the model still gathers the brief conversationally.
 - Knowledge files and indexes remain private and Git-ignored. Only source
   metadata and update reports are versioned. Rangabot uses retrieval rather than
   changing chat-model weights, making sources inspectable and updates reversible.
+- Rangabot's Learning Core will treat retrieval as evidence gathering rather than
+  the final product. Answers must synthesize relevant vault material, downloaded-
+  model background, and conversation context into a fresh explanation suited to
+  the user's intent and level.
+- Persistent learning must remain local, inspectable, editable, deletable, and
+  provenance-aware. User statements are classified as preferences, personal
+  context, progress, corrections, or candidate knowledge; they are never silently
+  promoted to universal facts.
+- Continuous improvement means measured improvement: feedback creates reviewable
+  signals and regression cases, while automatic self-training and unreviewed
+  model-weight changes remain out of scope.
 - Weekly/monthly reports describe external subject developments only. Internal
   ingestion and product work are deliberately excluded. Each item must include
   a date, significance, direct source, evidence class, and local indexing state.
 - Smart mode automatically retrieves local evidence for informational questions
-  and visibly identifies vault-backed answers. Teacher Mode stays citation-first
-  and evidence-bound; Local-only mode never performs vault retrieval.
+  and visibly identifies vault-backed answers. Teacher Mode stays citation-first,
+  separating vault evidence from downloaded-model background; Local-only mode
+  never performs vault retrieval.

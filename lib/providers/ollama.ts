@@ -42,7 +42,7 @@ interface OllamaStreamChunk {
   error?: string;
 }
 
-export async function completeJsonWithOllama(messages: ChatMessage[]): Promise<string> {
+export async function completeJsonWithOllama(messages: ChatMessage[], options?: { numPredict?: number }): Promise<string> {
   const response = await ollamaFetch("/api/chat", {
     method: "POST",
     body: JSON.stringify({
@@ -50,6 +50,7 @@ export async function completeJsonWithOllama(messages: ChatMessage[]): Promise<s
       messages: messages.map(({ role, content }) => ({ role, content })),
       format: "json",
       stream: false,
+      options: { num_predict: options?.numPredict ?? 1800 },
     }),
   });
   if (!response.ok) throw new Error(`Ollama request failed (${response.status}): ${await response.text()}`);
