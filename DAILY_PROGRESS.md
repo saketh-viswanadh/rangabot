@@ -1,5 +1,12 @@
 # Daily progress
 
+## 2026-07-29 — Accurate Knowledge Vault doctor result
+
+- Corrected the doctor command so known incompatible files are reported as an
+  informational notice rather than incorrectly classified as unindexed work.
+- A healthy searchable vault now passes even when deliberately skipped sources
+  remain in the inbox for user review.
+
 ## 2026-07-29 — Hierarchical Knowledge Vault ingestion
 
 - Added a backward-compatible SQLite migration for passage heading, section
