@@ -41,6 +41,7 @@ npm run knowledge:validate   # validate public source metadata
 npm run knowledge:backup     # save a local index snapshot
 npm run knowledge:ingest     # incrementally index changed files
 npm run knowledge:vector-index # explicitly rebuild vectors without re-ingesting
+npm run knowledge:evaluate   # score retrieval without sending vault data anywhere
 npm run knowledge:doctor     # diagnose an empty or full vault
 npm run knowledge:rollback   # preview latest rollback; add -- --yes to confirm
 ```
@@ -57,3 +58,7 @@ material; it is not an inventory of private user books. When maintaining weekly
 subject intelligence, verify primary sources manually, record the event date,
 why it matters, evidence class and indexing status, then run
 `npm run knowledge:validate`. No Codex installation is required.
+
+The tracked evaluation suite contains only reusable questions for public starter
+categories. Store vault-specific cases as `evaluations/*.private.json`; both
+those fixtures and timestamped result reports are ignored by Git.
