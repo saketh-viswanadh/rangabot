@@ -107,6 +107,8 @@ local model, but never presents that material as source-verified or current.
 When several books contain strong matches, Rangabot reserves evidence space for
 multiple sources and asks the model to connect their ideas rather than reciting
 each passage separately. Weak books are not included merely to create diversity.
+Title-level subject guards also remove clearly cross-domain books while leaving
+uncategorized sources available for ordinary relevance ranking.
 
 **Smart routing** also searches the vault automatically for informational and
 subject-related questions. Responses visibly show `LOCAL · KNOWLEDGE VAULT`

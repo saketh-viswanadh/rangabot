@@ -51,6 +51,8 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - Relevant evidence is diversified across matching books before prompt assembly;
   weak sources remain excluded and source diversity is never forced through the
   relevance threshold.
+- Subject-aware retrieval excludes books with a clearly conflicting title-level
+  domain while retaining relevant and uncategorized sources for normal reranking.
 - Knowledge answers can use five bounded, reranked passages instead of three
   shorter raw matches, improving cross-source context without flooding small
   local models.

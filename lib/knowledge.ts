@@ -272,6 +272,32 @@ function ftsQuery(query: string) {
   return knowledgeQueryTerms(query).map((term) => `"${term.replaceAll('"', '')}"`).join(" OR ");
 }
 
+const knowledgeSubjectPatterns = {
+  python: /\bpython|fluent python|effective python|namespaces?|decorators?|asyncio|pip\b/i,
+  sql: /\bsql|relational|database|joins?|queries|duckdb|snowflake\b/i,
+  "data-platform": /\bpandas|numpy|spark|pyspark|databricks|dataframe\b/i,
+  "machine-learning": /\bmachine learning|statistical learning|scikit|clustering|classification|neural|gradient boost|random forest|cross[- ]validation|data leakage|feature engineering\b/i,
+  statistics: /\bstatistics|statistical inference|bayesian|frequentist|confidence interval|hypothesis|probability\b/i,
+  visualization: /\bvisuali[sz]|charts?|plots?|matplotlib|seaborn|graphics\b/i,
+  "indian-mythology": /\bramayana|mahabharata|hindu|indian myth|rama|sita|hanuman\b/i,
+  "greek-mythology": /\bgreek\b|zeus|hera|olymp|hesiod/i,
+  "egyptian-mythology": /\begyptian\b|osiris|isis|horus|\bra\b/i,
+  history: /\bhistory|historical|archaeolog|ancient civilisation|ancient civilization\b/i,
+} as const;
+
+export function inferKnowledgeSubjects(text: string) {
+  return Object.entries(knowledgeSubjectPatterns).filter(([, pattern]) => pattern.test(text)).map(([subject]) => subject);
+}
+
+export function filterKnowledgeResultsBySubject(query: string, results: KnowledgeResult[]) {
+  const querySubjects = new Set(inferKnowledgeSubjects(query));
+  if (!querySubjects.size) return results;
+  return results.filter((result) => {
+    const sourceSubjects = inferKnowledgeSubjects(result.title);
+    return !sourceSubjects.length || sourceSubjects.some((subject) => querySubjects.has(subject));
+  });
+}
+
 export function diversifyKnowledgeResults(results: KnowledgeResult[], limit: number) {
   if (limit <= 0 || !results.length) return [];
   const ranked = [...results].sort((left, right) => right.score - left.score);
@@ -315,7 +341,7 @@ export async function searchKnowledge(query: string, limit = 6): Promise<Knowled
   `).all(expression, Math.max(limit * 6, 24)) as unknown as Array<Omit<KnowledgeResult, "score"> & { rank: number }>;
   const lexical = rows.map(({ rank: _rank, ...row }, index) => ({ ...row, lexicalScore: Math.max(.35, 1 - index / Math.max(rows.length, 1)) }));
   const queryEmbedding = process.env.KNOWLEDGE_DISABLE_EMBEDDINGS === "1" ? null : await embedQuery(query);
-  if (!queryEmbedding) return diversifyKnowledgeResults(lexical.map(({ lexicalScore, ...result }) => ({ ...result, score: lexicalScore })), limit);
+  if (!queryEmbedding) return diversifyKnowledgeResults(filterKnowledgeResultsBySubject(query, lexical.map(({ lexicalScore, ...result }) => ({ ...result, score: lexicalScore }))), limit);
   const embeddedRows = getDatabase().prepare(`
     SELECT d.title, d.path, c.ordinal AS chunk, c.content, c.heading, c.section_path AS sectionPath, c.page_start AS pageStart, c.page_end AS pageEnd, c.embedding
     FROM chunks c JOIN documents d ON d.id = c.document_id
@@ -341,7 +367,7 @@ export async function searchKnowledge(query: string, limit = 6): Promise<Knowled
     .filter((result) => result.lexical || (result.similarity ?? 0) >= .46)
     .sort((a, b) => b.score - a.score)
     .map(({ lexical: _lexical, similarity: _similarity, ...result }) => result);
-  return diversifyKnowledgeResults(ranked, limit);
+  return diversifyKnowledgeResults(filterKnowledgeResultsBySubject(query, ranked), limit);
 }
 
 async function embedQuery(input: string): Promise<number[] | null> {
