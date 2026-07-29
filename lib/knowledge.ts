@@ -255,6 +255,35 @@ function ftsQuery(query: string) {
   return knowledgeQueryTerms(query).map((term) => `"${term.replaceAll('"', '')}"`).join(" OR ");
 }
 
+export function diversifyKnowledgeResults(results: KnowledgeResult[], limit: number) {
+  if (limit <= 0 || !results.length) return [];
+  const ranked = [...results].sort((left, right) => right.score - left.score);
+  const relevanceFloor = ranked[0].score * .72;
+  const relevant = ranked.filter((result) => result.score >= relevanceFloor);
+  if (new Set(relevant.map((result) => result.path)).size < 2) return ranked.slice(0, limit);
+  const selected: KnowledgeResult[] = [];
+  const selectedKeys = new Set<string>();
+  const sources = new Set<string>();
+  for (const result of relevant) {
+    if (sources.has(result.path)) continue;
+    selected.push(result);
+    selectedKeys.add(`${result.path}:${result.chunk}`);
+    sources.add(result.path);
+    if (selected.length === limit) return selected;
+  }
+  const perSourceLimit = Math.max(2, Math.ceil(limit / 2));
+  const counts = new Map<string, number>(selected.map((result) => [result.path, 1]));
+  for (const result of ranked) {
+    const key = `${result.path}:${result.chunk}`;
+    if (selectedKeys.has(key) || (counts.get(result.path) ?? 0) >= perSourceLimit) continue;
+    selected.push(result);
+    selectedKeys.add(key);
+    counts.set(result.path, (counts.get(result.path) ?? 0) + 1);
+    if (selected.length === limit) return selected;
+  }
+  return selected;
+}
+
 export async function searchKnowledge(query: string, limit = 6): Promise<KnowledgeResult[]> {
   const expression = ftsQuery(query);
   if (!expression) return [];
@@ -269,7 +298,7 @@ export async function searchKnowledge(query: string, limit = 6): Promise<Knowled
   `).all(expression, Math.max(limit * 6, 24)) as unknown as Array<Omit<KnowledgeResult, "score"> & { rank: number }>;
   const lexical = rows.map(({ rank: _rank, ...row }, index) => ({ ...row, lexicalScore: Math.max(.35, 1 - index / Math.max(rows.length, 1)) }));
   const queryEmbedding = process.env.KNOWLEDGE_DISABLE_EMBEDDINGS === "1" ? null : await embedQuery(query);
-  if (!queryEmbedding) return lexical.slice(0, limit).map(({ lexicalScore, ...result }) => ({ ...result, score: lexicalScore }));
+  if (!queryEmbedding) return diversifyKnowledgeResults(lexical.map(({ lexicalScore, ...result }) => ({ ...result, score: lexicalScore })), limit);
   const embeddedRows = getDatabase().prepare(`
     SELECT d.title, d.path, c.ordinal AS chunk, c.content, c.embedding
     FROM chunks c JOIN documents d ON d.id = c.document_id
@@ -289,11 +318,11 @@ export async function searchKnowledge(query: string, limit = 6): Promise<Knowled
     if (!prior && result.similarity < .46) continue;
     combined.set(key, { title: result.title, path: result.path, chunk: result.chunk, content: result.content, score: (prior?.score ?? 0) + result.similarity * .32, lexical: prior?.lexical, similarity: result.similarity });
   }
-  return [...combined.values()]
+  const ranked = [...combined.values()]
     .filter((result) => result.lexical || (result.similarity ?? 0) >= .46)
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
     .map(({ lexical: _lexical, similarity: _similarity, ...result }) => result);
+  return diversifyKnowledgeResults(ranked, limit);
 }
 
 async function embedQuery(input: string): Promise<number[] | null> {

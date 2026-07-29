@@ -43,6 +43,19 @@ test("cleans conversational filler and keeps retrieval on the requested subject"
   assert.equal(egypt.some((result) => /Ramayana|Python/i.test(result.title)), false);
 });
 
+test("diversifies strong evidence across books without admitting weak sources", () => {
+  const candidates = [
+    { title: "Book A", path: "/a", chunk: 1, content: "A1", score: 1 },
+    { title: "Book A", path: "/a", chunk: 2, content: "A2", score: .96 },
+    { title: "Book A", path: "/a", chunk: 3, content: "A3", score: .93 },
+    { title: "Book B", path: "/b", chunk: 1, content: "B1", score: .88 },
+    { title: "Book C", path: "/c", chunk: 1, content: "C1", score: .45 },
+  ];
+  const results = knowledge.diversifyKnowledgeResults(candidates, 3);
+  assert.deepEqual(results.map((result) => result.title), ["Book A", "Book B", "Book A"]);
+  assert.equal(results.some((result) => result.title === "Book C"), false);
+});
+
 test("relinks moved sources by content hash without duplicating their chunks", () => {
   const moved = knowledge.relinkKnowledgeDocumentByHash({ path: "/new/vault/ramayana.pdf", title: "Valmiki Ramayana", format: "pdf", sizeBytes: 200, sha256: "ramayana-hash" });
   assert.equal(moved, true);

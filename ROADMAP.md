@@ -58,6 +58,8 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   section, heading, page, and passage relationships
 - [ ] Learning Core 2: Conversation-aware query planning and multi-source
   retrieval across books, local-model knowledge, and relevant chat history
+- [x] Learning Core 2a: Relevance-gated source diversity prevents one matching
+  book from monopolizing the evidence window when other strong books contribute
 - [ ] Learning Core 3: Evidence synthesis that compares, connects, deduplicates,
   and preserves disagreements before composing an original explanation
 - [ ] Learning Core 4: Inspectable local memory for user preferences, proficiency,

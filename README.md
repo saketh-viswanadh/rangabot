@@ -98,6 +98,9 @@ the chat model answers. Teacher Mode is instructed to cite the numbered local
 sources, identify gaps, and preserve conflicting historical or mythological
 interpretations. It may add clearly labelled background from the downloaded
 local model, but never presents that material as source-verified or current.
+When several books contain strong matches, Rangabot reserves evidence space for
+multiple sources and asks the model to connect their ideas rather than reciting
+each passage separately. Weak books are not included merely to create diversity.
 
 **Smart routing** also searches the vault automatically for informational and
 subject-related questions. Responses visibly show `LOCAL · KNOWLEDGE VAULT`
