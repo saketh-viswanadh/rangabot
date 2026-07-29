@@ -3,10 +3,25 @@ import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { load } from "cheerio";
 import mammoth from "mammoth";
-import { clearKnowledgeSourceIssue, existingDocumentHash, getKnowledgeStatus, hashBuffer, indexedDocumentUsefulCharacters, listKnowledgeFiles, recordKnowledgeSourceIssue, relinkKnowledgeDocumentByHash, removeKnowledgeDocumentByPath, removeKnowledgeDocumentsNotIn, removeKnowledgeSourceIssuesNotIn, saveKnowledgeDocument } from "../lib/knowledge.ts";
+import { clearKnowledgeSourceIssue, existingDocumentHash, existingDocumentIngestionVersion, getKnowledgeStatus, hashBuffer, indexedDocumentUsefulCharacters, knowledgeIngestionVersion, listKnowledgeFiles, recordKnowledgeSourceIssue, relinkKnowledgeDocumentByHash, removeKnowledgeDocumentByPath, removeKnowledgeDocumentsNotIn, removeKnowledgeSourceIssuesNotIn, saveKnowledgeDocument } from "../lib/knowledge.ts";
+import { chunkHierarchicalText } from "../lib/knowledge-ingestion.ts";
 
 function normalizeText(text: string) {
   return text.replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function structuredHtml(html: string) {
+  const $ = load(html);
+  $("script, style, nav, footer").remove();
+  const parts: string[] = [];
+  $("body").find("h1, h2, h3, h4, h5, h6, p, li, pre").each((_index, element) => {
+    const text = $(element).text().replace(/\s+/g, " ").trim();
+    if (!text) return;
+    const tag = element.tagName.toLowerCase();
+    if (/^h[1-6]$/.test(tag)) parts.push(`${"#".repeat(Number(tag[1]))} ${text}`);
+    else parts.push(text);
+  });
+  return normalizeText(parts.join("\n\n"));
 }
 
 async function extractText(path: string, buffer: Buffer, filename: string) {
@@ -17,37 +32,24 @@ async function extractText(path: string, buffer: Buffer, filename: string) {
     const pages: string[] = [];
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const content = await (await pdf.getPage(pageNumber)).getTextContent();
-      pages.push(`[Page ${pageNumber}]\n${content.items.map((item) => ("str" in item ? item.str : "")).join(" ")}`);
+      const lines: string[] = [];
+      let line = "";
+      for (const item of content.items) {
+        if (!("str" in item)) continue;
+        line += `${line ? " " : ""}${item.str}`;
+        if ("hasEOL" in item && item.hasEOL) { if (line.trim()) lines.push(line.trim()); line = ""; }
+      }
+      if (line.trim()) lines.push(line.trim());
+      pages.push(`[Page ${pageNumber}]\n${lines.join("\n")}`);
       if (pageNumber === 1 || pageNumber === pdf.numPages || pageNumber % 25 === 0) console.log(`extracting ${filename} page ${pageNumber}/${pdf.numPages}`);
     }
     return normalizeText(pages.join("\n\n"));
   }
-  if (extension === ".docx") return normalizeText((await mammoth.extractRawText({ buffer })).value);
+  if (extension === ".docx") return structuredHtml((await mammoth.convertToHtml({ buffer })).value);
   if (extension === ".html" || extension === ".htm") {
-    const $ = load(buffer.toString("utf8"));
-    $("script, style, nav, footer").remove();
-    return normalizeText($("body").text());
+    return structuredHtml(buffer.toString("utf8"));
   }
   return normalizeText(buffer.toString("utf8"));
-}
-
-function chunkText(text: string, target = 1_200, overlap = 180) {
-  const paragraphs = text.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean).flatMap((part) => {
-    if (part.length <= target * 1.5) return [part];
-    const pieces = [];
-    for (let start = 0; start < part.length; start += target - overlap) pieces.push(part.slice(start, start + target));
-    return pieces;
-  });
-  const chunks: string[] = [];
-  let current = "";
-  for (const paragraph of paragraphs) {
-    if (current && current.length + paragraph.length + 2 > target) {
-      chunks.push(current);
-      current = `${current.slice(-overlap)}\n\n${paragraph}`;
-    } else current = current ? `${current}\n\n${paragraph}` : paragraph;
-  }
-  if (current) chunks.push(current);
-  return chunks.filter((chunk) => chunk.length >= 80);
 }
 
 function usefulCharacterCount(text: string) {
@@ -88,13 +90,13 @@ for (const [fileIndex, path] of knowledgeFiles.entries()) {
   const sha256 = hashBuffer(buffer);
   const title = basename(path, extname(path)).replaceAll(/[_-]+/g, " ");
   const format = extname(path).slice(1).toLowerCase();
-  if (existingDocumentHash(path) === sha256 && indexedDocumentUsefulCharacters(path) >= 200) {
+  if (existingDocumentHash(path) === sha256 && indexedDocumentUsefulCharacters(path) >= 200 && existingDocumentIngestionVersion(path) === knowledgeIngestionVersion) {
     clearKnowledgeSourceIssue(path);
       console.log(`unchanged  ${filename}`);
     continue;
   }
   if (relinkKnowledgeDocumentByHash({ path, title, format, sizeBytes: buffer.length, sha256 })) {
-    if (indexedDocumentUsefulCharacters(path) >= 200) {
+    if (indexedDocumentUsefulCharacters(path) >= 200 && existingDocumentIngestionVersion(path) === knowledgeIngestionVersion) {
       clearKnowledgeSourceIssue(path);
       console.log(`relocated  ${filename}`);
       continue;
@@ -112,9 +114,9 @@ for (const [fileIndex, path] of knowledgeFiles.entries()) {
     console.error(`skipped    ${message}`);
     continue;
   }
-  const rawChunks = chunkText(text);
+  const rawChunks = chunkHierarchicalText(text);
   console.log(`chunked    ${filename} into ${rawChunks.length} passages`);
-  const embeddings = await embedChunks(rawChunks, filename);
+  const embeddings = await embedChunks(rawChunks.map((chunk) => chunk.content), filename);
   const id = randomUUID();
   saveKnowledgeDocument({
     id,
@@ -123,7 +125,7 @@ for (const [fileIndex, path] of knowledgeFiles.entries()) {
     format,
     sizeBytes: buffer.length,
     sha256,
-    chunks: rawChunks.map((content, ordinal) => ({ id: randomUUID(), ordinal: ordinal + 1, content, ...(embeddings?.[ordinal] ? { embedding: embeddings[ordinal] } : {}) })),
+    chunks: rawChunks.map((chunk, ordinal) => ({ id: randomUUID(), ordinal: ordinal + 1, ...chunk, ...(embeddings?.[ordinal] ? { embedding: embeddings[ordinal] } : {}) })),
   });
   clearKnowledgeSourceIssue(path);
   console.log(`indexed    ${basename(path)} (${rawChunks.length} chunks${embeddings ? ", embedded" : ", keyword-only"})`);

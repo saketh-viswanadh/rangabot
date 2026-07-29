@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
+import { chunkHierarchicalText } from "../lib/knowledge-ingestion.ts";
 
 process.env.KNOWLEDGE_DISABLE_EMBEDDINGS = "1";
 const knowledge = await import("../lib/knowledge.ts");
@@ -17,12 +18,23 @@ test.after(() => {
 test("indexes and retrieves a cited local teaching passage", async () => {
   knowledge.saveKnowledgeDocument({
     id: randomUUID(), path: "/private/local/python.txt", title: "Python lesson", format: "txt", sizeBytes: 100, sha256: "test-hash",
-    chunks: [{ id: randomUUID(), ordinal: 1, content: "Python handles runtime errors with try and except clauses." }],
+    chunks: [{ id: randomUUID(), ordinal: 1, content: "Python handles runtime errors with try and except clauses.", heading: "Handling errors", sectionPath: "Python basics > Handling errors", pageStart: 12, pageEnd: 13 }],
   });
   const results = await knowledge.searchKnowledge("Python runtime exceptions", 3);
   assert.equal(results[0]?.title, "Python lesson");
   assert.equal(results[0]?.chunk, 1);
   assert.match(results[0]?.content ?? "", /try and except/);
+  assert.equal(results[0]?.sectionPath, "Python basics > Handling errors");
+  assert.equal(results[0]?.pageStart, 12);
+  assert.equal(knowledge.existingDocumentIngestionVersion("/private/local/python.txt"), knowledge.knowledgeIngestionVersion);
+});
+
+test("preserves heading hierarchy and page ranges while chunking", () => {
+  const text = `[Page 4]\n# Statistics\n## Regression\n${"Regression estimates relationships between variables. ".repeat(8)}\n\n[Page 5]\n### Assumptions\n${"Residual assumptions affect inference and diagnostics. ".repeat(8)}`;
+  const chunks = chunkHierarchicalText(text, 320, 40);
+  assert.equal(chunks[0]?.sectionPath, "Statistics > Regression");
+  assert.equal(chunks[0]?.pageStart, 4);
+  assert.equal(chunks.some((chunk) => chunk.sectionPath === "Statistics > Regression > Assumptions" && chunk.pageStart === 5), true);
 });
 
 test("cleans conversational filler and keeps retrieval on the requested subject", async () => {

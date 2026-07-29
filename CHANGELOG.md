@@ -31,6 +31,8 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   files, including visible filenames and reasons requiring attention.
 - Portable content-hash vault synchronization so indexed books survive a local
   project-folder or repository rename without duplicate passages.
+- Versioned hierarchical ingestion preserving section paths, headings, and PDF
+  page ranges on passages, with automatic in-place SQLite migration.
 - The approved Rangabot Learning Core roadmap: hierarchical book understanding,
   conversation-aware planning, multi-book synthesis, inspectable local memory,
   grounding review, cross-book concept summaries, and feedback-based evaluation.
@@ -96,15 +98,14 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Planned next
 
-1. Preserve book, chapter, section, heading, page, and passage hierarchy during
-   ingestion.
-2. Retrieve and compare relevant material across multiple books and conversation
+1. Plan questions using the conversation, then retrieve and compare relevant
+   material across multiple books and conversation
    history.
-3. Synthesize original explanations from vault evidence, local-model knowledge,
+2. Synthesize original explanations from vault evidence, local-model knowledge,
    and user context rather than returning retrieved text.
-4. Add reviewable local memory for preferences, proficiency, progress,
+3. Add reviewable local memory for preferences, proficiency, progress,
    corrections, and user-approved conclusions.
-5. Add draft, grounding, completeness, and revision passes plus a permanent local
+4. Add draft, grounding, completeness, and revision passes plus a permanent local
    evaluation suite that proves whether Rangabot is improving.
 
 ## 0.1.0 - 2026-07-28

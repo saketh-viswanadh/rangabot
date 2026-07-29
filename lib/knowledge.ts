@@ -17,6 +17,12 @@ export const knowledgeBudgetBytes = Number(process.env.KNOWLEDGE_BUDGET_BYTES ??
 export const embeddingModel = process.env.OLLAMA_EMBED_MODEL ?? "nomic-embed-text";
 
 let database: Database | undefined;
+export const knowledgeIngestionVersion = 2;
+
+function ensureColumn(db: Database, table: string, column: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{ name: string }>;
+  if (!columns.some((item) => item.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
 
 function getDatabase() {
   if (database) return database;
@@ -56,13 +62,18 @@ function getDatabase() {
       detected_at TEXT NOT NULL
     );
   `);
+  ensureColumn(database, "documents", "ingestion_version", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(database, "chunks", "heading", "TEXT");
+  ensureColumn(database, "chunks", "section_path", "TEXT");
+  ensureColumn(database, "chunks", "page_start", "INTEGER");
+  ensureColumn(database, "chunks", "page_end", "INTEGER");
   return database;
 }
 
-export type KnowledgeChunkInput = { id: string; ordinal: number; content: string; embedding?: number[] };
+export type KnowledgeChunkInput = { id: string; ordinal: number; content: string; embedding?: number[]; heading?: string; sectionPath?: string; pageStart?: number; pageEnd?: number };
 export type KnowledgeDocumentInput = { id: string; path: string; title: string; format: string; sizeBytes: number; sha256: string; chunks: KnowledgeChunkInput[] };
-export type KnowledgeResult = { title: string; path: string; chunk: number; content: string; score: number };
-export type IndexedKnowledgeDocument = { id: string; path: string; title: string; sha256: string; chunkCount: number };
+export type KnowledgeResult = { title: string; path: string; chunk: number; content: string; score: number; heading?: string; sectionPath?: string; pageStart?: number; pageEnd?: number };
+export type IndexedKnowledgeDocument = { id: string; path: string; title: string; sha256: string; chunkCount: number; ingestionVersion: number };
 export type KnowledgeSourceState = { name: string; status: "indexed" | "pending" | "incompatible"; detail: string; chunks: number };
 type SourceManifest = { sources?: Array<{ title?: string; subject?: string[]; difficulty?: string }> };
 
@@ -125,6 +136,11 @@ export function existingDocumentHash(path: string): string | null {
   return row?.sha256 ?? null;
 }
 
+export function existingDocumentIngestionVersion(path: string): number | null {
+  const row = getDatabase().prepare("SELECT ingestion_version AS version FROM documents WHERE path = ?").get(path) as { version: number } | undefined;
+  return row?.version ?? null;
+}
+
 export function relinkKnowledgeDocumentByHash(input: { path: string; title: string; format: string; sizeBytes: number; sha256: string }) {
   const db = getDatabase();
   const row = db.prepare("SELECT id, path FROM documents WHERE sha256 = ? LIMIT 1").get(input.sha256) as { id: string; path: string } | undefined;
@@ -143,7 +159,7 @@ export function relinkKnowledgeDocumentByHash(input: { path: string; title: stri
 }
 
 export function listIndexedKnowledgeDocuments(): IndexedKnowledgeDocument[] {
-  return getDatabase().prepare("SELECT id, path, title, sha256, chunk_count AS chunkCount FROM documents ORDER BY title")
+  return getDatabase().prepare("SELECT id, path, title, sha256, chunk_count AS chunkCount, ingestion_version AS ingestionVersion FROM documents ORDER BY title")
     .all() as unknown as IndexedKnowledgeDocument[];
 }
 
@@ -205,7 +221,8 @@ export function getKnowledgeSourceStates(): KnowledgeSourceState[] {
   const issues = new Map((getDatabase().prepare("SELECT path, reason FROM source_issues").all() as unknown as Array<{ path: string; reason: string }>).map((issue) => [issue.path, issue.reason]));
   return listKnowledgeFiles().map((path) => {
     const document = indexed.get(path);
-    if (document) return { name: path.split("/").at(-1) ?? path, status: "indexed" as const, detail: `${document.chunkCount} searchable passages`, chunks: document.chunkCount };
+    if (document?.ingestionVersion === knowledgeIngestionVersion) return { name: path.split("/").at(-1) ?? path, status: "indexed" as const, detail: `${document.chunkCount} searchable passages with hierarchy`, chunks: document.chunkCount };
+    if (document) return { name: path.split("/").at(-1) ?? path, status: "pending" as const, detail: "Run npm run knowledge:ingest to add chapter and page metadata", chunks: document.chunkCount };
     const issue = issues.get(path);
     if (issue) return { name: path.split("/").at(-1) ?? path, status: "incompatible" as const, detail: issue, chunks: 0 };
     return { name: path.split("/").at(-1) ?? path, status: "pending" as const, detail: "Run npm run knowledge:ingest", chunks: 0 };
@@ -228,14 +245,14 @@ export function saveKnowledgeDocument(document: KnowledgeDocumentInput) {
       db.prepare("DELETE FROM chunks WHERE document_id = ?").run(prior.id);
       db.prepare("DELETE FROM documents WHERE id = ?").run(prior.id);
     }
-    db.prepare(`INSERT INTO documents (id, path, title, format, size_bytes, sha256, chunk_count, ingested_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(document.id, document.path, document.title, document.format, document.sizeBytes, document.sha256, document.chunks.length, new Date().toISOString());
-    const insertChunk = db.prepare("INSERT INTO chunks (id, document_id, ordinal, content, embedding) VALUES (?, ?, ?, ?, ?)");
+    db.prepare(`INSERT INTO documents (id, path, title, format, size_bytes, sha256, chunk_count, ingested_at, ingestion_version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(document.id, document.path, document.title, document.format, document.sizeBytes, document.sha256, document.chunks.length, new Date().toISOString(), knowledgeIngestionVersion);
+    const insertChunk = db.prepare("INSERT INTO chunks (id, document_id, ordinal, content, embedding, heading, section_path, page_start, page_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
     const insertFts = db.prepare("INSERT INTO chunks_fts (chunk_id, document_id, title, content) VALUES (?, ?, ?, ?)");
     for (const chunk of document.chunks) {
-      insertChunk.run(chunk.id, document.id, chunk.ordinal, chunk.content, chunk.embedding ? JSON.stringify(chunk.embedding) : null);
-      insertFts.run(chunk.id, document.id, document.title, chunk.content);
+      insertChunk.run(chunk.id, document.id, chunk.ordinal, chunk.content, chunk.embedding ? JSON.stringify(chunk.embedding) : null, chunk.heading ?? null, chunk.sectionPath ?? null, chunk.pageStart ?? null, chunk.pageEnd ?? null);
+      insertFts.run(chunk.id, document.id, document.title, [chunk.sectionPath, chunk.heading, chunk.content].filter(Boolean).join("\n"));
     }
     db.exec("COMMIT");
   } catch (error) {
@@ -289,7 +306,7 @@ export async function searchKnowledge(query: string, limit = 6): Promise<Knowled
   if (!expression) return [];
   const terms = knowledgeQueryTerms(query);
   const rows = getDatabase().prepare(`
-    SELECT d.title, d.path, c.ordinal AS chunk, c.content, bm25(chunks_fts, 8.0, 1.0) AS rank
+    SELECT d.title, d.path, c.ordinal AS chunk, c.content, c.heading, c.section_path AS sectionPath, c.page_start AS pageStart, c.page_end AS pageEnd, bm25(chunks_fts, 8.0, 1.0) AS rank
     FROM chunks_fts
     JOIN chunks c ON c.id = chunks_fts.chunk_id
     JOIN documents d ON d.id = chunks_fts.document_id
@@ -300,7 +317,7 @@ export async function searchKnowledge(query: string, limit = 6): Promise<Knowled
   const queryEmbedding = process.env.KNOWLEDGE_DISABLE_EMBEDDINGS === "1" ? null : await embedQuery(query);
   if (!queryEmbedding) return diversifyKnowledgeResults(lexical.map(({ lexicalScore, ...result }) => ({ ...result, score: lexicalScore })), limit);
   const embeddedRows = getDatabase().prepare(`
-    SELECT d.title, d.path, c.ordinal AS chunk, c.content, c.embedding
+    SELECT d.title, d.path, c.ordinal AS chunk, c.content, c.heading, c.section_path AS sectionPath, c.page_start AS pageStart, c.page_end AS pageEnd, c.embedding
     FROM chunks c JOIN documents d ON d.id = c.document_id
     WHERE c.embedding IS NOT NULL
   `).all() as unknown as Array<Omit<KnowledgeResult, "score"> & { embedding: string }>;
@@ -310,13 +327,15 @@ export async function searchKnowledge(query: string, limit = 6): Promise<Knowled
   for (const result of lexical) {
     const title = result.title.toLowerCase();
     const titleBoost = terms.some((term) => title.includes(term)) ? .35 : 0;
-    combined.set(`${result.path}:${result.chunk}`, { title: result.title, path: result.path, chunk: result.chunk, content: result.content, score: result.lexicalScore * .68 + titleBoost, lexical: true });
+    const { lexicalScore, ...knowledgeResult } = result;
+    combined.set(`${result.path}:${result.chunk}`, { ...knowledgeResult, score: lexicalScore * .68 + titleBoost, lexical: true });
   }
   for (const result of semantic) {
     const key = `${result.path}:${result.chunk}`;
     const prior = combined.get(key);
     if (!prior && result.similarity < .46) continue;
-    combined.set(key, { title: result.title, path: result.path, chunk: result.chunk, content: result.content, score: (prior?.score ?? 0) + result.similarity * .32, lexical: prior?.lexical, similarity: result.similarity });
+    const { similarity, ...knowledgeResult } = result;
+    combined.set(key, { ...(prior ?? knowledgeResult), score: (prior?.score ?? 0) + similarity * .32, lexical: prior?.lexical, similarity });
   }
   const ranked = [...combined.values()]
     .filter((result) => result.lexical || (result.similarity ?? 0) >= .46)

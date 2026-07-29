@@ -93,6 +93,12 @@ are rejected rather than being advertised as searchable knowledge. Run
 processed with a local OCR tool such as OCRmyPDF.
 DOCX, HTML, Markdown, and plain-text files are also supported.
 
+Ingestion format v2 preserves document, heading hierarchy, section path, and PDF
+page ranges on each passage. DOCX and HTML headings are retained, Markdown
+headings are interpreted directly, and common plain-text chapter/section labels
+are detected. Existing compatible vault files migrate automatically through one
+full local re-index; later unchanged runs skip them normally.
+
 Select **Teacher mode** in Rangabot to retrieve relevant vault passages before
 the chat model answers. Teacher Mode is instructed to cite the numbered local
 sources, identify gaps, and preserve conflicting historical or mythological
@@ -122,14 +128,12 @@ available offline after the weekly source check.
 
 ## Next milestones
 
-1. Preserve book, chapter, section, heading, page, and passage structure during
-   Knowledge Vault ingestion.
-2. Add conversation-aware multi-book retrieval and evidence synthesis using the
+1. Add conversation-aware query planning and multi-book evidence synthesis using the
    downloaded model, vault sources, and relevant chat context.
-3. Add inspectable local learning memory and cross-book concept summaries.
-4. Add draft, grounding, revision, feedback, and regression-evaluation loops so
+2. Add inspectable local learning memory and cross-book concept summaries.
+3. Add draft, grounding, revision, feedback, and regression-evaluation loops so
    improvement is measured rather than assumed.
-5. Continue the artifact roadmap with existing-Word editing, PDF, email drafting,
+4. Continue the artifact roadmap with existing-Word editing, PDF, email drafting,
    long-form writing, technical documentation, presentations, and spreadsheets.
 
 Model management remains deferred. Cloud/Codex handoff remains disabled pending

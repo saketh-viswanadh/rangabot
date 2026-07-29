@@ -11,6 +11,9 @@ Self-service ingestion flow:
    active source, extraction, passage count, and every embedding batch so large
    textbooks do not appear stalled. If local embeddings time out, the compatible
    book is still saved as keyword-searchable instead of failing the entire run.
+   Passages retain heading/section hierarchy and PDF page ranges. The first run
+   after upgrading to ingestion format v2 re-indexes older compatible sources
+   once to add this metadata.
 4. Use Smart mode for automatic local retrieval or Teacher mode for citation-first
    teaching that clearly separates vault evidence from local-model background.
    Source files are never uploaded.

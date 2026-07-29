@@ -1,5 +1,18 @@
 # Daily progress
 
+## 2026-07-29 — Hierarchical Knowledge Vault ingestion
+
+- Added a backward-compatible SQLite migration for passage heading, section
+  path, and PDF page-range metadata.
+- Added versioned ingestion so older compatible sources re-index once without
+  requiring the user to delete or rebuild the vault manually.
+- Preserved DOCX and HTML heading levels, Markdown headings, common plain-text
+  chapter labels, and PDF page boundaries during chunking.
+- Prevented overlap text from crossing section boundaries and contaminating a
+  new section's metadata.
+- Added hierarchy metadata to retrieval results and source labels supplied to
+  Teacher and Smart modes.
+
 ## 2026-07-28 — Visible textbook-ingestion progress
 
 - Added per-source progress before reading each Knowledge Vault file.
