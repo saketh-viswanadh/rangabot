@@ -99,6 +99,19 @@ headings are interpreted directly, and common plain-text chapter/section labels
 are detected. Existing compatible vault files migrate automatically through one
 full local re-index; later unchanged runs skip them normally.
 
+Semantic retrieval uses a compact native `sqlite-vec` index stored inside the
+private Knowledge Vault database. Rangabot builds it automatically from existing
+embeddings on the first semantic search and invalidates it whenever indexed
+documents change. You can also rebuild it explicitly with:
+
+```bash
+npm run knowledge:vector-index
+```
+
+This does not re-read books or regenerate embeddings. If the native extension
+cannot load on a supported system, retrieval safely falls back to the existing
+JavaScript similarity scan instead of making the vault unavailable.
+
 Select **Teacher mode** in Rangabot to retrieve relevant vault passages before
 the chat model answers. Teacher Mode is instructed to cite the numbered local
 sources, identify gaps, and preserve conflicting historical or mythological

@@ -24,6 +24,7 @@
     "knowledge:init": "node --experimental-strip-types scripts/knowledge-cli.ts init",
     "knowledge:status": "node --experimental-strip-types scripts/knowledge-cli.ts status",
     "knowledge:doctor": "node --experimental-strip-types scripts/knowledge-cli.ts doctor",
+    "knowledge:vector-index": "node --experimental-strip-types scripts/knowledge-cli.ts vector-index",
     "knowledge:validate": "node --experimental-strip-types scripts/knowledge-cli.ts validate",
     "knowledge:backup": "node --experimental-strip-types scripts/knowledge-cli.ts backup",
     "knowledge:rollback": "node --experimental-strip-types scripts/knowledge-cli.ts rollback",
@@ -41,7 +42,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "sqlite-vec": "0.1.9"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

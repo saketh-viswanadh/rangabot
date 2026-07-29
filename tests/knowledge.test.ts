@@ -18,7 +18,7 @@ test.after(() => {
 test("indexes and retrieves a cited local teaching passage", async () => {
   knowledge.saveKnowledgeDocument({
     id: randomUUID(), path: "/private/local/python.txt", title: "Python lesson", format: "txt", sizeBytes: 100, sha256: "test-hash",
-    chunks: [{ id: randomUUID(), ordinal: 1, content: "Python handles runtime errors with try and except clauses.", heading: "Handling errors", sectionPath: "Python basics > Handling errors", pageStart: 12, pageEnd: 13 }],
+    chunks: [{ id: randomUUID(), ordinal: 1, content: "Python handles runtime errors with try and except clauses.", heading: "Handling errors", sectionPath: "Python basics > Handling errors", pageStart: 12, pageEnd: 13, embedding: [1, 0, 0] }],
   });
   const results = await knowledge.searchKnowledge("Python runtime exceptions", 3);
   assert.equal(results[0]?.title, "Python lesson");
@@ -27,6 +27,10 @@ test("indexes and retrieves a cited local teaching passage", async () => {
   assert.equal(results[0]?.sectionPath, "Python basics > Handling errors");
   assert.equal(results[0]?.pageStart, 12);
   assert.equal(knowledge.existingDocumentIngestionVersion("/private/local/python.txt"), knowledge.knowledgeIngestionVersion);
+  const vectorIndex = knowledge.rebuildKnowledgeVectorIndex();
+  assert.equal(vectorIndex.available, true);
+  assert.equal(vectorIndex.vectors, 1);
+  assert.equal(vectorIndex.dimensions, 3);
 });
 
 test("preserves heading hierarchy and page ranges while chunking", () => {

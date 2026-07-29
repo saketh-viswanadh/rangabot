@@ -62,6 +62,8 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   book from monopolizing the evidence window when other strong books contribute
 - [x] Learning Core 2b: Subject-aware filtering blocks clearly cross-domain books
   before the final multi-book evidence window is assembled
+- [x] Learning Core 2c: Compact native local vector search with automatic
+  rebuild, mutation invalidation, and a portable JavaScript fallback
 - [ ] Learning Core 3: Evidence synthesis that compares, connects, deduplicates,
   and preserves disagreements before composing an original explanation
 - [ ] Learning Core 4: Inspectable local memory for user preferences, proficiency,

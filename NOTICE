@@ -5,6 +5,8 @@ Rangabot includes and interoperates with third-party software, models and source
 documents whose licenses remain their own. Consult package-lock.json, upstream
 model cards and data/knowledge/SOURCE_MANIFEST.json before redistribution.
 
+sqlite-vec is available under the MIT OR Apache-2.0 licenses.
+
 Ranga artwork under public/ranga is licensed separately under CC BY 4.0.
 The Rangabot name is subject to BRANDING.md and is not licensed as a trademark
 under Apache-2.0 or CC BY 4.0.

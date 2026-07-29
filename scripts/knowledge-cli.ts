@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { getKnowledgeStatus, hashBuffer, indexedDocumentUsefulCharacters, knowledgeDatabasePath, knowledgeInbox, knowledgeIngestionVersion, knowledgeRoot, listIndexedKnowledgeDocuments, listKnowledgeFiles } from "../lib/knowledge.ts";
+import { getKnowledgeStatus, getKnowledgeVectorIndexStatus, hashBuffer, indexedDocumentUsefulCharacters, knowledgeDatabasePath, knowledgeInbox, knowledgeIngestionVersion, knowledgeRoot, listIndexedKnowledgeDocuments, listKnowledgeFiles, rebuildKnowledgeVectorIndex } from "../lib/knowledge.ts";
 
 const command = process.argv[2] ?? "status";
 if (command === "init") {
@@ -38,6 +38,13 @@ if (command === "init") {
     console.log(problems.length ? `WARN: ${problems.join("; ")}` : "PASS: vault is initialized and searchable");
     if (problems.length) process.exitCode = 1;
   }
+} else if (command === "vector-index") {
+  const before = getKnowledgeVectorIndexStatus();
+  console.log(`Vector extension: ${before.available ? "available" : "unavailable; JavaScript fallback remains active"}`);
+  const started = Date.now();
+  const result = rebuildKnowledgeVectorIndex();
+  if (!result.available) process.exitCode = 1;
+  else console.log(`Indexed ${result.vectors.toLocaleString()} vectors with ${result.dimensions} dimensions in ${((Date.now() - started) / 1000).toFixed(1)}s.`);
 } else if (command === "validate") {
   const manifest = JSON.parse(readFileSync(resolve(knowledgeRoot, "SOURCE_MANIFEST.json"), "utf8")) as { sources?: Array<Record<string, unknown>> };
   const required = ["id", "title", "author", "url", "license", "licenseUrl", "distributionPolicy", "retrievedAt", "subject", "difficulty", "updatePolicy"];

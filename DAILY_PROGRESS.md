@@ -1,5 +1,17 @@
 # Daily progress
 
+## 2026-07-29 — Native local vector search
+
+- Added a compact `sqlite-vec` table inside the private Knowledge Vault database
+  for exact cosine search over existing local embeddings.
+- Added automatic stale-index detection, rebuild after vault changes, an
+  explicit rebuild command, and fallback to the previous JavaScript search.
+- Indexed 17,986 768-dimensional passage vectors in 10.2 seconds, adding about
+  54 MB to the local vault database.
+- Reduced a 12-query, three-concurrent-batch mixed-subject stress run from
+  31.6 seconds to 17.8 seconds. Native vector lookup itself measured about
+  24 milliseconds; local query-embedding generation is now the main bottleneck.
+
 ## 2026-07-29 — Subject-aware retrieval guard
 
 - Stress-tested 37,094 passages across statistics, ML, Python, SQL,
