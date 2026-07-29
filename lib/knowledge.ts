@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { extname, resolve } from "node:path";
 import type { DatabaseSync as Database } from "node:sqlite";
 import * as sqliteVec from "sqlite-vec";
+import { getConfiguredEmbeddingModel, getKnowledgeBudgetBytes, getLocalOllamaBaseUrl } from "./local-runtime-config.ts";
 
 const serverRequire = createRequire(resolve(process.cwd(), "package.json"));
 const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sqlite");
@@ -14,8 +15,8 @@ export const knowledgeWeeklyBrief = resolve(knowledgeRoot, "NEW_THIS_WEEK.md");
 export const knowledgeMonthlyBrief = resolve(knowledgeRoot, "NEW_THIS_MONTH.md");
 export const knowledgeDatabasePath = resolve(knowledgeRoot, "indexes", "knowledge.db");
 let activeKnowledgeDatabasePath = knowledgeDatabasePath;
-export const knowledgeBudgetBytes = Number(process.env.KNOWLEDGE_BUDGET_BYTES ?? 4 * 1024 ** 3);
-export const embeddingModel = process.env.OLLAMA_EMBED_MODEL ?? "nomic-embed-text";
+export const knowledgeBudgetBytes = getKnowledgeBudgetBytes();
+export const embeddingModel = getConfiguredEmbeddingModel();
 
 let database: Database | undefined;
 let nativeVectorAvailable = false;
@@ -462,7 +463,7 @@ function nativeSemanticSearch(queryEmbedding: number[], limit: number) {
 
 async function embedQuery(input: string): Promise<number[] | null> {
   try {
-    const response = await fetch("http://127.0.0.1:11434/api/embed", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: embeddingModel, input }) });
+    const response = await fetch(`${getLocalOllamaBaseUrl()}/api/embed`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: embeddingModel, input }), signal: AbortSignal.timeout(30_000) });
     if (!response.ok) return null;
     return ((await response.json()) as { embeddings?: number[][] }).embeddings?.[0] ?? null;
   } catch { return null; }

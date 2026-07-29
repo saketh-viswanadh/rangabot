@@ -36,3 +36,15 @@ test("requires a meaningful bounded search query", () => {
   const repository = { id: "missing", name: "missing", path: "/not/read", addedAt: new Date(0).toISOString() };
   assert.throws(() => searchRepository(repository, "x"), /between 2 and 120/);
 });
+
+test("does not search or preview files containing high-confidence secrets", () => {
+  const root = mkdtempSync(join(tmpdir(), "rangabot-repository-secret-"));
+  try {
+    writeFileSync(join(root, "config.ts"), 'export const password = "synthetic-secret-value";\n');
+    const repository = { id: "repo", name: "private", path: root, addedAt: new Date().toISOString() };
+    assert.deepEqual(searchRepository(repository, "password"), []);
+    assert.throws(() => previewRepositoryFile(repository, "config.ts", 1), /cannot be previewed safely/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

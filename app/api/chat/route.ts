@@ -9,19 +9,9 @@ import { getAllowedRepository } from "@/lib/repositories";
 import { previewRepositoryFile } from "@/lib/repository-search";
 import { buildConversationSummaryFallback, buildWordConversationPrompt, buildWordDraftPrompt, buildWordSourceTranscript, createWordArtifact, isWordConversationSummaryRequest, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, shouldPlanWordDocument, validateWordDraftForBrief, type WordDocumentBrief } from "@/lib/word-documents";
 import { buildRamayanaStoryCollection } from "@/lib/story-packs/ramayana";
+import { isValidChatMessages } from "@/lib/chat-validation";
 
 export const runtime = "nodejs";
-
-function validMessages(value: unknown): value is ChatMessage[] {
-  return Array.isArray(value) && value.length > 0 && value.every((message) => {
-    if (!message || typeof message !== "object") return false;
-    const candidate = message as Partial<ChatMessage>;
-    return ["user", "assistant", "system"].includes(candidate.role ?? "")
-      && typeof candidate.content === "string"
-      && candidate.content.trim().length > 0
-      && candidate.content.length <= 50_000;
-  });
-}
 
 async function generateStoryCollection(brief: WordDocumentBrief) {
   const isRamayana = /ramayana/i.test(`${brief.title} ${brief.purpose} ${brief.sourceNotes}`);
@@ -51,7 +41,7 @@ async function generateConversationSummary(brief: WordDocumentBrief, messages: C
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as { messages?: unknown; mode?: unknown; codeContext?: unknown };
-    if (!validMessages(body.messages)) {
+    if (!isValidChatMessages(body.messages)) {
       return NextResponse.json({ error: "A valid message is required." }, { status: 400 });
     }
     if (body.mode === "codex") {

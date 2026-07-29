@@ -1,19 +1,10 @@
 import { NextResponse } from "next/server";
 import { deleteConversation, getConversation, setConversationPinned, updateConversation } from "@/lib/conversations";
-import type { ChatMessage } from "@/lib/providers/types";
+import { isValidChatMessages } from "@/lib/chat-validation";
 
 export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ id: string }> };
-
-function validMessages(value: unknown): value is ChatMessage[] {
-  return Array.isArray(value) && value.every((message) => (
-    message
-    && typeof message === "object"
-    && ["user", "assistant", "system"].includes((message as ChatMessage).role)
-    && typeof (message as ChatMessage).content === "string"
-  ));
-}
 
 export async function GET(_request: Request, context: RouteContext) {
   const conversation = getConversation((await context.params).id);
@@ -24,7 +15,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 export async function PUT(request: Request, context: RouteContext) {
   const body = (await request.json()) as { messages?: unknown };
-  if (!validMessages(body.messages)) {
+  if (!isValidChatMessages(body.messages, { allowEmpty: true })) {
     return NextResponse.json({ error: "Valid messages are required." }, { status: 400 });
   }
   const conversation = updateConversation((await context.params).id, body.messages);

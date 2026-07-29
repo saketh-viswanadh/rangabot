@@ -1,5 +1,20 @@
 # Daily progress
 
+## 2026-07-29 — Critical full-tree and GitHub audit
+
+- Verified the public repository, branch protection, successful required CI,
+  license, Discussions, Issues, secret scanning, push protection, and production
+  dependency audit.
+- Removed the unsafe heavy-model fallback and prohibited remote Ollama endpoints.
+- Centralized and validated local runtime defaults, bounded stored/generated chat
+  payloads, and added repository secret-content filtering.
+- Corrected misleading evaluation summaries that treated timeouts as answer
+  failures and included their timeout duration in answer latency.
+- Updated the stale Discussions link, added defensive browser headers, updated
+  PDF extraction, and documented unresolved findings in `docs/code-review.md`.
+- Confirmed GitHub maintenance debt: the latest release trails `main` by 21
+  commits, 31 remote branches remain, and automatic merged-branch deletion is off.
+
 ## 2026-07-29 — Adaptive grounding without a weaker gate
 
 - Recorded the fresh 60-case result: 80.0% pass rate, 84.4% required-concept

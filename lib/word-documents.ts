@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import {
   AlignmentType,
   Document,
@@ -323,7 +324,7 @@ export async function createWordArtifact(brief: WordDocumentBrief, draft: WordDr
 function renderPreview(documentPath: string, directory: string, checks: QualityCheck[]) {
   const renderHome = resolve(directory, "render-home");
   mkdirSync(renderHome, { recursive: true });
-  const office = spawnSync("soffice", ["--headless", "--convert-to", "pdf", "--outdir", directory, documentPath], { env: { ...process.env, HOME: renderHome }, encoding: "utf8", timeout: 60_000 });
+  const office = spawnSync("soffice", [`-env:UserInstallation=${pathToFileURL(renderHome).href}`, "--headless", "--convert-to", "pdf", "--outdir", directory, documentPath], { encoding: "utf8", timeout: 60_000 });
   const pdfPath = resolve(directory, `${basename(documentPath, ".docx")}.pdf`);
   if (office.status !== 0 || !existsSync(pdfPath)) {
     checks.push({ id: "visual-review", label: "Visual preview", status: "warning", detail: "LibreOffice rendering is unavailable; inspect the DOCX in Word before final use." });

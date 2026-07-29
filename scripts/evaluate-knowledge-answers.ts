@@ -86,22 +86,26 @@ for (const [index, item] of cases.entries()) {
 
 const resultById = new Map([...completedResults, ...errorResults].map((result) => [result.id, result]));
 const results = cases.flatMap((item) => resultById.get(item.id) ?? []);
+const scoredResults = results.filter((result) => !result.error);
 
 const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
-const groups = (field: "subject" | "difficulty") => Object.fromEntries([...new Set(results.map((result) => result[field]))].map((value) => {
-  const group = results.filter((result) => result[field] === value);
+const groups = (field: "subject" | "difficulty") => Object.fromEntries([...new Set(scoredResults.map((result) => result[field]))].map((value) => {
+  const group = scoredResults.filter((result) => result[field] === value);
   return [value, { cases: group.length, passRate: average(group.map((result) => Number(result.passed))), conceptCoverage: average(group.map((result) => result.conceptCoverage)) }];
 }));
 const summary = {
   cases: results.length,
-  passed: results.filter((result) => result.passed).length,
-  passRate: average(results.map((result) => Number(result.passed))),
-  conceptCoverage: average(results.map((result) => result.conceptCoverage)),
-  groundingPassRate: average(results.map((result) => Number(result.groundingPassed))),
-  forbiddenClaimsFreeRate: average(results.map((result) => Number(result.forbiddenClaimsFree))),
-  revisionRate: average(results.map((result) => Number(result.revised))),
-  separationRate: average(results.map((result) => Number(result.separated))),
-  averageLatencyMs: average(results.map((result) => result.latencyMs)),
+  completedCases: scoredResults.length,
+  executionErrors: errorResults.length,
+  passed: scoredResults.filter((result) => result.passed).length,
+  passRate: average(scoredResults.map((result) => Number(result.passed))),
+  overallPassFloor: cases.length ? scoredResults.filter((result) => result.passed).length / cases.length : 0,
+  conceptCoverage: average(scoredResults.map((result) => result.conceptCoverage)),
+  groundingPassRate: average(scoredResults.map((result) => Number(result.groundingPassed))),
+  forbiddenClaimsFreeRate: average(scoredResults.map((result) => Number(result.forbiddenClaimsFree))),
+  revisionRate: average(scoredResults.map((result) => Number(result.revised))),
+  separationRate: average(scoredResults.map((result) => Number(result.separated))),
+  averageLatencyMs: average(scoredResults.map((result) => result.latencyMs)),
   bySubject: groups("subject"),
   byDifficulty: groups("difficulty"),
 };
@@ -109,7 +113,8 @@ const stamp = new Date().toISOString().replaceAll(/[:.]/g, "-");
 const outputPath = resolve(outputRoot, `answers-${stamp}.json`);
 writeFileSync(outputPath, `${JSON.stringify({ generatedAt: new Date().toISOString(), fixturePath, summary, results }, null, 2)}\n`);
 console.log("\nEnd-to-end answer quality summary");
-console.log(`Pass rate: ${(summary.passRate * 100).toFixed(1)}% (${summary.passed}/${summary.cases})`);
+console.log(`Completed-case pass rate: ${(summary.passRate * 100).toFixed(1)}% (${summary.passed}/${summary.completedCases})`);
+if (summary.executionErrors) console.log(`Provisional overall pass floor: ${(summary.overallPassFloor * 100).toFixed(1)}% (${summary.passed}/${summary.cases}; ${summary.executionErrors} execution errors excluded from quality averages)`);
 console.log(`Required-concept coverage: ${(summary.conceptCoverage * 100).toFixed(1)}%`);
 console.log(`Grounding pass rate: ${(summary.groundingPassRate * 100).toFixed(1)}%`);
 console.log(`Revision rate: ${(summary.revisionRate * 100).toFixed(1)}%`);

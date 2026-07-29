@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { getConfiguredChatModel, getLocalOllamaBaseUrl } from "../lib/local-runtime-config.ts";
 
 type Check = { name: string; ok: boolean; detail: string; required?: boolean };
 const checks: Check[] = [];
@@ -21,9 +22,9 @@ const popplerAvailable = spawnSync("pdftoppm", ["-v"], { stdio: "ignore" }).stat
 checks.push({ name: "Word preview", ok: officeAvailable && popplerAvailable, required: false, detail: officeAvailable && popplerAvailable ? "LibreOffice and Poppler available" : "optional; install LibreOffice and Poppler for rendered page previews" });
 
 try {
-  const response = await fetch(`${process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434"}/api/tags`, { signal: AbortSignal.timeout(2_500) });
+  const response = await fetch(`${getLocalOllamaBaseUrl()}/api/tags`, { signal: AbortSignal.timeout(2_500) });
   const body = await response.json() as { models?: Array<{ name: string }> };
-  const configured = process.env.OLLAMA_MODEL ?? readFileSync(resolve(".env.example"), "utf8").match(/^OLLAMA_MODEL=(.+)$/m)?.[1] ?? "llama3.2:3b";
+  const configured = getConfiguredChatModel();
   const installed = body.models?.some((model) => model.name === configured || model.name.startsWith(`${configured}:`)) ?? false;
   checks.push({ name: "Ollama", ok: response.ok, detail: response.ok ? "running locally" : `HTTP ${response.status}` });
   checks.push({ name: "Chat model", ok: installed, detail: installed ? `${configured} installed` : `${configured} missing; run ollama pull ${configured}` });

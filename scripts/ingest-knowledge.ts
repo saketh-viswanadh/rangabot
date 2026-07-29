@@ -5,6 +5,7 @@ import { load } from "cheerio";
 import mammoth from "mammoth";
 import { clearKnowledgeSourceIssue, existingDocumentHash, existingDocumentIngestionVersion, getKnowledgeStatus, hashBuffer, indexedDocumentUsefulCharacters, knowledgeIngestionVersion, listKnowledgeFiles, recordKnowledgeSourceIssue, relinkKnowledgeDocumentByHash, removeKnowledgeDocumentByPath, removeKnowledgeDocumentsNotIn, removeKnowledgeSourceIssuesNotIn, saveKnowledgeDocument } from "../lib/knowledge.ts";
 import { chunkHierarchicalText } from "../lib/knowledge-ingestion.ts";
+import { getConfiguredEmbeddingModel, getLocalOllamaBaseUrl } from "../lib/local-runtime-config.ts";
 
 function normalizeText(text: string) {
   return text.replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
@@ -64,7 +65,7 @@ async function embedChunks(chunks: string[], filename: string) {
     for (let index = 0; index < chunks.length; index += 32) {
       const batch = Math.floor(index / batchSize) + 1;
       console.log(`embedding  ${filename} batch ${batch}/${totalBatches}`);
-      const response = await fetch("http://127.0.0.1:11434/api/embed", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: process.env.OLLAMA_EMBED_MODEL ?? "nomic-embed-text", input: chunks.slice(index, index + batchSize) }), signal: AbortSignal.timeout(120_000) });
+      const response = await fetch(`${getLocalOllamaBaseUrl()}/api/embed`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: getConfiguredEmbeddingModel(), input: chunks.slice(index, index + batchSize) }), signal: AbortSignal.timeout(120_000) });
       if (!response.ok) {
         console.warn(`fallback   ${filename} embedding request failed (${response.status}); saving a keyword-searchable index`);
         return null;

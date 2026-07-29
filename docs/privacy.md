@@ -8,10 +8,12 @@ can access local files.
 The application guarantees by design:
 
 - loopback-only server binding by default;
+- loopback-only Ollama chat and embedding configuration enforcement;
 - no enabled cloud chat handoff;
 - Git-ignored chats, documents, indexes and embeddings;
 - visible routing modes;
 - no silent model downloads;
+- bounded chat request history and high-confidence repository secret filtering;
 - explicit source metadata for public starter knowledge.
 
 Contributions that add telemetry, remote APIs, network binding, account systems

@@ -18,6 +18,9 @@ Experienced users can copy `.env.example` to `.env.local` and use the manual
 model guidance in [docs/models.md](docs/models.md).
 
 The server binds only to the local computer by default.
+Rangabot also rejects non-loopback Ollama URLs, preventing an environment
+configuration mistake from silently sending chats or vault evidence to a remote
+model server.
 
 ## Current milestone
 
@@ -142,17 +145,22 @@ checkpoints every completed answer, and automatically resumes the same selected
 suite. If it is interrupted or a model call times out, rerun the identical
 command instead of starting over. Override the evaluation-only timeout with
 `-- --timeout-ms=600000` when exceptionally slow hardware needs ten minutes.
+Execution errors are excluded from completed-case quality and latency averages;
+an interrupted run also prints a conservative overall pass floor until retries
+finish.
 
 Select **Teacher mode** in Rangabot to retrieve relevant vault passages before
 the chat model answers. Teacher Mode is instructed to cite the numbered local
 sources, identify gaps, and preserve conflicting historical or mythological
 interpretations. It may add clearly labelled background from the downloaded
 local model, but never presents that material as source-verified or current.
-Before showing a Teacher Mode answer, Rangabot now audits substantive paragraphs
-for missing, invalid, or weakly supported citations. It revises a weak draft
-once using the same local model and displays a grounding warning if that revision
-still cannot be verified. This quality gate buffers Teacher Mode answers until
-review finishes; ordinary and Smart-mode responses continue streaming.
+Before showing a Teacher Mode answer, Rangabot audits substantive paragraphs
+for missing, invalid, or weakly supported citations. It first attempts fast,
+deterministic evidence/background separation and requests one local-model
+revision only when the unchanged audit still fails. A grounding warning appears
+if that selective revision remains insufficient. This quality gate buffers
+Teacher Mode answers until review finishes; ordinary and Smart-mode responses
+continue streaming.
 Teacher Mode also builds a visible-to-the-model evidence plan before drafting:
 requested subtopics, source labels, query/source overlap, and a strict writing
 contract. If revision still mixes supported and unsupported material, Rangabot
@@ -226,3 +234,6 @@ local-download-only policy are documented in
 Source code and documentation use Apache-2.0. Original Ranga artwork uses CC BY
 4.0 with attribution. The Rangabot naming policy is documented in
 [BRANDING.md](BRANDING.md).
+
+The latest severity-ranked engineering audit is in
+[docs/code-review.md](docs/code-review.md).

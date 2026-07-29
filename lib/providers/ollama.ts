@@ -1,10 +1,10 @@
 import type { ChatMessage, ProviderStatus } from "./types";
+import { getConfiguredChatModel, getLocalOllamaBaseUrl } from "../local-runtime-config.ts";
 
-const baseUrl = process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434";
-const configuredModel = process.env.OLLAMA_MODEL ?? "gpt-oss:20b";
+const configuredModel = getConfiguredChatModel();
 
 async function ollamaFetch(path: string, init?: RequestInit, timeoutMs = 120_000) {
-  return fetch(`${baseUrl}${path}`, {
+  return fetch(`${getLocalOllamaBaseUrl()}${path}`, {
     ...init,
     signal: AbortSignal.timeout(timeoutMs),
     headers: { "Content-Type": "application/json", ...init?.headers },
