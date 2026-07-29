@@ -1,5 +1,15 @@
 # Daily progress
 
+## 2026-07-29 — Subject-aware retrieval guard
+
+- Stress-tested 37,094 passages across statistics, ML, Python, SQL,
+  visualization, and mythology queries.
+- Added local subject inference for major Rangabot teaching domains.
+- Excluded clearly cross-domain titled sources before final evidence diversity,
+  while preserving relevant and uncategorized books.
+- Added a regression case preventing Fluent Python from entering clustering
+  evaluation evidence.
+
 ## 2026-07-29 — Accurate Knowledge Vault doctor result
 
 - Corrected the doctor command so known incompatible files are reported as an

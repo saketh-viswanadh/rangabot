@@ -68,6 +68,17 @@ test("diversifies strong evidence across books without admitting weak sources", 
   assert.equal(results.some((result) => result.title === "Book C"), false);
 });
 
+test("rejects clearly cross-subject books while retaining uncategorized sources", () => {
+  const candidates = [
+    { title: "Scikit-learn user guide", path: "/ml", chunk: 1, content: "Clustering metrics", score: 1 },
+    { title: "Fluent Python", path: "/python", chunk: 1, content: "Object evaluation", score: .9 },
+    { title: "Research notes", path: "/notes", chunk: 1, content: "Clustering evaluation", score: .8 },
+  ];
+  const filtered = knowledge.filterKnowledgeResultsBySubject("compare clustering evaluation methods", candidates);
+  assert.deepEqual(filtered.map((result) => result.title), ["Scikit-learn user guide", "Research notes"]);
+  assert.deepEqual(knowledge.inferKnowledgeSubjects("compare Greek and Egyptian creation myths"), ["greek-mythology", "egyptian-mythology"]);
+});
+
 test("relinks moved sources by content hash without duplicating their chunks", () => {
   const moved = knowledge.relinkKnowledgeDocumentByHash({ path: "/new/vault/ramayana.pdf", title: "Valmiki Ramayana", format: "pdf", sizeBytes: 200, sha256: "ramayana-hash" });
   assert.equal(moved, true);

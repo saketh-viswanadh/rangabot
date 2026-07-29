@@ -60,6 +60,8 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   retrieval across books, local-model knowledge, and relevant chat history
 - [x] Learning Core 2a: Relevance-gated source diversity prevents one matching
   book from monopolizing the evidence window when other strong books contribute
+- [x] Learning Core 2b: Subject-aware filtering blocks clearly cross-domain books
+  before the final multi-book evidence window is assembled
 - [ ] Learning Core 3: Evidence synthesis that compares, connects, deduplicates,
   and preserves disagreements before composing an original explanation
 - [ ] Learning Core 4: Inspectable local memory for user preferences, proficiency,
