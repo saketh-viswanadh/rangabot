@@ -137,6 +137,11 @@ coverage, grounding, forbidden claims, cross-source citation synthesis, revision
 rate, and latency. Use `-- --sample=10` for one case per subject,
 `-- --limit=5`, or `-- --subject=statistics` for smaller diagnostic runs. Full
 runs can take a long time on lightweight local hardware.
+The runner allows five minutes per local generation, catches isolated failures,
+checkpoints every completed answer, and automatically resumes the same selected
+suite. If it is interrupted or a model call times out, rerun the identical
+command instead of starting over. Override the evaluation-only timeout with
+`-- --timeout-ms=600000` when exceptionally slow hardware needs ten minutes.
 
 Select **Teacher mode** in Rangabot to retrieve relevant vault passages before
 the chat model answers. Teacher Mode is instructed to cite the numbered local
@@ -148,6 +153,13 @@ for missing, invalid, or weakly supported citations. It revises a weak draft
 once using the same local model and displays a grounding warning if that revision
 still cannot be verified. This quality gate buffers Teacher Mode answers until
 review finishes; ordinary and Smart-mode responses continue streaming.
+Teacher Mode also builds a visible-to-the-model evidence plan before drafting:
+requested subtopics, source labels, query/source overlap, and a strict writing
+contract. If revision still mixes supported and unsupported material, Rangabot
+conservatively attaches a missing citation only when one passage has strong
+lexical support, then separates remaining content into **Vault-grounded answer**
+and **Local model background** sections. It never silently labels weakly matched
+background as vault evidence.
 When several books contain strong matches, Rangabot reserves evidence space for
 multiple sources and asks the model to connect their ideas rather than reciting
 each passage separately. Weak books are not included merely to create diversity.

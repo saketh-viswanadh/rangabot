@@ -60,7 +60,7 @@ export async function completeJsonWithOllama(messages: ChatMessage[], options?: 
   return content;
 }
 
-export async function completeTextWithOllama(messages: ChatMessage[], options?: { numPredict?: number }): Promise<string> {
+export async function completeTextWithOllama(messages: ChatMessage[], options?: { numPredict?: number; timeoutMs?: number }): Promise<string> {
   const response = await ollamaFetch("/api/chat", {
     method: "POST",
     body: JSON.stringify({
@@ -69,7 +69,7 @@ export async function completeTextWithOllama(messages: ChatMessage[], options?: 
       stream: false,
       options: { num_predict: options?.numPredict ?? 1000 },
     }),
-  });
+  }, options?.timeoutMs ?? 120_000);
   if (!response.ok) throw new Error(`Ollama request failed (${response.status}): ${await response.text()}`);
   const data = (await response.json()) as { message?: { content?: string } };
   const content = data.message?.content?.trim();

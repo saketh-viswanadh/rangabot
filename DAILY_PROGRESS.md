@@ -1,5 +1,22 @@
 # Daily progress
 
+## 2026-07-29 — Evidence-planned Teacher Mode synthesis
+
+- Used the completed 60-answer run as the baseline: 46.7% composite pass, 89%
+  concept coverage, 51.7% grounding, 70% revision, and 50.6-second mean latency.
+- Added deterministic subtopic and claim-to-source planning before drafting.
+- Prevented a weak revision from replacing a better-grounded first draft.
+- Repaired citation markers emitted as isolated paragraphs and added conservative
+  citation recovery at twice the audit's lexical-support threshold.
+- When mixed content still fails, separated supported vault paragraphs from
+  explicitly unverified local-model background rather than hiding uncertainty.
+- A fresh four-domain targeted run passed 4/4 with 100% concept and grounding
+  coverage; 75% used the separation fallback and all still required revision,
+  so first-draft reliability and latency remain unresolved.
+- Reprocessing the original 60 saved answers through the new deterministic
+  boundary raised composite pass from 29/60 to 52/60. This is a counterfactual
+  re-score, not a substitute for the next fresh 60-answer run.
+
 ## 2026-07-29 — Sixty-question RAG benchmark
 
 - Replaced the 13-question smoke test with 60 rubric-backed questions across ten
@@ -14,6 +31,9 @@
   coverage, 100% contamination-free, and 98% passage-locator coverage.
 - Remaining retrieval failures are concentrated in multi-book coverage and one
   cross-domain statistics-plus-visualization synthesis query.
+- Hardened the long answer run after a 120-second generation timeout stopped at
+  question 8: evaluation calls now allow five minutes, checkpoint every answer,
+  continue after isolated errors, and resume only unfinished cases.
 - A ten-subject generated-answer sample initially passed 60%, with 90.8%
   required-concept coverage, 70% grounding, 40% revision, and 61.6-second mean
   latency on `llama3.2:3b`. This is the first honest synthesis baseline, not a

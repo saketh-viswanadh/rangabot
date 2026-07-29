@@ -27,7 +27,9 @@ export function countCitedSources(text: string) {
 }
 
 function normalizeCitationMarkers(text: string) {
-  return text.replace(/\[(\d+)\]/g, "[Source $1]");
+  return text
+    .replace(/\[(\d+)\]/g, "[Source $1]")
+    .replace(/\n\s*\n(\[Source\s+\d+(?:[^\]]*)\])/gi, " $1");
 }
 
 function substantiveParagraphs(answer: string) {
@@ -91,6 +93,44 @@ Keep useful explanations, but:
 Return only the improved answer.`;
 }
 
+function stripCitationMarkers(text: string) {
+  return text.replace(/\s*\[Source\s+\d+(?:[^\]]*)\]/gi, "").trim();
+}
+
+export function separateGroundedEvidence(answer: string, sources: KnowledgeResult[]) {
+  const grounded: string[] = [];
+  const background: string[] = [];
+  let explicitBackground = false;
+  for (const raw of normalizeCitationMarkers(answer).split(/\n\s*\n/)) {
+    const paragraph = raw.trim();
+    if (!paragraph || /^>\s*\*\*Grounding note:/i.test(paragraph)) continue;
+    if (/^(?:#{1,6}\s*|\*\*)?local model background\b/i.test(paragraph)) {
+      explicitBackground = true;
+      continue;
+    }
+    if (explicitBackground) {
+      background.push(stripCitationMarkers(paragraph));
+      continue;
+    }
+    if (/^#{1,6}\s|^\*\*[^*]+\*\*$/.test(paragraph)) continue;
+    const citations = citedSourceNumbers(paragraph).filter((number) => number >= 1 && number <= sources.length);
+    const supported = citations.some((number) => lexicalSupport(paragraph, sources[number - 1].content) > .1);
+    if (supported) {
+      grounded.push(paragraph);
+      continue;
+    }
+    const inferred = sources
+      .map((source, index) => ({ number: index + 1, support: lexicalSupport(paragraph, source.content) }))
+      .sort((left, right) => right.support - left.support)[0];
+    if (inferred && inferred.support >= .2) grounded.push(`${stripCitationMarkers(paragraph)} [Source ${inferred.number}]`);
+    else background.push(stripCitationMarkers(paragraph));
+  }
+  const sections: string[] = [];
+  if (grounded.length) sections.push(`## Vault-grounded answer\n\n${grounded.join("\n\n")}`);
+  if (background.length) sections.push(`## Local model background\n\n> The following explanation was not verified against the retrieved vault passages.\n\n${background.join("\n\n")}`);
+  return sections.join("\n\n");
+}
+
 export async function generateGroundedTeacherAnswer(
   messages: ChatMessage[],
   sources: KnowledgeResult[],
@@ -100,17 +140,28 @@ export async function generateGroundedTeacherAnswer(
   let answer = draft;
   let audit = auditGroundedAnswer(answer, sources);
   let revised = false;
+  let separated = false;
   if (!audit.passed) {
     revised = true;
-    answer = normalizeCitationMarkers(await complete([
+    const revision = normalizeCitationMarkers(await complete([
       ...messages,
       { role: "assistant", content: draft },
       { role: "user", content: buildGroundingRevisionInstruction(audit) },
     ]));
+    const revisionAudit = auditGroundedAnswer(revision, sources);
+    const auditQuality = (value: GroundingAudit) => Number(value.passed) * 10 + value.citationCoverage + value.supportedCitationRate - value.invalidCitations.length;
+    if (auditQuality(revisionAudit) >= auditQuality(audit)) {
+      answer = revision;
+      audit = revisionAudit;
+    }
+  }
+  if (!audit.passed) {
+    separated = true;
+    answer = separateGroundedEvidence(answer, sources);
     audit = auditGroundedAnswer(answer, sources);
   }
   if (!audit.passed) {
-    answer += `\n\n> **Grounding note:** Rangabot could not fully verify this answer against the retrieved passages. ${audit.issues.join("; ")}. Treat unsupported details as local-model background and verify them before relying on them.`;
+    answer += `\n\n> **Grounding note:** Rangabot could not verify a sufficient vault-grounded answer. ${audit.issues.join("; ")}. The clearly labelled background may still be useful, but verify it before relying on it.`;
   }
-  return { answer, audit, revised };
+  return { answer, audit, revised, separated };
 }

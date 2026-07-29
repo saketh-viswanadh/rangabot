@@ -163,7 +163,7 @@ export async function POST(request: Request) {
           "Cache-Control": "no-cache, no-transform",
           "X-Content-Type-Options": "nosniff",
           "X-Rangabot-Knowledge": "used",
-          "X-Rangabot-Grounding": grounded.audit.passed ? (grounded.revised ? "revised-and-passed" : "passed") : "warning",
+          "X-Rangabot-Grounding": grounded.audit.passed ? (grounded.separated ? "separated-and-passed" : grounded.revised ? "revised-and-passed" : "passed") : "warning",
           "X-Rangabot-Code-Context": localCodeContext ? "used" : "not-used",
         },
       });

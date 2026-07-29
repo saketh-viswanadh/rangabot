@@ -72,6 +72,9 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   between vault evidence, local-model background, and unresolved uncertainty
 - [x] Learning Core 5a: Teacher Mode citation audit, one bounded local revision,
   and a visible warning when grounding remains below the quality threshold
+- [x] Learning Core 5b: Pre-draft evidence plan, best-draft preservation,
+  isolated-citation repair, conservative citation recovery, and deterministic
+  vault-evidence versus local-background separation
 - [ ] Learning Core 6: Feedback capture and regression evaluation proving that
   changes improve synthesis, teaching quality, citations, and completeness
 - [x] Learning Core 6a: Local retrieval evaluation baseline covering expected
