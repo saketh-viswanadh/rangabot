@@ -49,6 +49,7 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Local project folders with project-scoped chat history
 - [x] Private 4 GB Knowledge Vault with incremental local document ingestion
 - [x] Hybrid keyword and embedding retrieval with Teacher Mode citations
+- [x] Visible per-answer hybrid versus keyword-only retrieval diagnostics
 - [x] Portable hash-based vault synchronization, extraction-quality gates, scanned-PDF detection, query cleanup, title-aware hybrid reranking, and cross-subject retrieval tests
 - [x] Weekly and monthly sourced subject-intelligence briefs
 - [x] Deterministic Teacher Mode answers for current-awareness questions
@@ -75,8 +76,14 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Learning Core 5b: Pre-draft evidence plan, best-draft preservation,
   isolated-citation repair, conservative citation recovery, and deterministic
   vault-evidence versus local-background separation
+- [x] Learning Core 5c: Coverage-aware evidence mapping and selective escalation
+  that attempts deterministic separation before a second model generation while
+  preserving the existing grounding gate
 - [ ] Learning Core 6: Feedback capture and regression evaluation proving that
   changes improve synthesis, teaching quality, citations, and completeness
+- [ ] Learning Core 6c: Add terminology-contradiction and concept-distinction
+  regression checks, beginning with data leakage versus concept drift, without
+  weakening or replacing the existing 60-case criteria
 - [x] Learning Core 6a: Local retrieval evaluation baseline covering expected
   sources, contamination, diversity, passage locators, and latency
 - [x] Learning Core 6b: Balanced 60-question retrieval and complete-answer
@@ -90,7 +97,9 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Explicit code-preview attachment with visible send scope and local-only delivery
 - [x] Artifact-skill foundation: ordered registry, shared quality contract and welcome entry points
 - [x] A1: Conversational Word creation with requirement gathering, validation and rendered previews
-- [x] A1 quality hardening: genre-aware story documents, no planning-note fallback, content-depth gates, and a curated local Ramayana pack for reliable small-model output
+- [x] A1 quality hardening: genre-aware story documents, no planning-note fallback, content-depth gates, and a registered curated Ramayana story pack for reliable small-model output
+- [x] Concept-distinction regression coverage for known technical conflations,
+  beginning with data leakage versus concept drift
 - [ ] A1b: Safe editing of user-selected existing Word documents
 - [ ] A2: Validated PDF reports and summaries
 - [ ] A3: Local email drafting and critique (no sending)

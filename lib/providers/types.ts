@@ -4,6 +4,7 @@ export interface ChatMessage {
   role: ChatRole;
   content: string;
   artifactIntent?: "word";
+  retrievalMode?: "hybrid" | "keyword-only";
   wordArtifact?: {
     id: string;
     title: string;

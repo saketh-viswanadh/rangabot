@@ -1,33 +1,21 @@
 import { NextResponse } from "next/server";
 import { completeJsonWithOllama, completeTextWithOllama, streamChatWithOllama } from "@/lib/providers/ollama";
 import type { ChatMessage } from "@/lib/providers/types";
-import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatalogQuestion, isKnowledgeNewsQuestion, searchKnowledge, shouldAutoSearchKnowledge, type KnowledgeResult } from "@/lib/knowledge";
+import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatalogQuestion, isKnowledgeNewsQuestion, searchKnowledgeWithDiagnostics, shouldAutoSearchKnowledge, type KnowledgeResult, type KnowledgeSearchMode } from "@/lib/knowledge";
 import { generateGroundedTeacherAnswer } from "@/lib/knowledge-grounding";
 import { buildTeacherMessages, formatKnowledgeContext } from "@/lib/teacher-mode";
 import { formatCodeContext, isCodeContextRequest } from "@/lib/code-context";
 import { getAllowedRepository } from "@/lib/repositories";
 import { previewRepositoryFile } from "@/lib/repository-search";
 import { buildConversationSummaryFallback, buildWordConversationPrompt, buildWordDraftPrompt, buildWordSourceTranscript, createWordArtifact, isWordConversationSummaryRequest, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, shouldPlanWordDocument, validateWordDraftForBrief, type WordDocumentBrief } from "@/lib/word-documents";
-import { buildRamayanaStoryCollection } from "@/lib/story-packs/ramayana";
+import { findStoryPack } from "@/lib/story-packs";
+import { isValidChatMessages } from "@/lib/chat-validation";
 
 export const runtime = "nodejs";
 
-function validMessages(value: unknown): value is ChatMessage[] {
-  return Array.isArray(value) && value.length > 0 && value.every((message) => {
-    if (!message || typeof message !== "object") return false;
-    const candidate = message as Partial<ChatMessage>;
-    return ["user", "assistant", "system"].includes(candidate.role ?? "")
-      && typeof candidate.content === "string"
-      && candidate.content.trim().length > 0
-      && candidate.content.length <= 50_000;
-  });
-}
-
 async function generateStoryCollection(brief: WordDocumentBrief) {
-  const isRamayana = /ramayana/i.test(`${brief.title} ${brief.purpose} ${brief.sourceNotes}`);
-  if (isRamayana) {
-    return buildRamayanaStoryCollection(brief);
-  }
+  const storyPack = findStoryPack(brief);
+  if (storyPack) return storyPack.build(brief);
   const raw = await completeJsonWithOllama([
     { role: "system", content: "You are Rangabot's local children's author. Write complete, vivid, age-appropriate stories—not summaries, outlines, planning notes, or a report. Return valid JSON only." },
     { role: "user", content: buildWordDraftPrompt(brief) },
@@ -51,7 +39,7 @@ async function generateConversationSummary(brief: WordDocumentBrief, messages: C
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as { messages?: unknown; mode?: unknown; codeContext?: unknown };
-    if (!validMessages(body.messages)) {
+    if (!isValidChatMessages(body.messages)) {
       return NextResponse.json({ error: "A valid message is required." }, { status: 400 });
     }
     if (body.mode === "codex") {
@@ -124,6 +112,7 @@ export async function POST(request: Request) {
 
     let messages = body.messages;
     let knowledgeSources: KnowledgeResult[] = [];
+    let knowledgeSearchMode: KnowledgeSearchMode | null = null;
     const question = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
     const usesVault = body.mode === "teach" || (body.mode === "smart" && shouldAutoSearchKnowledge(question));
     if (usesVault) {
@@ -137,8 +126,9 @@ export async function POST(request: Request) {
           headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff", "X-Rangabot-Knowledge": "used" },
         });
       }
-      const sources = await searchKnowledge(question, 5);
+      const { results: sources, mode: retrievalMode } = await searchKnowledgeWithDiagnostics(question, 5);
       knowledgeSources = sources;
+      knowledgeSearchMode = retrievalMode;
       const history = body.messages.slice(0, -1);
       const teacherMode = body.mode === "teach";
       messages = teacherMode ? buildTeacherMessages(question, history, sources) : [
@@ -163,6 +153,7 @@ export async function POST(request: Request) {
           "Cache-Control": "no-cache, no-transform",
           "X-Content-Type-Options": "nosniff",
           "X-Rangabot-Knowledge": "used",
+          "X-Rangabot-Retrieval": knowledgeSearchMode ?? "keyword-only",
           "X-Rangabot-Grounding": grounded.audit.passed ? (grounded.separated ? "separated-and-passed" : grounded.revised ? "revised-and-passed" : "passed") : "warning",
           "X-Rangabot-Code-Context": localCodeContext ? "used" : "not-used",
         },
@@ -176,6 +167,7 @@ export async function POST(request: Request) {
         "Cache-Control": "no-cache, no-transform",
         "X-Content-Type-Options": "nosniff",
         "X-Rangabot-Knowledge": usesVault ? "used" : "not-used",
+        ...(knowledgeSearchMode ? { "X-Rangabot-Retrieval": knowledgeSearchMode } : {}),
         "X-Rangabot-Code-Context": localCodeContext ? "used" : "not-used",
       },
     });

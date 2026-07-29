@@ -9,6 +9,15 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Per-answer retrieval diagnostics distinguish full hybrid search from the safe
+  keyword-only fallback in the chat source label and persisted history.
+- A registered story-pack interface replaces route-level Ramayana branching and
+  provides one bounded extension point for future provenance-aware collections.
+- A contradiction regression rejects answers that collapse data leakage and
+  concept drift into the same concept.
+- A severity-ranked full-tree code, privacy, dependency, documentation, and
+  public-GitHub review with explicit unresolved risks.
+- Shared bounded chat validation and local-runtime configuration tests.
 - Conversational Word creation inside ordinary chat. Rangabot gathers missing
   requirements, uses the local model to draft finished content, applies
   deterministic DOCX formatting, stores artifacts privately, renders previews,
@@ -53,6 +62,19 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Changed
 
+- Ollama chat and embedding configuration is now centrally validated as
+  loopback-only, with the documented lightweight model as the single fallback.
+- Answer evaluations exclude execution errors from completed-case quality and
+  latency averages and report a separate conservative overall pass floor.
+- Repository previews now reject high-confidence secret content in addition to
+  common sensitive filenames; document preview rendering no longer overrides
+  the subprocess home directory.
+- Updated `pdfjs-dist` to 6.2.108 and added defensive response headers.
+- Teacher Mode now maps each requested answer part to the strongest matching
+  passages before drafting. When a first draft fails the unchanged grounding
+  gate, Rangabot tries fast deterministic evidence/background separation before
+  spending time on a second local-model generation; revision remains available
+  only when that safe local transformation is insufficient.
 - Smart Mode and Teacher Mode now treat retrieval as evidence gathering rather
   than the final response. Vault evidence is combined with relevant conversation
   context and clearly distinguished background from the downloaded local model.

@@ -46,6 +46,17 @@ test("scores end-to-end answer concepts, grounding, and source synthesis", () =>
   assert.match(failed.failures.join(" "), /forbidden answer claim/);
 });
 
+test("rejects answers that collapse distinct technical concepts", () => {
+  const item = {
+    id: "leakage-distinction", subject: "machine-learning", difficulty: "advanced" as const, query: "What is data leakage?",
+    expectedTitlePatterns: ["machine learning"], requiredAnswerConcepts: [["leak"], ["train|test"]],
+    forbiddenAnswerPatterns: ["data leakage.{0,40}(?:is|means|known as|same as).{0,30}concept drift"],
+  };
+  const score = scoreKnowledgeAnswer(item, "Data leakage is also known as concept drift. It affects train and test data.", 1, true);
+  assert.equal(score.passed, false);
+  assert.equal(score.forbiddenClaimsFree, false);
+});
+
 test("ships exactly 60 balanced, rubric-backed evaluation questions", () => {
   const cases = loadKnowledgeEvaluationCases(resolve(process.cwd(), "data", "knowledge", "evaluations", "starter.json"));
   assert.equal(cases.length, 60);
@@ -55,9 +66,11 @@ test("ships exactly 60 balanced, rubric-backed evaluation questions", () => {
 });
 
 test("builds an inspectable claim-to-source plan before Teacher Mode drafting", () => {
-  const plan = buildEvidencePlan("Compare classification and regression", [result("Statistical Learning", "/ml")]);
+  const plan = buildEvidencePlan("Compare classification and regression", [{ ...result("Statistical Learning", "/ml"), content: "Classification predicts categories while regression predicts continuous values." }]);
   assert.match(plan, /REQUIRED ANSWER COVERAGE/);
   assert.match(plan, /CLAIM-TO-SOURCE PLAN/);
   assert.match(plan, /\[Source 1\] Statistical Learning/);
+  assert.match(plan, /Compare classification and regression -> \[Source 1\]/i);
+  assert.match(plan, /Do not collapse related concepts into synonyms/);
   assert.match(plan, /End every vault-grounded factual paragraph/);
 });

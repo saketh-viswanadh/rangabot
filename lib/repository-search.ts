@@ -26,6 +26,13 @@ function isSearchablePath(path: string) {
   return searchableExtensions.has(extname(lowerName)) || searchableNames.has(lowerName);
 }
 
+function containsLikelySecret(content: string) {
+  return /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(content)
+    || /\bgh[opurs]_[A-Za-z0-9_]{20,}\b/.test(content)
+    || /\bAKIA[A-Z0-9]{16}\b/.test(content)
+    || /\b(?:api[_-]?key|password|secret|token)\s*[:=]\s*["'][^"'\r\n]{12,}["']/i.test(content);
+}
+
 function withinRoot(root: string, path: string) {
   return path === root || path.startsWith(`${root}${sep}`);
 }
@@ -34,7 +41,8 @@ function readSafeText(path: string) {
   if (!isSearchablePath(path) || statSync(path).size > maxFileBytes) return null;
   const buffer = readFileSync(path);
   if (buffer.includes(0)) return null;
-  return buffer.toString("utf8");
+  const content = buffer.toString("utf8");
+  return containsLikelySecret(content) ? null : content;
 }
 
 export function searchRepository(repository: AllowedRepository, rawQuery: string): CodeSearchResult[] {

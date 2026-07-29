@@ -142,6 +142,15 @@ export async function generateGroundedTeacherAnswer(
   let revised = false;
   let separated = false;
   if (!audit.passed) {
+    const separatedDraft = separateGroundedEvidence(answer, sources);
+    const separatedAudit = auditGroundedAnswer(separatedDraft, sources);
+    if (separatedDraft && separatedAudit.passed) {
+      answer = separatedDraft;
+      audit = separatedAudit;
+      separated = true;
+    }
+  }
+  if (!audit.passed) {
     revised = true;
     const revision = normalizeCitationMarkers(await complete([
       ...messages,

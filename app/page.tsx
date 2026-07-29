@@ -17,6 +17,7 @@ type DisplayMessage = ChatMessage & {
   active?: boolean;
   stopped?: boolean;
   knowledgeUsed?: boolean;
+  retrievalMode?: "hybrid" | "keyword-only";
 };
 type ConversationSummary = {
   id: string;
@@ -238,6 +239,7 @@ export default function Home() {
       ...message,
       id: crypto.randomUUID(),
       source: message.role === "assistant" ? "local" : undefined,
+      knowledgeUsed: Boolean(message.retrievalMode),
     })));
     setActiveConversationId(id);
     setAttachedCodeContext(null);
@@ -388,7 +390,7 @@ export default function Home() {
     const userMessage: DisplayMessage = { id: crypto.randomUUID(), role: "user", content, replyTo: reference, codeContext };
     const assistantId = crypto.randomUUID();
     const nextMessages = [...messages, userMessage];
-    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply, codeContext: code, artifactIntent, wordArtifact }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}), ...(code ? { codeContext: code } : {}), ...(artifactIntent ? { artifactIntent } : {}), ...(wordArtifact ? { wordArtifact } : {}) }));
+    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply, codeContext: code, artifactIntent, wordArtifact, retrievalMode }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}), ...(code ? { codeContext: code } : {}), ...(artifactIntent ? { artifactIntent } : {}), ...(wordArtifact ? { wordArtifact } : {}), ...(retrievalMode ? { retrievalMode } : {}) }));
     let conversationId = activeConversationId;
     if (!conversationId) {
       const createResponse = await fetch("/api/conversations", {
@@ -456,8 +458,10 @@ export default function Home() {
         setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, artifactIntent: responseArtifactIntent, wordArtifact: responseWordArtifact } : message));
       }
       const knowledgeUsed = response.headers.get("X-Rangabot-Knowledge") === "used";
+      const retrievalHeader = response.headers.get("X-Rangabot-Retrieval");
+      const retrievalMode = retrievalHeader === "hybrid" || retrievalHeader === "keyword-only" ? retrievalHeader : undefined;
       if (knowledgeUsed) {
-        setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, knowledgeUsed: true } : message));
+        setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, knowledgeUsed: true, retrievalMode } : message));
       }
 
       const reader = response.body.getReader();
@@ -483,7 +487,7 @@ export default function Home() {
         )));
       }
       if (!receivedContent) throw new Error("The local model returned an empty response.");
-      finalAssistant = { role: "assistant", content: generatedContent, ...(responseArtifactIntent ? { artifactIntent: responseArtifactIntent } : {}), ...(responseWordArtifact ? { wordArtifact: responseWordArtifact } : {}) };
+      finalAssistant = { role: "assistant", content: generatedContent, ...(responseArtifactIntent ? { artifactIntent: responseArtifactIntent } : {}), ...(responseWordArtifact ? { wordArtifact: responseWordArtifact } : {}), ...(retrievalMode ? { retrievalMode } : {}) };
     } catch (error) {
       const stopped = abortController.signal.aborted;
       finalAssistant = {
@@ -720,7 +724,7 @@ export default function Home() {
                 {message.replyTo && <div className="reply-reference"><strong>{message.replyTo.role === "assistant" ? "Rangabot" : "You"}</strong><span>{message.replyTo.excerpt}</span></div>}
                 {message.codeContext && <div className="message-code-reference"><strong>Attached code</strong><span>{message.codeContext.repository} · {message.codeContext.path} · lines {message.codeContext.startLine}–{message.codeContext.endLine}</span></div>}
                 {message.wordArtifact && <div className="chat-word-artifact"><span aria-hidden="true">W</span><div><strong>{message.wordArtifact.title}</strong><small>{message.wordArtifact.filename} · {message.wordArtifact.previewPages} rendered page{message.wordArtifact.previewPages === 1 ? "" : "s"}</small><nav><a href={`/api/artifacts/word/${message.wordArtifact.id}/document`}>Download .docx</a>{message.wordArtifact.previewPages > 0 && <a href={`/api/artifacts/word/${message.wordArtifact.id}/preview/1`} target="_blank" rel="noreferrer">Review preview</a>}</nav></div></div>}
-                {message.source && <span className="source">LOCAL{message.knowledgeUsed ? " · KNOWLEDGE VAULT" : ""}</span>}
+                {message.source && <span className="source">LOCAL{message.knowledgeUsed || message.retrievalMode ? ` · KNOWLEDGE VAULT${message.retrievalMode === "hybrid" ? " · HYBRID" : message.retrievalMode === "keyword-only" ? " · KEYWORD ONLY" : ""}` : ""}</span>}
                 {message.content && (message.role === "assistant"
                   ? <MarkdownMessage content={message.content} />
                   : <p>{message.content}</p>)}

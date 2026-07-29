@@ -1,5 +1,39 @@
 # Daily progress
 
+## 2026-07-29 — Critical full-tree and GitHub audit
+
+- Verified the public repository, branch protection, successful required CI,
+  license, Discussions, Issues, secret scanning, push protection, and production
+  dependency audit.
+- Removed the unsafe heavy-model fallback and prohibited remote Ollama endpoints.
+- Centralized and validated local runtime defaults, bounded stored/generated chat
+  payloads, and added repository secret-content filtering.
+- Corrected misleading evaluation summaries that treated timeouts as answer
+  failures and included their timeout duration in answer latency.
+- Updated the stale Discussions link, added defensive browser headers, updated
+  PDF extraction, and documented unresolved findings in `docs/code-review.md`.
+- Confirmed GitHub maintenance debt: the latest release trails `main` by 21
+  commits, 31 remote branches remain, and automatic merged-branch deletion is off.
+
+## 2026-07-29 — Adaptive grounding without a weaker gate
+
+- Recorded the fresh 60-case result: 80.0% pass rate, 84.4% required-concept
+  coverage, 91.7% grounding, 73.3% revision, 63.3% evidence/background
+  separation, and 57.8-second mean latency. Two statistics cases timed out and
+  remain retryable from the local checkpoint.
+- Mapped each requested answer part to its strongest direct passage matches so
+  the small local model receives a more explicit completeness checklist.
+- Reordered grounding recovery: deterministic evidence/background separation
+  now runs before any second generation, and the unchanged audit is rerun before
+  revision can be skipped.
+- Kept local revision as selective escalation for drafts that still cannot pass
+  the same citation-coverage and lexical-support thresholds.
+- A focused rerun of four previously failing cases passed 2/4, kept grounding at
+  100%, required no second generations, and reduced mean latency to 34.4 seconds.
+  Dashboard completeness and cross-mythology source synthesis still failed. A
+  superficially passing leakage answer also conflated leakage with concept drift,
+  exposing a terminology-reliability regression that aggregate scoring missed.
+
 ## 2026-07-29 — Evidence-planned Teacher Mode synthesis
 
 - Used the completed 60-answer run as the baseline: 46.7% composite pass, 89%

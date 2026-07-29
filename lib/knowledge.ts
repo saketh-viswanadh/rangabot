@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { extname, resolve } from "node:path";
 import type { DatabaseSync as Database } from "node:sqlite";
 import * as sqliteVec from "sqlite-vec";
+import { getConfiguredEmbeddingModel, getKnowledgeBudgetBytes, getLocalOllamaBaseUrl } from "./local-runtime-config.ts";
 
 const serverRequire = createRequire(resolve(process.cwd(), "package.json"));
 const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sqlite");
@@ -14,8 +15,8 @@ export const knowledgeWeeklyBrief = resolve(knowledgeRoot, "NEW_THIS_WEEK.md");
 export const knowledgeMonthlyBrief = resolve(knowledgeRoot, "NEW_THIS_MONTH.md");
 export const knowledgeDatabasePath = resolve(knowledgeRoot, "indexes", "knowledge.db");
 let activeKnowledgeDatabasePath = knowledgeDatabasePath;
-export const knowledgeBudgetBytes = Number(process.env.KNOWLEDGE_BUDGET_BYTES ?? 4 * 1024 ** 3);
-export const embeddingModel = process.env.OLLAMA_EMBED_MODEL ?? "nomic-embed-text";
+export const knowledgeBudgetBytes = getKnowledgeBudgetBytes();
+export const embeddingModel = getConfiguredEmbeddingModel();
 
 let database: Database | undefined;
 let nativeVectorAvailable = false;
@@ -141,6 +142,8 @@ function ensureNativeVectorIndex(dimensions: number) {
 export type KnowledgeChunkInput = { id: string; ordinal: number; content: string; embedding?: number[]; heading?: string; sectionPath?: string; pageStart?: number; pageEnd?: number };
 export type KnowledgeDocumentInput = { id: string; path: string; title: string; format: string; sizeBytes: number; sha256: string; chunks: KnowledgeChunkInput[] };
 export type KnowledgeResult = { title: string; path: string; chunk: number; content: string; score: number; heading?: string; sectionPath?: string; pageStart?: number; pageEnd?: number };
+export type KnowledgeSearchMode = "hybrid" | "keyword-only";
+export type KnowledgeSearchResponse = { results: KnowledgeResult[]; mode: KnowledgeSearchMode };
 export type IndexedKnowledgeDocument = { id: string; path: string; title: string; sha256: string; chunkCount: number; ingestionVersion: number };
 export type KnowledgeSourceState = { name: string; status: "indexed" | "pending" | "incompatible"; detail: string; chunks: number };
 type SourceManifest = { sources?: Array<{ title?: string; subject?: string[]; difficulty?: string }> };
@@ -398,9 +401,9 @@ export function diversifyKnowledgeResults(results: KnowledgeResult[], limit: num
   return selected;
 }
 
-export async function searchKnowledge(query: string, limit = 6): Promise<KnowledgeResult[]> {
+export async function searchKnowledgeWithDiagnostics(query: string, limit = 6): Promise<KnowledgeSearchResponse> {
   const expression = ftsQuery(query);
-  if (!expression) return [];
+  if (!expression) return { results: [], mode: "keyword-only" };
   const terms = knowledgeQueryTerms(query);
   const rows = getDatabase().prepare(`
     SELECT d.title, d.path, c.ordinal AS chunk, c.content, c.heading, c.section_path AS sectionPath, c.page_start AS pageStart, c.page_end AS pageEnd, bm25(chunks_fts, 8.0, 1.0) AS rank
@@ -412,7 +415,10 @@ export async function searchKnowledge(query: string, limit = 6): Promise<Knowled
   `).all(expression, Math.max(limit * 6, 24)) as unknown as Array<Omit<KnowledgeResult, "score"> & { rank: number }>;
   const lexical = rows.map(({ rank: _rank, ...row }, index) => ({ ...row, lexicalScore: Math.max(.35, 1 - index / Math.max(rows.length, 1)) }));
   const queryEmbedding = process.env.KNOWLEDGE_DISABLE_EMBEDDINGS === "1" ? null : await embedQuery(query);
-  if (!queryEmbedding) return diversifyKnowledgeResults(filterKnowledgeResultsBySubject(query, lexical.map(({ lexicalScore, ...result }) => ({ ...result, score: lexicalScore }))), limit);
+  if (!queryEmbedding) return {
+    results: diversifyKnowledgeResults(filterKnowledgeResultsBySubject(query, lexical.map(({ lexicalScore, ...result }) => ({ ...result, score: lexicalScore }))), limit),
+    mode: "keyword-only",
+  };
   const semanticLimit = Math.max(limit * 6, 24);
   const nativeSemantic = nativeSemanticSearch(queryEmbedding, semanticLimit);
   const embeddedRows = nativeSemantic ? [] : getDatabase().prepare(`
@@ -440,7 +446,11 @@ export async function searchKnowledge(query: string, limit = 6): Promise<Knowled
     .filter((result) => result.lexical || (result.similarity ?? 0) >= .46)
     .sort((a, b) => b.score - a.score)
     .map(({ lexical: _lexical, similarity: _similarity, ...result }) => result);
-  return diversifyKnowledgeResults(filterKnowledgeResultsBySubject(query, ranked), limit);
+  return { results: diversifyKnowledgeResults(filterKnowledgeResultsBySubject(query, ranked), limit), mode: "hybrid" };
+}
+
+export async function searchKnowledge(query: string, limit = 6): Promise<KnowledgeResult[]> {
+  return (await searchKnowledgeWithDiagnostics(query, limit)).results;
 }
 
 function nativeSemanticSearch(queryEmbedding: number[], limit: number) {
@@ -462,7 +472,7 @@ function nativeSemanticSearch(queryEmbedding: number[], limit: number) {
 
 async function embedQuery(input: string): Promise<number[] | null> {
   try {
-    const response = await fetch("http://127.0.0.1:11434/api/embed", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: embeddingModel, input }) });
+    const response = await fetch(`${getLocalOllamaBaseUrl()}/api/embed`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: embeddingModel, input }), signal: AbortSignal.timeout(30_000) });
     if (!response.ok) return null;
     return ((await response.json()) as { embeddings?: number[][] }).embeddings?.[0] ?? null;
   } catch { return null; }
