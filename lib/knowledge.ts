@@ -345,14 +345,14 @@ function ftsQuery(query: string) {
 
 const knowledgeSubjectPatterns = {
   python: /\bpython|fluent python|effective python|namespaces?|decorators?|asyncio|pip\b/i,
-  sql: /\bsql|relational|database|joins?|queries|duckdb|snowflake\b/i,
+  sql: /\bsql|relational|database|joins?|queries|duckdb|snowflake|group by|having|window functions?|row_number|common table expressions?|\bcte\b|transactions?|\bacid\b|execution plans?\b/i,
   "data-platform": /\bpandas|numpy|spark|pyspark|databricks|dataframe\b/i,
-  "machine-learning": /\bmachine learning|statistical learning|scikit|clustering|classification|neural|gradient boost|random forest|cross[- ]validation|data leakage|feature engineering\b/i,
-  statistics: /\bstatistics|statistical inference|bayesian|frequentist|confidence interval|hypothesis|probability\b/i,
-  visualization: /\bvisuali[sz]|charts?|plots?|matplotlib|seaborn|graphics\b/i,
-  "indian-mythology": /\bramayana|mahabharata|hindu|indian myth|rama|sita|hanuman\b/i,
+  "machine-learning": /machine.?learning|\bstatistical learning|scikit|clustering|classification|neural|gradient boost|random forest|cross[- ]validation|data leakage|feature engineering|regulari[sz]ation|bias[- ]variance\b/i,
+  statistics: /\bstatistics|statistical inference|bayes(?:ian)?|frequentist|confidence interval|hypothesis|probability|p[- ]?values?|bootstrap|correlation|causation|mean|median\b/i,
+  visualization: /\bvisuali[sz]|charts?|plots?|matplotlib|seaborn|graphics|dashboards?|data stor(?:y|ies)|truncated axis|chart axis\b/i,
+  "indian-mythology": /\bramayana|mahabharata|hindu|indian myth|rama|sita|hanuman|shiva|pandava|kaurava|arjuna|krishna\b/i,
   "greek-mythology": /\bgreek\b|zeus|hera|olymp|hesiod/i,
-  "egyptian-mythology": /\begyptian\b|osiris|isis|horus|\bra\b/i,
+  "egyptian-mythology": /\begypt(?:ian)?\b|osiris|isis|horus|\bra\b/i,
   history: /\bhistory|historical|archaeolog|ancient civilisation|ancient civilization\b/i,
 } as const;
 

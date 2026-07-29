@@ -42,6 +42,7 @@ npm run knowledge:backup     # save a local index snapshot
 npm run knowledge:ingest     # incrementally index changed files
 npm run knowledge:vector-index # explicitly rebuild vectors without re-ingesting
 npm run knowledge:evaluate   # score retrieval without sending vault data anywhere
+npm run knowledge:evaluate:answers # run the slower complete-answer benchmark
 npm run knowledge:doctor     # diagnose an empty or full vault
 npm run knowledge:rollback   # preview latest rollback; add -- --yes to confirm
 ```

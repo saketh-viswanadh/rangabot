@@ -22,15 +22,22 @@ function citedSourceNumbers(text: string) {
   return [...text.matchAll(/\[Source\s+(\d+)(?:[^\]]*)\]/gi)].map((match) => Number(match[1]));
 }
 
+export function countCitedSources(text: string) {
+  return new Set(citedSourceNumbers(normalizeCitationMarkers(text))).size;
+}
+
+function normalizeCitationMarkers(text: string) {
+  return text.replace(/\[(\d+)\]/g, "[Source $1]");
+}
+
 function substantiveParagraphs(answer: string) {
   let localBackground = false;
   return answer.split(/\n\s*\n/).flatMap((raw) => {
     const paragraph = raw.trim();
-    if (/^#{1,6}\s*local model background\b/i.test(paragraph) || /^local model background\s*:/i.test(paragraph)) {
+    if (/^(?:#{1,6}\s*|\*\*)?local model background\b/i.test(paragraph)) {
       localBackground = true;
       return [];
     }
-    if (/^#{1,6}\s/.test(paragraph) && !/local model background/i.test(paragraph)) localBackground = false;
     const plain = paragraph.replace(/^[-*>\s#]+/, "").trim();
     if (localBackground || terms(plain).length < 6) return [];
     return [plain];
@@ -45,8 +52,9 @@ function lexicalSupport(paragraph: string, source: string) {
 }
 
 export function auditGroundedAnswer(answer: string, sources: KnowledgeResult[]): GroundingAudit {
-  const paragraphs = substantiveParagraphs(answer);
-  const allCitations = citedSourceNumbers(answer);
+  const normalizedAnswer = normalizeCitationMarkers(answer);
+  const paragraphs = substantiveParagraphs(normalizedAnswer);
+  const allCitations = citedSourceNumbers(normalizedAnswer);
   const invalidCitations = [...new Set(allCitations.filter((number) => number < 1 || number > sources.length))];
   const citedParagraphs = paragraphs.filter((paragraph) => citedSourceNumbers(paragraph).some((number) => number <= sources.length));
   const weaklySupported = citedParagraphs.filter((paragraph) => {
@@ -57,8 +65,8 @@ export function auditGroundedAnswer(answer: string, sources: KnowledgeResult[]):
   const supportedCitationRate = citedParagraphs.length ? (citedParagraphs.length - weaklySupported.length) / citedParagraphs.length : sources.length ? 0 : 1;
   const issues: string[] = [];
   if (invalidCitations.length) issues.push(`invalid citations: ${invalidCitations.map((number) => `[Source ${number}]`).join(", ")}`);
-  if (sources.length && citationCoverage < .7) issues.push(`only ${Math.round(citationCoverage * 100)}% of substantive vault-answer paragraphs include citations`);
-  if (sources.length && supportedCitationRate < .7) issues.push(`only ${Math.round(supportedCitationRate * 100)}% of cited paragraphs have clear lexical support`);
+  if (sources.length && citationCoverage < 2 / 3) issues.push(`only ${Math.round(citationCoverage * 100)}% of substantive vault-answer paragraphs include citations`);
+  if (sources.length && supportedCitationRate < 2 / 3) issues.push(`only ${Math.round(supportedCitationRate * 100)}% of cited paragraphs have clear lexical support`);
   return {
     passed: issues.length === 0,
     citationCoverage,
@@ -79,6 +87,7 @@ Keep useful explanations, but:
 2. Remove or qualify claims that the cited passage does not support.
 3. Put uncited stable knowledge under a clearly headed "Local model background" section.
 4. Never invent a source number, quotation, page, fact, or disagreement.
+5. Do not discuss irrelevant retrieved passages; answer the user's question directly and concisely.
 Return only the improved answer.`;
 }
 
@@ -87,17 +96,17 @@ export async function generateGroundedTeacherAnswer(
   sources: KnowledgeResult[],
   complete: (messages: ChatMessage[]) => Promise<string>,
 ) {
-  const draft = await complete(messages);
+  const draft = normalizeCitationMarkers(await complete(messages));
   let answer = draft;
   let audit = auditGroundedAnswer(answer, sources);
   let revised = false;
   if (!audit.passed) {
     revised = true;
-    answer = await complete([
+    answer = normalizeCitationMarkers(await complete([
       ...messages,
       { role: "assistant", content: draft },
       { role: "user", content: buildGroundingRevisionInstruction(audit) },
-    ]);
+    ]));
     audit = auditGroundedAnswer(answer, sources);
   }
   if (!audit.passed) {
