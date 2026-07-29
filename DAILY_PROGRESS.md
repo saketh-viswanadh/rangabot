@@ -1,5 +1,17 @@
 # Daily progress
 
+## 2026-07-29 — Teacher Mode grounding review
+
+- Added deterministic checks for substantive citation coverage, invalid source
+  numbers, and weak lexical support between claims and cited passages.
+- Added one bounded local-model revision when the first answer fails grounding.
+- Added a visible warning when the revised answer still cannot meet the
+  grounding threshold rather than presenting uncertain claims as verified.
+- Preserved explicit Local model background sections without requiring false
+  vault citations and kept ordinary/Smart chat streaming unchanged.
+- Verified the full local route: a weak cross-validation draft was revised and
+  returned with `revised-and-passed` in about 27 seconds on `llama3.2:3b`.
+
 ## 2026-07-29 — Measurable RAG retrieval quality
 
 - Added a local evaluation harness so retrieval changes must demonstrate useful
