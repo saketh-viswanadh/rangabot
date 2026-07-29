@@ -44,6 +44,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - A balanced 60-question benchmark spanning ten subject groups and three
   difficulty levels, with answer-level concept, grounding, forbidden-claim,
   cited-source synthesis, revision, and latency scoring.
+- Resumable answer evaluation with per-case atomic checkpoints, a five-minute
+  evaluation timeout, isolated error reporting, and automatic retry of only
+  unfinished cases.
 - A Teacher Mode grounding gate that audits citation coverage, citation numbers,
   and lexical support before returning an answer, revises weak drafts once
   locally, and warns visibly when the revision remains insufficiently grounded.
