@@ -38,6 +38,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   grounding review, cross-book concept summaries, and feedback-based evaluation.
 - A compact native `sqlite-vec` index for existing local embeddings, including
   an explicit `knowledge:vector-index` rebuild command.
+- A privacy-preserving local retrieval evaluation harness with reusable starter
+  cases, private vault-specific fixtures, timestamped reports, and measurable
+  relevance, contamination, diversity, locator, and latency results.
 
 ### Changed
 

@@ -1,0 +1,17 @@
+{
+  "cases": [
+    { "id": "python-errors", "query": "How should Python programs handle runtime exceptions?", "expectedTitlePatterns": ["python.*errors|python.*tutorial"], "forbiddenTitlePatterns": ["myth|ramayana|egypt"] },
+    { "id": "python-modules", "query": "Explain Python modules and namespaces", "expectedTitlePatterns": ["python.*modules|python.*tutorial"], "forbiddenTitlePatterns": ["myth|ramayana|statistics"] },
+    { "id": "python-data-structures", "query": "Compare Python lists, tuples, sets, and dictionaries", "expectedTitlePatterns": ["python.*data structures|python.*tutorial"], "forbiddenTitlePatterns": ["myth|ramayana|egypt"] },
+    { "id": "sql-joins", "query": "Explain inner, left, right, and full SQL joins", "expectedTitlePatterns": ["sql|duckdb"], "forbiddenTitlePatterns": ["myth|python tutorial"] },
+    { "id": "spark-dataframes", "query": "How do PySpark DataFrames execute transformations lazily?", "expectedTitlePatterns": ["spark|pyspark"], "forbiddenTitlePatterns": ["myth|ramayana"] },
+    { "id": "numpy-broadcasting", "query": "Explain NumPy array broadcasting with an example", "expectedTitlePatterns": ["numpy"], "forbiddenTitlePatterns": ["myth|ramayana|spark"] },
+    { "id": "pandas-releases", "query": "What deprecations and improvements are described in the pandas release notes?", "expectedTitlePatterns": ["pandas"], "forbiddenTitlePatterns": ["myth|ramayana"] },
+    { "id": "ml-cross-validation", "query": "Why is cross-validation useful when evaluating a machine learning model?", "expectedTitlePatterns": ["scikit|machine learning|statistical learning"], "minimumSources": 2, "forbiddenTitlePatterns": ["myth|python tutorial"] },
+    { "id": "ml-clustering", "query": "Compare methods for evaluating clustering quality", "expectedTitlePatterns": ["scikit|machine learning|statistical learning"], "minimumSources": 2, "forbiddenTitlePatterns": ["fluent python|myth"] },
+    { "id": "visual-story", "query": "How can a data visualization communicate a clear explanatory story?", "expectedTitlePatterns": ["storytelling|visuali[sz]"], "forbiddenTitlePatterns": ["myth|ramayana|python tutorial"] },
+    { "id": "indian-mythology", "query": "What role does Hanuman play in the Ramayana?", "expectedTitlePatterns": ["ramayana|indian myth"], "forbiddenTitlePatterns": ["python|sql|statistics"] },
+    { "id": "greek-mythology", "query": "Explain the conflict between the Greek Olympian gods and the Titans", "expectedTitlePatterns": ["greek|roman myths"], "forbiddenTitlePatterns": ["python|sql|ramayana"] },
+    { "id": "egyptian-mythology", "query": "Explain the relationship between Osiris, Isis, Horus, and Set", "expectedTitlePatterns": ["egypt"], "forbiddenTitlePatterns": ["python|sql|ramayana"] }
+  ]
+}

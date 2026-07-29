@@ -1,5 +1,16 @@
 # Daily progress
 
+## 2026-07-29 — Measurable RAG retrieval quality
+
+- Added a local evaluation harness so retrieval changes must demonstrate useful
+  source selection instead of relying on anecdotal chat outputs.
+- Added 13 starter questions across Python, SQL, PySpark, NumPy, pandas, machine
+  learning, visualization, and three mythology traditions.
+- Measured expected-source coverage, cross-subject contamination, source
+  diversity, passage locators, and p50/p95 latency without exporting vault data.
+- Kept personal textbook cases and detailed reports in explicit Git-ignored
+  locations while retaining a reusable public starter suite.
+
 ## 2026-07-29 — Native local vector search
 
 - Added a compact `sqlite-vec` table inside the private Knowledge Vault database

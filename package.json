@@ -25,6 +25,7 @@
     "knowledge:status": "node --experimental-strip-types scripts/knowledge-cli.ts status",
     "knowledge:doctor": "node --experimental-strip-types scripts/knowledge-cli.ts doctor",
     "knowledge:vector-index": "node --experimental-strip-types scripts/knowledge-cli.ts vector-index",
+    "knowledge:evaluate": "node --experimental-strip-types scripts/evaluate-knowledge.ts",
     "knowledge:validate": "node --experimental-strip-types scripts/knowledge-cli.ts validate",
     "knowledge:backup": "node --experimental-strip-types scripts/knowledge-cli.ts backup",
     "knowledge:rollback": "node --experimental-strip-types scripts/knowledge-cli.ts rollback",

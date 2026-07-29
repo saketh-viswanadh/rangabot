@@ -16,5 +16,7 @@ data/knowledge/indexes/
 data/knowledge/backups/
 data/knowledge/*.private.*
 data/knowledge/LOCAL_*
+data/knowledge/evaluations/*.private.json
+data/knowledge/evaluations/results/
 work/
 outputs/

@@ -112,6 +112,19 @@ This does not re-read books or regenerate embeddings. If the native extension
 cannot load on a supported system, retrieval safely falls back to the existing
 JavaScript similarity scan instead of making the vault unavailable.
 
+Measure retrieval quality against the local vault with:
+
+```bash
+npm run knowledge:evaluate
+```
+
+The starter suite checks expected-source coverage, cross-subject contamination,
+multi-source retrieval, passage locators, and latency. Detailed results are
+written to a private Git-ignored directory. Contributors can add a private suite
+at `data/knowledge/evaluations/my-vault.private.json` and run it with
+`npm run knowledge:evaluate -- --file=data/knowledge/evaluations/my-vault.private.json`.
+Private evaluation files may name personal textbooks and must never be committed.
+
 Select **Teacher mode** in Rangabot to retrieve relevant vault passages before
 the chat model answers. Teacher Mode is instructed to cite the numbered local
 sources, identify gaps, and preserve conflicting historical or mythological

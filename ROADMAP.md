@@ -72,6 +72,8 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   between vault evidence, local-model background, and unresolved uncertainty
 - [ ] Learning Core 6: Feedback capture and regression evaluation proving that
   changes improve synthesis, teaching quality, citations, and completeness
+- [x] Learning Core 6a: Local retrieval evaluation baseline covering expected
+  sources, contamination, diversity, passage locators, and latency
 - [ ] Learning Core 7: Rebuildable cross-book concept summaries and relationships
   that update incrementally when compatible sources are added or removed
 - [ ] Model management for installed models and active selection
