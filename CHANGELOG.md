@@ -9,6 +9,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Conversation-aware local retrieval planning for context-dependent follow-up
+  questions, using the latest substantive user topic without changing the
+  question Rangabot answers.
 - Per-answer retrieval diagnostics distinguish full hybrid search from the safe
   keyword-only fallback in the chat source label and persisted history.
 - A registered story-pack interface replaces route-level Ramayana branching and

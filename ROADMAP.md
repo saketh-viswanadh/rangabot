@@ -59,6 +59,9 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   section, heading, page, and passage relationships
 - [ ] Learning Core 2: Conversation-aware query planning and multi-source
   retrieval across books, local-model knowledge, and relevant chat history
+- [x] Learning Core 2d: Context-dependent follow-up retrieval carries the latest
+  substantive user topic into the local search query without rewriting the
+  question presented to the model
 - [x] Learning Core 2a: Relevance-gated source diversity prevents one matching
   book from monopolizing the evidence window when other strong books contribute
 - [x] Learning Core 2b: Subject-aware filtering blocks clearly cross-domain books

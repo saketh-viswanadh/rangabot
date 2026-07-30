@@ -40,6 +40,8 @@ model server.
 - Hybrid local keyword and embedding retrieval
 - Per-answer `HYBRID` or `KEYWORD ONLY` retrieval status, so an unavailable
   embedding model never degrades silently
+- Conversation-aware follow-up retrieval that carries the latest user topic into
+  locally searched questions such as “What about its limitations?”
 - Teacher Mode with passage citations and explicit evidence limits
 - Automatic local Knowledge Vault lookup for informational questions in Smart mode
 - Weekly and monthly sourced subject-intelligence briefs
