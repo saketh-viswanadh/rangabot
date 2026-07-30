@@ -1,12 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useMemo, useState, type CSSProperties } from "react";
 import treeData from "@/content/path-to-mastery.json";
+import contributorsData from "@/content/mastery-contributors.json";
+import masteryBanner from "@/docs/media/rangabot-social-preview.png";
 import { masteryProgress, type MasteryNode, type MasteryStatus, type MasteryTree } from "@/lib/mastery-tree";
 import "./mastery.css";
 
 const tree = treeData as MasteryTree;
+const repositoryUrl = "https://github.com/saketh-viswanadh/rangabot";
 const statusLabels: Record<MasteryStatus, string> = { vision: "Vision", locked: "Locked", ready: "Ready", "in-progress": "In progress", training: "Training", unlocked: "Unlocked", mastered: "Mastered", regressed: "Regressed" };
 type SelectedNode = MasteryNode & { branchName: string };
 
@@ -17,9 +21,10 @@ export default function MasteryPage() {
     <main className="mastery-shell">
       <header className="mastery-header">
         <Link href="/" className="mastery-back"><span aria-hidden="true">‹</span> Rangabot</Link>
-        <div><span className="mastery-kicker">Public capability roadmap</span><h1>{tree.title}</h1><p>{tree.vision}</p></div>
+        <div className="mastery-title"><span className="mastery-kicker">Public capability roadmap</span><h1>{tree.title}</h1><p>{tree.vision}</p></div>
         <div className="mastery-summary" aria-label="Mastery summary"><strong>{progress.percent}%</strong><span>{progress.unlocked} unlocked · {progress.active} training · {progress.total} total</span><small>Verified {tree.updatedAt}</small></div>
       </header>
+      <section className="mastery-banner" aria-label="Rangabot local AI"><Image src={masteryBanner} alt="Rangabot, private local AI that learns from your documents" priority /></section>
       <section className="mastery-legend" aria-label="Skill status legend">
         {(Object.keys(statusLabels) as MasteryStatus[]).map((status) => <span key={status} data-status={status}><i />{statusLabels[status]}</span>)}
       </section>
@@ -38,17 +43,20 @@ export default function MasteryPage() {
                 <span className="node-emblem"><i>{node.status === "locked" ? "◇" : node.status === "unlocked" ? "✦" : node.status === "mastered" ? "◆" : "·"}</i></span>
                 <span className="node-copy"><strong>{node.name}</strong><small>{statusLabels[node.status]} · {node.score.toFixed(1)}/5</small></span>
               </button>
+              <aside className="node-unlock" aria-hidden="true"><small>How to unlock</small><strong>{node.acceptance[0]}</strong>{node.acceptance[1] && <span>{node.acceptance[1]}</span>}<a href={`${repositoryUrl}/blob/main/docs/PATH_TO_MASTERY.md#${node.id}`} target="_blank" rel="noreferrer">Complete checklist ↗</a></aside>
             </li>)}</ol>
           </article>
         ))}
       </section>
-      <footer className="mastery-footer"><p><strong>This tree is also the backlog.</strong> Nodes unlock only after their code is merged and every listed acceptance criterion passes. A failed regression can relock a skill.</p><a href="https://github.com/saketh-viswanadh/rangabot" target="_blank" rel="noreferrer">View Rangabot on GitHub ↗</a></footer>
+      <section className="mastery-achievements" aria-labelledby="achievement-title"><div><span className="mastery-kicker">Built by the pack</span><h2 id="achievement-title">Achievements remembered</h2><p>Every credited milestone stays attached to the people who helped unlock it. Contributor portraits are opt-in and stored locally.</p></div><ul>{contributorsData.contributors.map((contributor) => <li key={contributor.github}><a href={`https://github.com/${contributor.github}`} target="_blank" rel="noreferrer"><span className="contributor-avatar" aria-hidden="true">{contributor.avatar ? <Image src={contributor.avatar} alt="" width={48} height={48} /> : contributor.name.slice(0, 1)}</span><span><strong>{contributor.name}</strong><small>@{contributor.github}</small><em>{contributor.achievement}</em></span></a></li>)}</ul><a className="claim-skill" href={`${repositoryUrl}/issues/new?title=Claim%20a%20Path%20to%20Mastery%20node`} target="_blank" rel="noreferrer">Claim a skill node on GitHub ↗</a></section>
+      <footer className="mastery-footer"><p><strong>This tree is also the backlog.</strong> Nodes unlock only after their code is merged and every listed acceptance criterion passes. A failed regression can relock a skill.</p><a href={repositoryUrl} target="_blank" rel="noreferrer">View Rangabot on GitHub ↗</a></footer>
       {selected && <div className="mastery-modal" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setSelected(null); }}>
         <section role="dialog" aria-modal="true" aria-labelledby="selected-mastery-title" data-status={selected.status}>
           <button className="mastery-close" type="button" onClick={() => setSelected(null)} aria-label="Close mastery details">×</button>
           <span className="detail-path">{selected.branchName} · {statusLabels[selected.status]}</span><h2 id="selected-mastery-title">{selected.name}</h2>
           <div className="detail-score"><strong>{selected.score.toFixed(1)}</strong><span>/ 5 maturity</span></div><p>{selected.description}</p>
           <h3>Unlock requirements</h3><ul>{selected.acceptance.map((criterion) => <li key={criterion}>{criterion}</li>)}</ul>
+          <a className="detail-checklist" href={`${repositoryUrl}/blob/main/docs/PATH_TO_MASTERY.md#${selected.id}`} target="_blank" rel="noreferrer">Open the complete public checklist ↗</a>
           <h3>Dependencies</h3><p className="detail-tags">{selected.dependencies.length ? selected.dependencies.map((dependency) => <span key={dependency}>{dependency.replaceAll("-", " ")}</span>) : <span>Foundation node</span>}</p>
           <h3>Evidence</h3><p className="detail-tags">{selected.evidence.length ? selected.evidence.map((evidence) => <span key={evidence}>{evidence}</span>) : <span>No verified evidence yet</span>}</p>
           <div className="detail-next"><small>Next backlog item</small><strong>{selected.backlog}</strong></div>

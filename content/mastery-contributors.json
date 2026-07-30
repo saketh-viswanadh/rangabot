@@ -1,0 +1,11 @@
+{
+  "policy": "Recognition is opt-in. Portraits must be locally committed with the contributor's permission; Rangabot never fetches GitHub avatars at runtime.",
+  "contributors": [
+    {
+      "name": "Saketh Viswanadha",
+      "github": "saketh-viswanadh",
+      "avatar": null,
+      "achievement": "Founded Rangabot and opened its first paths to mastery"
+    }
+  ]
+}

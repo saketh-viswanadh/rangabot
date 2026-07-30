@@ -5,6 +5,10 @@ import test from "node:test";
 import { masteryProgress, validateMasteryTree } from "../lib/mastery-tree.ts";
 
 const tree: unknown = JSON.parse(readFileSync(resolve("content/path-to-mastery.json"), "utf8"));
+const contributorRegistry = JSON.parse(readFileSync(resolve("content/mastery-contributors.json"), "utf8")) as {
+  policy: string;
+  contributors: Array<{ github: string; avatar: string | null }>;
+};
 
 test("keeps the public mastery tree complete, scored, and dependency-safe", () => {
   validateMasteryTree(tree);
@@ -25,4 +29,13 @@ test("keeps web research locked behind the approved persistent allowlist", () =>
   assert.equal(research?.status, "locked");
   assert.ok(research?.dependencies.includes("web-allowlist"));
   assert.match(research?.acceptance.join(" ") ?? "", /approved query leaves device/i);
+});
+
+test("keeps mastery recognition opt-in and prevents runtime GitHub avatar tracking", () => {
+  assert.match(contributorRegistry.policy, /opt-in/i);
+  assert.ok(contributorRegistry.contributors.length > 0);
+  for (const contributor of contributorRegistry.contributors) {
+    assert.match(contributor.github, /^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i);
+    assert.ok(contributor.avatar === null || contributor.avatar.startsWith("/mastery/contributors/"));
+  }
 });

@@ -14,6 +14,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   next tasks also form Rangabot's public contributor backlog.
 - A canonical mastery JSON model and generated Markdown view, including an
   approved persistent web-allowlist node that must unlock before web research.
+- A spacious, scrollable mastery layout with Rangabot banner art, hover and
+  keyboard unlock previews, complete public checklists, and an opt-in local
+  contributor achievement wall that never fetches GitHub avatars at runtime.
 - Conversation-aware local retrieval planning for context-dependent follow-up
   questions, using the latest substantive user topic without changing the
   question Rangabot answers.

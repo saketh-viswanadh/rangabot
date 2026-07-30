@@ -11,6 +11,11 @@
   dependencies, evidence, acceptance criteria and the next task.
 - Added canonical JSON, generated Markdown and validation that prevents unknown
   dependencies or unapproved web research from silently appearing unlocked.
+- Reworked the first visual draft after direct user review: restored page
+  scrolling, reduced the tree to two readable columns, reused the social banner,
+  added hover/focus unlock guidance and linked full checklists.
+- Added opt-in contributor achievements and locally stored portraits so public
+  recognition never causes a hidden runtime request to GitHub.
 
 ## 2026-07-30 — Conversation-aware follow-up retrieval
 
