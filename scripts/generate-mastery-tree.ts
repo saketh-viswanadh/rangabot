@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { masteryProgress, validateMasteryTree, type MasteryTree } from "../lib/mastery-tree.ts";
+import { normalizeLineEndings } from "../lib/text-normalization.ts";
 
 const sourcePath = resolve(process.cwd(), "content", "path-to-mastery.json");
 const outputPath = resolve(process.cwd(), "docs", "PATH_TO_MASTERY.md");
@@ -53,7 +54,9 @@ ${sections}
 `;
 
 if (process.argv.includes("--check")) {
-  if (readFileSync(outputPath, "utf8") !== markdown) throw new Error("docs/PATH_TO_MASTERY.md is stale. Run npm run mastery:generate.");
+  if (normalizeLineEndings(readFileSync(outputPath, "utf8")) !== normalizeLineEndings(markdown)) {
+    throw new Error("docs/PATH_TO_MASTERY.md is stale. Run npm run mastery:generate.");
+  }
 } else {
   writeFileSync(outputPath, markdown);
   console.log(`Generated ${outputPath} from ${sourcePath}`);

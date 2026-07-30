@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import { masteryProgress, validateMasteryTree } from "../lib/mastery-tree.ts";
+import { normalizeLineEndings } from "../lib/text-normalization.ts";
 
 const tree: unknown = JSON.parse(readFileSync(resolve("content/path-to-mastery.json"), "utf8"));
 const contributorRegistry = JSON.parse(readFileSync(resolve("content/mastery-contributors.json"), "utf8")) as {
@@ -38,4 +39,10 @@ test("keeps mastery recognition opt-in and prevents runtime GitHub avatar tracki
     assert.match(contributor.github, /^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i);
     assert.ok(contributor.avatar === null || contributor.avatar.startsWith("/mastery/contributors/"));
   }
+});
+
+test("treats Windows and Unix line endings as the same generated mastery document", () => {
+  const unix = "# Path to Mastery\n\nGenerated locally.\n";
+  const windows = unix.replaceAll("\n", "\r\n");
+  assert.equal(normalizeLineEndings(windows), normalizeLineEndings(unix));
 });
