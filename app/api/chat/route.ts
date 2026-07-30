@@ -11,6 +11,7 @@ import { buildConversationSummaryFallback, buildWordConversationPrompt, buildWor
 import { findStoryPack } from "@/lib/story-packs";
 import { isValidChatMessages } from "@/lib/chat-validation";
 import { buildKnowledgeSearchQuery } from "@/lib/knowledge-query-planning";
+import { formatMemoryContext } from "@/lib/memories";
 
 export const runtime = "nodejs";
 
@@ -147,6 +148,9 @@ export async function POST(request: Request) {
         : message);
     }
 
+    const memoryContext = formatMemoryContext();
+    if (memoryContext) messages = [{ role: "system", content: memoryContext }, ...messages];
+
     if (body.mode === "teach" && usesVault) {
       const grounded = await generateGroundedTeacherAnswer(messages, knowledgeSources, completeTextWithOllama);
       return new Response(grounded.answer, {
@@ -158,6 +162,7 @@ export async function POST(request: Request) {
           "X-Rangabot-Retrieval": knowledgeSearchMode ?? "keyword-only",
           "X-Rangabot-Grounding": grounded.audit.passed ? (grounded.separated ? "separated-and-passed" : grounded.revised ? "revised-and-passed" : "passed") : "warning",
           "X-Rangabot-Code-Context": localCodeContext ? "used" : "not-used",
+          "X-Rangabot-Memory": memoryContext ? "used" : "not-used",
         },
       });
     }
@@ -171,6 +176,7 @@ export async function POST(request: Request) {
         "X-Rangabot-Knowledge": usesVault ? "used" : "not-used",
         ...(knowledgeSearchMode ? { "X-Rangabot-Retrieval": knowledgeSearchMode } : {}),
         "X-Rangabot-Code-Context": localCodeContext ? "used" : "not-used",
+        "X-Rangabot-Memory": memoryContext ? "used" : "not-used",
       },
     });
   } catch (error) {

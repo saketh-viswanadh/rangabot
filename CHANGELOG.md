@@ -9,6 +9,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Inspectable local memory for explicitly approved preferences, facts, and
+  standing instructions, with visible provenance, edit/delete controls, JSON
+  export, and bounded context injection into ordinary and Teacher Mode chats.
 - Governed, evidence-backed mastery attribution with CODEOWNER protection, a
   public claim workflow, local-only optional portraits, node-level contributor
   credits, and founder recognition covering 19 verified capabilities.

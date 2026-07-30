@@ -204,11 +204,21 @@ current data-science pack adds official NumPy 2.5, pandas, scikit-learn, and
 DuckDB learning/release material. Briefs are indexed too, so they remain
 available offline after the weekly source check.
 
+### Inspectable local memory
+
+Open **Local memory** in the sidebar to save a preference, user-provided fact,
+or standing instruction. Rangabot never infers durable memories from a chat:
+each item requires an explicit **Approve and remember** action and records its
+origin, confidence, and timestamps in the private local SQLite database
+`data/rangabot-memory.db`. Approved memories are supplied as bounded context to
+ordinary and Teacher Mode chats. The panel supports review, editing, JSON export,
+and deletion; no memory is sent to a remote service.
+
 ## Next milestones
 
 1. Add conversation-aware query planning and multi-book evidence synthesis using the
    downloaded model, vault sources, and relevant chat context.
-2. Add inspectable local learning memory and cross-book concept summaries.
+2. Validate inspectable local memory across chat sessions, then add cross-book concept summaries.
 3. Add draft, grounding, revision, feedback, and regression-evaluation loops so
    improvement is measured rather than assumed.
 4. Continue the artifact roadmap with existing-Word editing, PDF, email drafting,

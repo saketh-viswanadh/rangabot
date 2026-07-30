@@ -1,12 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ProviderStatus } from "@/lib/providers/types";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { appendWelcomeHistory, chooseWelcomeIndex, parseWelcomeHistory, welcomeLines } from "@/lib/welcome-content";
 import { isNearMessageBottom } from "@/lib/message-scroll";
 import { parseKnowledgeBrief } from "@/lib/knowledge-brief";
 import { CraftIcon } from "@/app/components/craft-icon";
+import { MemoryPanel } from "@/app/components/memory-panel";
 
 type Mode = "local" | "smart" | "teach" | "codex";
 type Appearance = "light" | "dark";
@@ -71,6 +72,7 @@ export default function Home() {
   const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab>("discover");
   const [knowledgePeriod, setKnowledgePeriod] = useState<"week" | "month">("week");
   const [readKnowledgeVersion, setReadKnowledgeVersion] = useState<string | null>(null);
+  const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -78,6 +80,7 @@ export default function Home() {
   const knowledgeCloseRef = useRef<HTMLButtonElement>(null);
   const conversationImportRef = useRef<HTMLInputElement>(null);
   const repositoryCloseRef = useRef<HTMLButtonElement>(null);
+  const closeMemoryPanel = useCallback(() => setMemoryPanelOpen(false), []);
 
   async function refreshStatus() {
     try {
@@ -631,6 +634,7 @@ export default function Home() {
           <span className="knowledge-launcher-action">{unreadKnowledge > 0 ? <b>{unreadKnowledge} new</b> : "Explore"} <CraftIcon name="chevron" size={14} /></span>
         </button>
         <a className="mastery-launcher" href="/mastery"><CraftIcon name="mastery" /><span><strong>Path to Mastery</strong><small>Skills, scores and public backlog</small></span><CraftIcon name="chevron" size={14} /></a>
+        <button type="button" className="memory-launcher" onClick={() => setMemoryPanelOpen(true)}><CraftIcon name="memory" /><span><strong>Local memory</strong><small>Approved facts and preferences</small></span><CraftIcon name="chevron" size={14} /></button>
         <label className="conversation-search">
           <CraftIcon name="search" size={15} />
           <input value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Search chats" aria-label="Search conversations" maxLength={120} />
@@ -871,6 +875,7 @@ export default function Home() {
           </aside>
         </div>
       )}
+      <MemoryPanel open={memoryPanelOpen} onClose={closeMemoryPanel} />
     </main>
   );
 }
