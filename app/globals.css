@@ -15,6 +15,9 @@
 html, body { margin: 0; height: 100%; overflow: hidden; background: #171613; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; }
 button, textarea, select { font: inherit; }
 button { color: inherit; }
+.craft-icon { display: block; flex: 0 0 auto; vector-effect: non-scaling-stroke; }
+button .craft-icon, a .craft-icon { transition: transform .18s ease, opacity .18s ease; }
+button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px); }
 
 .app-shell { display: grid; grid-template-columns: 248px minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
 .app-shell { background: var(--bg); color: var(--text); transition: background .3s ease, color .3s ease; }
@@ -22,7 +25,7 @@ button { color: inherit; }
 .brand { display: flex; align-items: center; gap: 11px; font-size: 18px; font-weight: 650; letter-spacing: -.02em; padding: 0 8px 22px; }
 .brand-mark, .avatar { background: url("/ranga/ranga-idle.png") center / contain no-repeat; }
 .brand-mark { width: 34px; height: 34px; filter: var(--mascot-filter) drop-shadow(0 5px 8px #0003); }
-.new-chat { background: var(--surface-raised); border: .5px solid var(--line); border-radius: 12px; padding: 11px 13px; text-align: left; cursor: pointer; transition: background .18s ease, transform .18s ease; }
+.new-chat { display: flex; align-items: center; gap: 9px; background: var(--surface-raised); border: .5px solid var(--line); border-radius: 12px; padding: 11px 13px; text-align: left; cursor: pointer; transition: background .18s ease, transform .18s ease; }
 .new-chat:hover { background: var(--hover); }.new-chat:active { transform: scale(.98); }
 .projects { display: grid; gap: 4px; margin-top: 22px; }
 .project-heading { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .08em; padding: 0 9px 5px; text-transform: uppercase; }
@@ -30,7 +33,7 @@ button { color: inherit; }
 .project-item.active, .project-item:hover, .project-row.active { background: var(--surface-raised); }
 .project-row { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; border: 0; color: var(--muted); background: transparent; border-radius: 10px; padding: 8px 9px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .project-item.active .project-row, .project-row.active { color: var(--text); }
-.project-row span { color: var(--accent); font-size: 12px; }
+.project-row .craft-icon { color: var(--accent); }
 .project-more { width: 24px; height: 24px; border: 0; color: var(--muted); background: transparent; border-radius: 50%; cursor: pointer; opacity: 0; }
 .project-item:hover .project-more, .project-item:focus-within .project-more { opacity: 1; }
 .project-more:hover { color: var(--text); background: var(--hover); }
@@ -82,8 +85,9 @@ header p { color: var(--muted); font-size: 12px; margin: 0; }
 .ranga-scene { position: relative; width: 142px; height: 96px; display: grid; place-items: center; }
 .welcome-orbit { position: relative; width: 82px; height: 82px; background: url("/ranga/ranga-idle.png") center / contain no-repeat; filter: var(--mascot-filter) drop-shadow(0 12px 18px #0003); transform: translate(calc(var(--look-x, 0) * 2px), calc(var(--look-y, 0) * 1.5px)); animation: ranga-curious 14s ease-in-out infinite; transition: filter .3s ease; }
 .welcome-orbit::before { content: ""; position: absolute; z-index: -1; inset: 13px; border-radius: 50%; background: radial-gradient(circle, #ff9f0a40, #bf5af21c 52%, transparent 72%); filter: blur(9px); }
-.butterfly { position: absolute; z-index: 2; color: color-mix(in srgb, var(--accent) 72%, #fff); font-size: 7px; opacity: 0; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 45%, transparent)); }
-.butterfly::after { content: "◆"; position: absolute; left: 5px; transform: scaleX(-1); }
+.butterfly { position: absolute; z-index: 2; width: 11px; height: 7px; opacity: 0; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 45%, transparent)); }
+.butterfly::before, .butterfly::after { content: ""; position: absolute; top: 1px; width: 6px; height: 5px; border: 1px solid color-mix(in srgb, var(--accent) 72%, #fff); border-radius: 70% 25% 65% 30%; transform: rotate(24deg); }
+.butterfly::before { left: 0; }.butterfly::after { right: 0; transform: scaleX(-1) rotate(24deg); }
 .butterfly.one { animation: butterfly-pass 14s ease-in-out infinite; }.butterfly.two { animation: butterfly-pass-two 19s ease-in-out 7s infinite; }
 .welcome-kicker { color: #bf5af2; font-size: 10px; font-weight: 700; letter-spacing: .15em; margin-top: 25px; }
 .welcome-state h2 { font-size: clamp(24px, 4vw, 34px); font-weight: 680; letter-spacing: -.035em; margin: 8px 0 14px; }

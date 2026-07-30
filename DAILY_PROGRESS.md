@@ -2,6 +2,10 @@
 
 ## 2026-07-30 — Path to Mastery
 
+- Established Rangabot's shared icon craft language: one 20-pixel grid, quiet
+  monoline geometry, purposeful negative space and no platform-dependent emoji.
+- Replaced functional glyphs throughout the main app and Path to Mastery, added
+  design documentation and regression coverage for future contributors.
 - Defined Rangabot's final state as an ever-loyal local-first personal assistant
   with permissioned, allowlisted web help only when local knowledge is missing.
 - Added eight mastery paths and 40 subskills that double as the public backlog.

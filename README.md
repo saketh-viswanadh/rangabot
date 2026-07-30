@@ -226,7 +226,8 @@ current scores and the next bounded task for every capability.
 Rangabot welcomes community development. Read
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), the
 [architecture](docs/architecture.md), [privacy model](docs/privacy.md), and
-[model guide](docs/models.md). Run `npm run check` before submitting a pull
+[model guide](docs/models.md). Interface contributions should follow the
+[Rangabot design language](docs/design-language.md). Run `npm run check` before submitting a pull
 request. Codex is optional; all required maintenance paths are normal scripts,
 documentation and GitHub workflows.
 

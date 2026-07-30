@@ -10,8 +10,8 @@ body:has(.mastery-shell) { margin: 0; color: var(--mastery-ink); background: #07
 .mastery-shell { min-height: 100vh; position: relative; padding: 28px clamp(18px, 4vw, 64px) 80px; overflow: visible; background: radial-gradient(circle at 50% 13%, #2a312e 0, #121820 25%, #080b10 63%, #05070a 100%); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; }
 .mastery-shell::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .2; background-image: linear-gradient(#ffffff08 1px, transparent 1px), linear-gradient(90deg, #ffffff08 1px, transparent 1px); background-size: 42px 42px; mask-image: radial-gradient(circle, black, transparent 78%); }
 .mastery-header { max-width: 1240px; min-height: 190px; margin: auto; padding: 0 250px 0 150px; position: relative; z-index: 1; }
-.mastery-back { position: absolute; top: 0; left: 0; padding: 10px 0; color: #d6d1c7; font-size: 14px; text-decoration: none; }
-.mastery-back span { margin-right: 4px; font-size: 22px; vertical-align: -2px; }
+.mastery-back { position: absolute; top: 0; left: 0; padding: 10px 0; display: flex; align-items: center; gap: 5px; color: #d6d1c7; font-size: 14px; text-decoration: none; }
+.mastery-back .craft-icon { transform: rotate(180deg); }
 .mastery-kicker, .mastery-branch header small, .mastery-core small, .detail-path { color: var(--mastery-gold-soft); font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .mastery-header h1 { margin: 5px 0 8px; font: 500 clamp(34px, 5vw, 62px)/.95 Georgia, serif; letter-spacing: -.04em; }
 .mastery-header p { max-width: 780px; margin: 0; color: #b9b6af; font-size: 15px; line-height: 1.55; }
@@ -48,7 +48,7 @@ body:has(.mastery-shell) { margin: 0; color: var(--mastery-ink); background: #07
 .mastery-branch::before { content: ""; position: absolute; top: -35px; left: 50%; width: 1px; height: 34px; background: linear-gradient(transparent, var(--branch-color)); }
 .mastery-branch header { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 11px; }
 .branch-glyph { width: 40px; height: 40px; display: grid; place-items: center; color: var(--branch-color); border: 1px solid var(--branch-color); transform: rotate(45deg); box-shadow: 0 0 18px color-mix(in srgb, var(--branch-color) 22%, transparent); }
-.branch-glyph i { font-style: normal; transform: rotate(-45deg); }
+.branch-glyph .craft-icon { transform: rotate(-45deg); }
 .mastery-branch h2 { margin: 2px 0 0; font: 500 24px Georgia, serif; }
 .mastery-branch > p { min-height: 36px; margin: 18px 3px; color: #a4a5a4; font-size: 13px; line-height: 1.5; }
 .mastery-branch ol { margin: 0; padding: 12px 0 0; position: relative; display: grid; gap: 27px; list-style: none; }
@@ -56,7 +56,8 @@ body:has(.mastery-shell) { margin: 0; color: var(--mastery-ink); background: #07
 .mastery-branch li { min-height: 52px; position: relative; }
 .mastery-branch button { width: 100%; padding: 3px 0; display: grid; grid-template-columns: 48px 1fr; align-items: center; gap: 12px; color: inherit; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .node-emblem { width: 44px; height: 44px; position: relative; z-index: 1; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--status) 72%, #111); background: radial-gradient(circle, color-mix(in srgb, var(--status) 18%, #10141a), #0b0e13 68%); transform: rotate(45deg); box-shadow: 0 0 14px var(--status-glow); transition: transform .2s ease, box-shadow .2s ease; }
-.node-emblem i { color: var(--status); font-size: 14px; font-style: normal; transform: rotate(-45deg); }
+.node-emblem i { width: 7px; height: 7px; border: 1px solid var(--status); border-radius: 50%; background: color-mix(in srgb, var(--status) 38%, transparent); box-shadow: 0 0 8px var(--status-glow); }
+[data-status="unlocked"] .node-emblem i, [data-status="mastered"] .node-emblem i { border-radius: 1px; transform: rotate(45deg); background: var(--status); }
 .mastery-branch button:hover .node-emblem, .mastery-branch button:focus-visible .node-emblem { transform: rotate(45deg) scale(1.08); box-shadow: 0 0 24px var(--status-glow); }
 .node-copy strong { display: block; color: #ddd9d1; font-size: 13px; font-weight: 600; }
 .node-copy small { display: block; margin-top: 4px; color: var(--status); font-size: 9px; letter-spacing: .09em; text-transform: uppercase; }
@@ -64,7 +65,7 @@ body:has(.mastery-shell) { margin: 0; color: var(--mastery-ink); background: #07
 .node-unlock small { color: var(--status); font-size: 9px; letter-spacing: .13em; text-transform: uppercase; }
 .node-unlock strong { color: #f0ede6; font-size: 11px; line-height: 1.45; }
 .node-unlock span { font-size: 10px; line-height: 1.4; }
-.node-unlock a { width: fit-content; margin-top: 3px; color: var(--mastery-gold-soft); font-size: 10px; text-decoration: none; }
+.node-unlock a { width: fit-content; margin-top: 3px; display: inline-flex; align-items: center; gap: 4px; color: var(--mastery-gold-soft); font-size: 10px; text-decoration: none; }
 .mastery-branch li:hover .node-unlock, .mastery-branch li:focus-within .node-unlock { max-height: 190px; margin-top: 10px; margin-bottom: 4px; padding: 14px; opacity: 1; border-width: 1px; box-shadow: 0 12px 32px #0008, 0 0 16px var(--status-glow); pointer-events: auto; }
 .mastery-achievements { max-width: 1116px; margin: 58px auto 0; padding: 32px; position: relative; z-index: 1; display: grid; grid-template-columns: minmax(240px, .8fr) minmax(320px, 1.2fr); gap: 35px; border: 1px solid #ddb45c33; border-radius: 24px; background: linear-gradient(135deg, #1c211ddd, #10151cdd); }
 .mastery-achievements h2 { margin: 7px 0; font: 500 30px Georgia, serif; }
@@ -77,10 +78,10 @@ body:has(.mastery-shell) { margin: 0; color: var(--mastery-ink); background: #07
 .mastery-achievements li strong { font-size: 12px; }
 .mastery-achievements li small { color: #9d998f; font-size: 9px; }
 .mastery-achievements li em { margin-top: 3px; color: #d4b672; font-size: 10px; font-style: normal; }
-.claim-skill { grid-column: 2; width: fit-content; color: var(--mastery-gold-soft); font-size: 11px; text-decoration: none; }
+.claim-skill { grid-column: 2; width: fit-content; display: inline-flex; align-items: center; gap: 5px; color: var(--mastery-gold-soft); font-size: 11px; text-decoration: none; }
 .mastery-footer { max-width: 1180px; margin: 48px auto 0; padding: 24px 0 0; display: flex; justify-content: space-between; gap: 30px; color: #96928a; border-top: 1px solid #ffffff14; font-size: 12px; line-height: 1.5; }
 .mastery-footer p { max-width: 760px; margin: 0; }
-.mastery-footer a, .detail-checklist { color: var(--mastery-gold-soft); text-decoration: none; }
+.mastery-footer a, .detail-checklist { display: inline-flex; align-items: center; gap: 5px; color: var(--mastery-gold-soft); text-decoration: none; }
 .mastery-footer a { white-space: nowrap; }
 .mastery-modal { position: fixed; inset: 0; z-index: 20; padding: 18px; display: grid; place-items: center; background: #030507bd; backdrop-filter: blur(12px); }
 .mastery-modal section { width: min(560px, 94vw); max-height: 88vh; overflow: auto; padding: 30px; position: relative; border: 1px solid color-mix(in srgb, var(--status) 55%, #333); background: linear-gradient(150deg, #1c222b, #0d1117); box-shadow: 0 22px 80px #000b, 0 0 35px var(--status-glow); }

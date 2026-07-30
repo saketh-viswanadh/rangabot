@@ -9,6 +9,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- A shared Japanese-craft-inspired SVG icon language across navigation, chat,
+  creation tools, local privacy controls, Knowledge Brief and Path to Mastery,
+  replacing platform-dependent Unicode symbols with restrained local geometry.
 - **Path to Mastery**, an interactive Assassin-inspired capability tree whose
   main paths, subskills, strict scores, dependencies, acceptance criteria and
   next tasks also form Rangabot's public contributor backlog.

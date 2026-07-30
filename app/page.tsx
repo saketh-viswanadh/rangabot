@@ -6,6 +6,7 @@ import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { appendWelcomeHistory, chooseWelcomeIndex, parseWelcomeHistory, welcomeLines } from "@/lib/welcome-content";
 import { isNearMessageBottom } from "@/lib/message-scroll";
 import { parseKnowledgeBrief } from "@/lib/knowledge-brief";
+import { CraftIcon } from "@/app/components/craft-icon";
 
 type Mode = "local" | "smart" | "teach" | "codex";
 type Appearance = "light" | "dark";
@@ -601,22 +602,22 @@ export default function Home() {
     <main className="app-shell" data-appearance={appearance} data-palette={palette} onPointerMove={followCursor}>
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark" aria-hidden="true" /><span>Rangabot</span></div>
-        <button className="new-chat" onClick={() => startNewChat()}>＋ New chat</button>
+        <button className="new-chat" onClick={() => startNewChat()}><CraftIcon name="add" /> New chat</button>
         <section className="projects" aria-label="Projects">
           <div className="project-heading"><span>Projects</span><span>{projects.length}</span></div>
-          <button type="button" className={`project-row ${activeProjectId === null ? "active" : ""}`} onClick={() => { setActiveProjectId(null); startNewChat(null); }}><span>▱</span> All chats</button>
+          <button type="button" className={`project-row ${activeProjectId === null ? "active" : ""}`} onClick={() => { setActiveProjectId(null); startNewChat(null); }}><CraftIcon name="chat" /> All chats</button>
           {projects.map((project) => <div className={`project-item ${activeProjectId === project.id ? "active" : ""}`} key={project.id}>
-            <button type="button" className="project-row" onClick={() => { setActiveProjectId(project.id); startNewChat(project.id); }}><span>▰</span>{project.name}</button>
-            <button type="button" className="project-more" onClick={() => void renameProject(project)} aria-label={`Rename ${project.name}`}>✎</button>
-            <button type="button" className="project-more" onClick={() => void removeProject(project)} aria-label={`Delete ${project.name}`}>×</button>
+            <button type="button" className="project-row" onClick={() => { setActiveProjectId(project.id); startNewChat(project.id); }}><CraftIcon name="folder" />{project.name}</button>
+            <button type="button" className="project-more" onClick={() => void renameProject(project)} aria-label={`Rename ${project.name}`}><CraftIcon name="edit" size={14} /></button>
+            <button type="button" className="project-more" onClick={() => void removeProject(project)} aria-label={`Delete ${project.name}`}><CraftIcon name="trash" size={14} /></button>
           </div>)}
-          <form className="project-create" onSubmit={createNewProject}><input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="New project" maxLength={60} aria-label="New project name" /><button type="submit" disabled={!newProjectName.trim()} aria-label="Create project">＋</button></form>
+          <form className="project-create" onSubmit={createNewProject}><input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="New project" maxLength={60} aria-label="New project name" /><button type="submit" disabled={!newProjectName.trim()} aria-label="Create project"><CraftIcon name="add" /></button></form>
         </section>
         <section className="repositories" aria-label="Allowed local repositories">
           <div className="repository-heading"><span>Local repositories</span><span>{allowedRepositories.length}</span></div>
           {allowedRepositories.map((repository) => <div className="repository-item" key={repository.id} title={repository.path}>
-            <button type="button" className="repository-open" onClick={() => openRepositorySearch(repository)} aria-label={`Search ${repository.name}`}><span aria-hidden="true">⌂</span><span><strong>{repository.name}</strong><small>{repository.path}</small></span></button>
-            <button type="button" onClick={() => void revokeLocalRepository(repository)} aria-label={`Revoke ${repository.name}`}>×</button>
+            <button type="button" className="repository-open" onClick={() => openRepositorySearch(repository)} aria-label={`Search ${repository.name}`}><CraftIcon name="folder" /><span><strong>{repository.name}</strong><small>{repository.path}</small></span></button>
+            <button type="button" onClick={() => void revokeLocalRepository(repository)} aria-label={`Revoke ${repository.name}`}><CraftIcon name="close" size={14} /></button>
           </div>)}
           <form className="repository-create" onSubmit={allowLocalRepository}>
             <input value={repositoryPath} onChange={(event) => setRepositoryPath(event.target.value)} placeholder="/absolute/path/to/project" aria-label="Repository folder path" maxLength={1024} />
@@ -627,13 +628,13 @@ export default function Home() {
         </section>
         <button type="button" className="knowledge-launcher" onClick={() => openKnowledgeBrief()}>
           <span><strong>Knowledge Brief</strong><small>{knowledgeStatus ? `${knowledgeStatus.documents} docs · ${(knowledgeStatus.usedBytes / 1024 ** 2).toFixed(0)} MB` : "Loading…"}</small></span>
-          <span className="knowledge-launcher-action">{unreadKnowledge > 0 ? <b>{unreadKnowledge} new</b> : "Explore"} <i aria-hidden="true">›</i></span>
+          <span className="knowledge-launcher-action">{unreadKnowledge > 0 ? <b>{unreadKnowledge} new</b> : "Explore"} <CraftIcon name="chevron" size={14} /></span>
         </button>
-        <a className="mastery-launcher" href="/mastery"><span aria-hidden="true">✦</span><span><strong>Path to Mastery</strong><small>Skills, scores and public backlog</small></span><i aria-hidden="true">›</i></a>
+        <a className="mastery-launcher" href="/mastery"><CraftIcon name="mastery" /><span><strong>Path to Mastery</strong><small>Skills, scores and public backlog</small></span><CraftIcon name="chevron" size={14} /></a>
         <label className="conversation-search">
-          <span aria-hidden="true">⌕</span>
+          <CraftIcon name="search" size={15} />
           <input value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Search chats" aria-label="Search conversations" maxLength={120} />
-          {conversationSearch && <button type="button" onClick={() => setConversationSearch("")} aria-label="Clear conversation search">×</button>}
+          {conversationSearch && <button type="button" onClick={() => setConversationSearch("")} aria-label="Clear conversation search"><CraftIcon name="close" size={13} /></button>}
         </label>
         <div className="conversation-tools">
           <button type="button" onClick={() => conversationImportRef.current?.click()}>Import .md</button>
@@ -649,13 +650,13 @@ export default function Home() {
           {visibleConversations.map((conversation) => (
             <div className={`history-row ${conversation.id === activeConversationId ? "active" : ""} ${conversation.pinned ? "pinned" : ""}`} key={conversation.id}>
               <button type="button" onClick={() => void openConversation(conversation.id)}>{conversation.title}</button>
-              <button type="button" className="pin-chat" onClick={() => void toggleConversationPin(conversation)} aria-label={`${conversation.pinned ? "Unpin" : "Pin"} ${conversation.title}`} aria-pressed={conversation.pinned}>{conversation.pinned ? "Pinned" : "Pin"}</button>
-              <button type="button" className="delete-chat" onClick={() => void removeConversation(conversation.id)} aria-label={`Delete ${conversation.title}`}>×</button>
+              <button type="button" className="pin-chat" onClick={() => void toggleConversationPin(conversation)} aria-label={`${conversation.pinned ? "Unpin" : "Pin"} ${conversation.title}`} aria-pressed={conversation.pinned}><CraftIcon name="pin" size={13} /></button>
+              <button type="button" className="delete-chat" onClick={() => void removeConversation(conversation.id)} aria-label={`Delete ${conversation.title}`}><CraftIcon name="trash" size={13} /></button>
             </div>
           ))}
         </nav>
         <div className="privacy-card">
-          <span className="shield">◆</span>
+          <span className="shield"><CraftIcon name="shield" /></span>
           <div><strong>Private by default</strong><p>Nothing is sent to the cloud in this milestone.</p></div>
         </div>
       </aside>
@@ -665,10 +666,10 @@ export default function Home() {
           <div><h1>Rangabot</h1><p>Code, think, and build privately</p></div>
           <div className="header-actions">
             <button type="button" className="knowledge-header-button" onClick={() => openKnowledgeBrief()} aria-label={`Open Knowledge Brief${unreadKnowledge ? `, ${unreadKnowledge} new items` : ""}`}>
-              ◈<span>Brief</span>{unreadKnowledge > 0 && <b>{unreadKnowledge}</b>}
+              <CraftIcon name="knowledge" size={15} /><span>Brief</span>{unreadKnowledge > 0 && <b>{unreadKnowledge}</b>}
             </button>
             <div className="theme-picker" aria-label="Theme settings">
-              <button type="button" className="appearance-toggle" onClick={() => changeAppearance(appearance === "dark" ? "light" : "dark")} aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}>{appearance === "dark" ? "☀︎" : "☾"}</button>
+              <button type="button" className="appearance-toggle" onClick={() => changeAppearance(appearance === "dark" ? "light" : "dark")} aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}><CraftIcon name={appearance === "dark" ? "sun" : "moon"} size={15} /></button>
               {(["sand", "sage", "lavender"] as Palette[]).map((choice) => <button type="button" key={choice} className={`palette-dot ${choice} ${palette === choice ? "selected" : ""}`} onClick={() => changePalette(choice)} aria-label={`Use ${choice} palette`} />)}
             </div>
             <button className={`status ${ready ? "ready" : "offline"}`} onClick={refreshStatus}>
@@ -689,31 +690,31 @@ export default function Home() {
         >
           {messages.length === 0 && (
             <section className="welcome-state" aria-labelledby="welcome-title">
-              <div className="ranga-scene" aria-hidden="true"><span className="butterfly one">◆</span><span className="butterfly two">◆</span><div className="welcome-orbit" /></div>
+              <div className="ranga-scene" aria-hidden="true"><span className="butterfly one" /><span className="butterfly two" /><div className="welcome-orbit" /></div>
               <span className="welcome-kicker">{welcomeLines[welcomeIndex].kind}</span>
               <h2 id="welcome-title">A fresh conversation</h2>
               <blockquote>“{welcomeLines[welcomeIndex].text}”</blockquote>
               <cite>— {welcomeLines[welcomeIndex].credit}</cite>
               <div className="starter-grid" aria-label="Conversation starters">
                 <button type="button" onClick={() => chooseStarter("Help me think through an idea: ")}>
-                  <span className="starter-icon idea" aria-hidden="true">✦</span>
+                  <span className="starter-icon idea"><CraftIcon name="spark" /></span>
                   <span><strong>Explore an idea</strong><small>Brainstorm it locally</small></span>
-                  <i aria-hidden="true">›</i>
+                  <CraftIcon name="chevron" size={14} />
                 </button>
                 <button type="button" onClick={() => chooseStarter("Help me with this coding task: ")}>
-                  <span className="starter-icon code" aria-hidden="true">⌘</span>
+                  <span className="starter-icon code"><CraftIcon name="code" /></span>
                   <span><strong>Build something</strong><small>Plan or improve code</small></span>
-                  <i aria-hidden="true">›</i>
+                  <CraftIcon name="chevron" size={14} />
                 </button>
                 <button type="button" onClick={() => chooseStarter("Help me write this email. Ask me for the audience, purpose, tone, and key details before drafting: ")}>
-                  <span className="starter-icon mail" aria-hidden="true">✉</span>
+                  <span className="starter-icon mail"><CraftIcon name="mail" /></span>
                   <span><strong>Write an email</strong><small>Draft it locally in the right tone</small></span>
-                  <i aria-hidden="true">›</i>
+                  <CraftIcon name="chevron" size={14} />
                 </button>
                 <button type="button" onClick={() => chooseStarter("I want to create a professional Word document. Please ask me what you need before creating it: ")}>
-                  <span className="starter-icon document" aria-hidden="true">▤</span>
+                  <span className="starter-icon document"><CraftIcon name="document" /></span>
                   <span><strong>Create a Word document</strong><small>Draft, validate and preview locally</small></span>
-                  <i aria-hidden="true">›</i>
+                  <CraftIcon name="chevron" size={14} />
                 </button>
               </div>
             </section>
@@ -724,7 +725,7 @@ export default function Home() {
               <div className="message-body">
                 {message.replyTo && <div className="reply-reference"><strong>{message.replyTo.role === "assistant" ? "Rangabot" : "You"}</strong><span>{message.replyTo.excerpt}</span></div>}
                 {message.codeContext && <div className="message-code-reference"><strong>Attached code</strong><span>{message.codeContext.repository} · {message.codeContext.path} · lines {message.codeContext.startLine}–{message.codeContext.endLine}</span></div>}
-                {message.wordArtifact && <div className="chat-word-artifact"><span aria-hidden="true">W</span><div><strong>{message.wordArtifact.title}</strong><small>{message.wordArtifact.filename} · {message.wordArtifact.previewPages} rendered page{message.wordArtifact.previewPages === 1 ? "" : "s"}</small><nav><a href={`/api/artifacts/word/${message.wordArtifact.id}/document`}>Download .docx</a>{message.wordArtifact.previewPages > 0 && <a href={`/api/artifacts/word/${message.wordArtifact.id}/preview/1`} target="_blank" rel="noreferrer">Review preview</a>}</nav></div></div>}
+                {message.wordArtifact && <div className="chat-word-artifact"><span><CraftIcon name="document" /></span><div><strong>{message.wordArtifact.title}</strong><small>{message.wordArtifact.filename} · {message.wordArtifact.previewPages} rendered page{message.wordArtifact.previewPages === 1 ? "" : "s"}</small><nav><a href={`/api/artifacts/word/${message.wordArtifact.id}/document`}>Download .docx</a>{message.wordArtifact.previewPages > 0 && <a href={`/api/artifacts/word/${message.wordArtifact.id}/preview/1`} target="_blank" rel="noreferrer">Review preview</a>}</nav></div></div>}
                 {message.source && <span className="source">LOCAL{message.knowledgeUsed || message.retrievalMode ? ` · KNOWLEDGE VAULT${message.retrievalMode === "hybrid" ? " · HYBRID" : message.retrievalMode === "keyword-only" ? " · KEYWORD ONLY" : ""}` : ""}</span>}
                 {message.content && (message.role === "assistant"
                   ? <MarkdownMessage content={message.content} />
@@ -738,7 +739,7 @@ export default function Home() {
                 {message.stopped && (
                   <div className="stopped-state" role="status"><i aria-hidden="true" /> Stopped</div>
                 )}
-                {!message.active && !message.error && <button type="button" className="reply-button" onClick={() => { setReplyTo(message); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus()); }} aria-label="Reply to this message">↩ <span>Reply</span></button>}
+                {!message.active && !message.error && <button type="button" className="reply-button" onClick={() => { setReplyTo(message); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus()); }} aria-label="Reply to this message"><CraftIcon name="reply" size={14} /><span>Reply</span></button>}
               </div>
             </article>
           ))}
@@ -751,8 +752,8 @@ export default function Home() {
             <span>{status?.available ? `Run: ollama pull ${status.configuredModel}` : "The app is ready and waiting for the local model service."}</span>
           </div>}
           <form className="composer" onSubmit={sendMessage}>
-            {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply">×</button></div>}
-            {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code">×</button></div>}
+            {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
+            {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -774,9 +775,9 @@ export default function Home() {
               </select>
               <span className="route-note">{mode === "codex" ? "Cloud handoff not enabled" : mode === "teach" ? "Strict vault teaching with citations" : mode === "smart" ? "Automatically uses local knowledge" : "Stays on this computer"}</span>
               {sending ? (
-                <button className="stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating">■</button>
+                <button className="stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating"><CraftIcon name="stop" /></button>
               ) : (
-                <button type="submit" disabled={!input.trim()} aria-label="Send">↑</button>
+                <button type="submit" disabled={!input.trim()} aria-label="Send"><CraftIcon name="send" /></button>
               )}
             </div>
           </form>
@@ -789,7 +790,7 @@ export default function Home() {
           <aside className="knowledge-panel" role="dialog" aria-modal="true" aria-labelledby="knowledge-panel-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="knowledge-panel-header">
               <div><span>Local intelligence</span><h2 id="knowledge-panel-title">Knowledge Brief</h2></div>
-              <button type="button" ref={knowledgeCloseRef} onClick={() => setKnowledgePanelOpen(false)} aria-label="Close Knowledge Brief">×</button>
+              <button type="button" ref={knowledgeCloseRef} onClick={() => setKnowledgePanelOpen(false)} aria-label="Close Knowledge Brief"><CraftIcon name="close" /></button>
             </div>
             <nav className="knowledge-tabs" aria-label="Knowledge Brief sections">
               <button type="button" className={knowledgeTab === "discover" ? "active" : ""} onClick={() => setKnowledgeTab("discover")}>Discover</button>
@@ -814,7 +815,7 @@ export default function Home() {
                         {item.evidenceUrl ? <a href={item.evidenceUrl} target="_blank" rel="noreferrer">{item.evidenceLabel || "Source"}</a> : <span>{item.evidenceLabel}</span>}
                         <small>{item.vaultStatus}</small>
                       </div>
-                      <button type="button" className="ask-update" onClick={() => askAboutUpdate(item.title)}>Ask Rangabot about this <span aria-hidden="true">→</span></button>
+                      <button type="button" className="ask-update" onClick={() => askAboutUpdate(item.title)}>Ask Rangabot about this <CraftIcon name="arrow" size={14} /></button>
                     </article>)}
                   </div>
                 ) : <div className="knowledge-markdown"><MarkdownMessage content={knowledgeUpdates?.month ?? "No monthly brief is available yet."} /></div>}
@@ -845,7 +846,7 @@ export default function Home() {
           <aside className="code-panel" role="dialog" aria-modal="true" aria-labelledby="code-panel-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="knowledge-panel-header">
               <div><span>Approved folder · local only</span><h2 id="code-panel-title">{selectedRepository.name}</h2><small>{selectedRepository.path}</small></div>
-              <button type="button" ref={repositoryCloseRef} onClick={() => setRepositoryPanelOpen(false)} aria-label="Close code search">×</button>
+              <button type="button" ref={repositoryCloseRef} onClick={() => setRepositoryPanelOpen(false)} aria-label="Close code search"><CraftIcon name="close" /></button>
             </div>
             <form className="code-search-form" onSubmit={searchAllowedRepository}>
               <input value={codeQuery} onChange={(event) => setCodeQuery(event.target.value)} placeholder="Search code and text files" aria-label="Search repository code" minLength={2} maxLength={120} />
