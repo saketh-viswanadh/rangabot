@@ -10,6 +10,7 @@ import { previewRepositoryFile } from "@/lib/repository-search";
 import { buildConversationSummaryFallback, buildWordConversationPrompt, buildWordDraftPrompt, buildWordSourceTranscript, createWordArtifact, isWordConversationSummaryRequest, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, shouldPlanWordDocument, validateWordDraftForBrief, type WordDocumentBrief } from "@/lib/word-documents";
 import { findStoryPack } from "@/lib/story-packs";
 import { isValidChatMessages } from "@/lib/chat-validation";
+import { buildKnowledgeSearchQuery } from "@/lib/knowledge-query-planning";
 
 export const runtime = "nodejs";
 
@@ -126,10 +127,11 @@ export async function POST(request: Request) {
           headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff", "X-Rangabot-Knowledge": "used" },
         });
       }
-      const { results: sources, mode: retrievalMode } = await searchKnowledgeWithDiagnostics(question, 5);
+      const history = body.messages.slice(0, -1);
+      const retrievalQuery = buildKnowledgeSearchQuery(question, history);
+      const { results: sources, mode: retrievalMode } = await searchKnowledgeWithDiagnostics(retrievalQuery, 5);
       knowledgeSources = sources;
       knowledgeSearchMode = retrievalMode;
-      const history = body.messages.slice(0, -1);
       const teacherMode = body.mode === "teach";
       messages = teacherMode ? buildTeacherMessages(question, history, sources) : [
         { role: "system", content: "You are Rangabot using an automatic, entirely local Knowledge Vault lookup. Use supplied passages when they help answer the question, but ignore irrelevant passages. Cite claims drawn from them as [Source 1], [Source 2], or [Source 3]. You may use your own local-model knowledge for gaps, but clearly distinguish it from cited vault evidence and never imply that it is current or source-verified." },

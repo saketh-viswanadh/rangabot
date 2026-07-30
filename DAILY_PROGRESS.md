@@ -1,5 +1,17 @@
 # Daily progress
 
+## 2026-07-30 — Conversation-aware follow-up retrieval
+
+- Added a bounded local query-planning step for context-dependent follow-ups.
+- Vague questions such as “What about its limitations?” now carry the latest
+  substantive user topic into hybrid Knowledge Vault retrieval.
+- Self-contained questions remain unchanged, assistant prose is not copied into
+  the search query, and the model still answers the user's original wording.
+- Added regression coverage for contextual, standalone, and missing-context
+  cases; the full 73-test suite and required quality checks pass.
+- Confirmed the weekly welcome and Knowledge Vault reviews were already
+  completed on 2026-07-28, so no unnecessary content churn was introduced.
+
 ## 2026-07-29 — Critical full-tree and GitHub audit
 
 - Verified the public repository, branch protection, successful required CI,
