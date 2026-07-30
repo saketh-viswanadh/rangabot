@@ -1,0 +1,5 @@
+# Official mastery scores and contributor recognition require maintainer review.
+/content/path-to-mastery.json @saketh-viswanadh
+/content/mastery-contributors.json @saketh-viswanadh
+/lib/mastery-contributors.ts @saketh-viswanadh
+/scripts/generate-mastery-tree.ts @saketh-viswanadh

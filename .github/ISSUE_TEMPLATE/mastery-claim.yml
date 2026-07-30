@@ -1,0 +1,36 @@
+name: Mastery contribution claim
+description: Request official credit for a verified contribution to a Path to Mastery node.
+title: "[Mastery claim]: "
+labels: [mastery-claim]
+body:
+  - type: input
+    id: node
+    attributes:
+      label: Mastery node ID
+      description: Use the ID linked from docs/PATH_TO_MASTERY.md.
+      placeholder: hybrid-retrieval
+    validations:
+      required: true
+  - type: textarea
+    id: contribution
+    attributes:
+      label: Concrete contribution
+      description: Explain what you personally designed, implemented, tested or documented.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Merged evidence
+      description: Link merged Rangabot pull requests or commits. Open work is not official evidence.
+    validations:
+      required: true
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Public recognition consent
+      options:
+        - label: I want my GitHub handle and this contribution displayed publicly in Rangabot.
+          required: true
+        - label: Any portrait I submit may be stored in the public repository and displayed locally.
+          required: false

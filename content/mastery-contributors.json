@@ -1,11 +1,34 @@
 {
-  "policy": "Recognition is opt-in. Portraits must be locally committed with the contributor's permission; Rangabot never fetches GitHub avatars at runtime.",
+  "version": 1,
+  "policy": "Official recognition is opt-in and evidence-backed. Claims change only through a pull request approved by the official CODEOWNER. Portraits must be committed locally with permission; Rangabot never fetches GitHub avatars at runtime.",
   "contributors": [
     {
       "name": "Saketh Viswanadha",
       "github": "saketh-viswanadh",
       "avatar": null,
-      "achievement": "Founded Rangabot and opened its first paths to mastery"
+      "role": "Founder and lead maintainer",
+      "achievement": "Founded Rangabot and opened its first paths to mastery",
+      "claims": [
+        { "nodeId": "local-conversation", "contribution": "Created the original local-first chat and Ollama foundation.", "evidence": [{ "kind": "commit", "reference": "f831dca" }] },
+        { "nodeId": "intent-planning", "contribution": "Added conversation-aware retrieval planning.", "evidence": [{ "kind": "pull_request", "reference": "#51" }] },
+        { "nodeId": "self-review", "contribution": "Built grounding review and revision loops.", "evidence": [{ "kind": "pull_request", "reference": "#47" }, { "kind": "pull_request", "reference": "#50" }] },
+        { "nodeId": "vault-ingestion", "contribution": "Built and hardened the local Knowledge Vault ingestion system.", "evidence": [{ "kind": "commit", "reference": "46bd087" }, { "kind": "pull_request", "reference": "#42" }] },
+        { "nodeId": "hybrid-retrieval", "contribution": "Added native local vector search and hybrid retrieval.", "evidence": [{ "kind": "pull_request", "reference": "#45" }] },
+        { "nodeId": "teacher-mode", "contribution": "Created Teacher Mode and strengthened grounded synthesis.", "evidence": [{ "kind": "commit", "reference": "46bd087" }, { "kind": "pull_request", "reference": "#47" }, { "kind": "pull_request", "reference": "#50" }] },
+        { "nodeId": "current-awareness", "contribution": "Created local subject briefs and the Knowledge Brief experience.", "evidence": [{ "kind": "commit", "reference": "3fc925a" }, { "kind": "pull_request", "reference": "#32" }] },
+        { "nodeId": "analysis-knowledge", "contribution": "Established broad RAG quality evaluation fixtures.", "evidence": [{ "kind": "pull_request", "reference": "#46" }, { "kind": "pull_request", "reference": "#48" }] },
+        { "nodeId": "repo-context", "contribution": "Added the explicit local repository allowlist.", "evidence": [{ "kind": "pull_request", "reference": "#36" }] },
+        { "nodeId": "code-understanding", "contribution": "Added scoped code search, previews and chat attachments.", "evidence": [{ "kind": "pull_request", "reference": "#37" }, { "kind": "pull_request", "reference": "#38" }] },
+        { "nodeId": "word-create", "contribution": "Built conversational local Word document creation.", "evidence": [{ "kind": "pull_request", "reference": "#40" }, { "kind": "pull_request", "reference": "#41" }] },
+        { "nodeId": "projects", "contribution": "Created persistent local projects and project conversations.", "evidence": [{ "kind": "commit", "reference": "b4fce56" }] },
+        { "nodeId": "local-first", "contribution": "Established and hardened Rangabot's local-first privacy boundary.", "evidence": [{ "kind": "pull_request", "reference": "#15" }, { "kind": "pull_request", "reference": "#50" }] },
+        { "nodeId": "provenance", "contribution": "Added source-grounding audits and evidence separation.", "evidence": [{ "kind": "pull_request", "reference": "#47" }, { "kind": "pull_request", "reference": "#49" }] },
+        { "nodeId": "evaluation", "contribution": "Built retrieval and 60-question answer-quality benchmarks.", "evidence": [{ "kind": "pull_request", "reference": "#46" }, { "kind": "pull_request", "reference": "#48" }] },
+        { "nodeId": "chat-experience", "contribution": "Designed the responsive chat, scrolling, search, pinning and crafted icon system.", "evidence": [{ "kind": "pull_request", "reference": "#31" }, { "kind": "pull_request", "reference": "#34" }, { "kind": "pull_request", "reference": "#52" }] },
+        { "nodeId": "ranga-personality", "contribution": "Created Ranga's mascot presence, themes and interaction details.", "evidence": [{ "kind": "commit", "reference": "17a8f2d" }, { "kind": "pull_request", "reference": "#52" }] },
+        { "nodeId": "mastery-tree", "contribution": "Designed and shipped the public Path to Mastery.", "evidence": [{ "kind": "pull_request", "reference": "#52" }] },
+        { "nodeId": "community-growth", "contribution": "Prepared Rangabot for open-source collaboration and public launch.", "evidence": [{ "kind": "pull_request", "reference": "#15" }, { "kind": "pull_request", "reference": "#30" }] }
+      ]
     }
   ]
 }

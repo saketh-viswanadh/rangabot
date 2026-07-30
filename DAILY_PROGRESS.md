@@ -2,6 +2,12 @@
 
 ## 2026-07-30 — Path to Mastery
 
+- Added official contributor-claim governance: CODEOWNERS, merged-evidence
+  validation, an opt-in claim template and node-level credits in the app.
+- Audited project history and recorded Saketh's founder credit across 19
+  implemented capabilities; no locked or merely proposed skill was claimed.
+- Marked Path to Mastery unlocked after merged PR #52 and passing Linux and
+  Windows validation.
 - Established Rangabot's shared icon craft language: one 20-pixel grid, quiet
   monoline geometry, purposeful negative space and no platform-dependent emoji.
 - Replaced functional glyphs throughout the main app and Path to Mastery, added
