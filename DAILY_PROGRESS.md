@@ -265,3 +265,6 @@ quality evaluation, and it can be validated without changing model weights.
   chats while prohibiting silent inference or automatic profile building.
 - Added validation and lifecycle tests; automatic proficiency tracking and
   memory import remain separate follow-up milestones.
+- Hardened direct recall after a real name-memory failure: identity and memory
+  review questions now resolve against approved records before model generation,
+  including an explicit no-guess response when the requested fact is absent.

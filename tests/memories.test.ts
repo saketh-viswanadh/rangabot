@@ -33,3 +33,11 @@ test("rejects silent or unbounded memory input", () => {
   assert.throws(() => memories.validateMemoryInput("x".repeat(501), "fact"), /1–500/);
   assert.throws(() => memories.validateMemoryInput("Secret", "inferred"), /kind/i);
 });
+
+test("answers direct identity recall from approved memory without model improvisation", () => {
+  const name = memories.createMemory("My name is Saketh", "fact");
+  assert.equal(memories.answerDirectMemoryQuestion("What is my name?"), "Your name is Saketh. You explicitly saved that in Local memory.");
+  assert.match(memories.answerDirectMemoryQuestion("What do you remember about me?") ?? "", /My name is Saketh/);
+  memories.deleteMemory(name.id);
+  assert.match(memories.answerDirectMemoryQuestion("What's my name?") ?? "", /won't guess/);
+});

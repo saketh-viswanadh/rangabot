@@ -85,6 +85,30 @@ export function formatMemoryContext(limit = 20): string | null {
   return `USER-APPROVED LOCAL MEMORY:\n${memories.map((memory) => `- [${memory.kind}] ${memory.content}`).join("\n")}\nUse these only when relevant. Treat them as user-provided context, not independently verified facts. Never claim you inferred or learned anything beyond this list.`;
 }
 
+function savedName(memories: LocalMemory[]) {
+  for (const memory of memories) {
+    const match = memory.content.match(/^(?:my name is|call me)\s+(.+?)[.!]?$/i);
+    if (match?.[1]) return match[1].trim();
+  }
+  return null;
+}
+
+export function answerDirectMemoryQuestion(question: string): string | null {
+  const normalized = question.trim().toLowerCase().replace(/[’]/g, "'");
+  const memories = listMemories();
+  if (/^(?:what(?:'s| is) my name|do you (?:know|remember) my name|who am i)[?.!]*$/i.test(normalized)) {
+    const name = savedName(memories);
+    return name
+      ? `Your name is ${name}. You explicitly saved that in Local memory.`
+      : "You haven't saved your name in Local memory yet, so I won't guess.";
+  }
+  if (/^(?:what do you remember about me|show (?:me )?(?:my |your )?(?:saved )?memories|what have i asked you to remember)[?.!]*$/i.test(normalized)) {
+    if (!memories.length) return "You haven't approved any Local memory yet.";
+    return `You have approved these Local memories:\n${memories.map((memory) => `- **${memory.kind}:** ${memory.content}`).join("\n")}`;
+  }
+  return null;
+}
+
 export function exportMemoriesJson(exportedAt = new Date().toISOString()): string {
   return `${JSON.stringify({ version: 1, exportedAt, memories: listMemories() }, null, 2)}\n`;
 }
