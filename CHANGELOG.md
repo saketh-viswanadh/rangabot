@@ -9,6 +9,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- **Path to Mastery**, an interactive Assassin-inspired capability tree whose
+  main paths, subskills, strict scores, dependencies, acceptance criteria and
+  next tasks also form Rangabot's public contributor backlog.
+- A canonical mastery JSON model and generated Markdown view, including an
+  approved persistent web-allowlist node that must unlock before web research.
 - Conversation-aware local retrieval planning for context-dependent follow-up
   questions, using the latest substantive user topic without changing the
   question Rangabot answers.

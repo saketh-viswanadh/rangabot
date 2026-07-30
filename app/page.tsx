@@ -629,6 +629,7 @@ export default function Home() {
           <span><strong>Knowledge Brief</strong><small>{knowledgeStatus ? `${knowledgeStatus.documents} docs · ${(knowledgeStatus.usedBytes / 1024 ** 2).toFixed(0)} MB` : "Loading…"}</small></span>
           <span className="knowledge-launcher-action">{unreadKnowledge > 0 ? <b>{unreadKnowledge} new</b> : "Explore"} <i aria-hidden="true">›</i></span>
         </button>
+        <a className="mastery-launcher" href="/mastery"><span aria-hidden="true">✦</span><span><strong>Path to Mastery</strong><small>Skills, scores and public backlog</small></span><i aria-hidden="true">›</i></a>
         <label className="conversation-search">
           <span aria-hidden="true">⌕</span>
           <input value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Search chats" aria-label="Search conversations" maxLength={120} />

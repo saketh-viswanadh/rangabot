@@ -1,5 +1,17 @@
 # Daily progress
 
+## 2026-07-30 — Path to Mastery
+
+- Defined Rangabot's final state as an ever-loyal local-first personal assistant
+  with permissioned, allowlisted web help only when local knowledge is missing.
+- Added eight mastery paths and 40 subskills that double as the public backlog.
+- Added strict Vision, Locked, Ready, In progress, Training, Unlocked, Mastered
+  and Regressed states; merging code alone never unlocks a skill.
+- Added an interactive connected mastery view with node details, scores,
+  dependencies, evidence, acceptance criteria and the next task.
+- Added canonical JSON, generated Markdown and validation that prevents unknown
+  dependencies or unapproved web research from silently appearing unlocked.
+
 ## 2026-07-30 — Conversation-aware follow-up retrieval
 
 - Added a bounded local query-planning step for context-dependent follow-ups.

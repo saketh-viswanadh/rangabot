@@ -27,6 +27,12 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 
 ## Approved
 
+- [x] Path to Mastery: canonical evidence-backed skill tree, interactive app
+  view, generated public backlog and regression-safe unlock states
+- [ ] Persistent local web-domain allowlist with editable capability scopes,
+  query previews and immediate revocation
+- [ ] Permissioned web research that runs only after local knowledge is
+  insufficient and only against approved domains and queries
 - [x] Open-source governance, security, support and contribution foundation
 - [x] Guided/non-interactive setup, doctor and privacy-check commands
 - [x] Public local-model registry with hardware and upstream-license guidance
