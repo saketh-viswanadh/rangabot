@@ -18,7 +18,9 @@ const branchIcons: CraftIconName[] = ["spark", "knowledge", "search", "code", "d
 
 export default function MasteryPage() {
   const progress = useMemo(() => masteryProgress(tree), []);
+  const nodeNames = useMemo(() => new Map(tree.branches.flatMap((branch) => branch.nodes.map((node) => [node.id, node.name]))), []);
   const [selected, setSelected] = useState<SelectedNode | null>(null);
+  const selectedContributors = selected ? contributorsData.contributors.filter((contributor) => contributor.claims.some((claim) => claim.nodeId === selected.id)) : [];
   return (
     <main className="mastery-shell">
       <header className="mastery-header">
@@ -50,7 +52,7 @@ export default function MasteryPage() {
           </article>
         ))}
       </section>
-      <section className="mastery-achievements" aria-labelledby="achievement-title"><div><span className="mastery-kicker">Built by the pack</span><h2 id="achievement-title">Achievements remembered</h2><p>Every credited milestone stays attached to the people who helped unlock it. Contributor portraits are opt-in and stored locally.</p></div><ul>{contributorsData.contributors.map((contributor) => <li key={contributor.github}><a href={`https://github.com/${contributor.github}`} target="_blank" rel="noreferrer"><span className="contributor-avatar" aria-hidden="true">{contributor.avatar ? <Image src={contributor.avatar} alt="" width={48} height={48} /> : contributor.name.slice(0, 1)}</span><span><strong>{contributor.name}</strong><small>@{contributor.github}</small><em>{contributor.achievement}</em></span></a></li>)}</ul><a className="claim-skill" href={`${repositoryUrl}/issues/new?title=Claim%20a%20Path%20to%20Mastery%20node`} target="_blank" rel="noreferrer">Claim a skill node on GitHub <CraftIcon name="external" size={12} /></a></section>
+      <section className="mastery-achievements" aria-labelledby="achievement-title"><div><span className="mastery-kicker">Built by the pack</span><h2 id="achievement-title">Achievements remembered</h2><p>Every credited milestone stays attached to the people who helped unlock it. Claims require merged evidence and official CODEOWNER approval.</p></div><ul>{contributorsData.contributors.map((contributor) => <li key={contributor.github}><a href={`https://github.com/${contributor.github}`} target="_blank" rel="noreferrer"><span className="contributor-avatar" aria-hidden="true">{contributor.avatar ? <Image src={contributor.avatar} alt="" width={48} height={48} /> : contributor.name.slice(0, 1)}</span><span><strong>{contributor.name}</strong><small>@{contributor.github} · {contributor.role}</small><em>{contributor.achievement}</em><b>{contributor.claims.length} verified contributions</b><span className="contributor-claims">{contributor.claims.map((claim) => <i key={claim.nodeId}>{nodeNames.get(claim.nodeId)}</i>)}</span></span></a></li>)}</ul><a className="claim-skill" href={`${repositoryUrl}/issues/new?template=mastery-claim.yml`} target="_blank" rel="noreferrer">Request an official contribution claim <CraftIcon name="external" size={12} /></a></section>
       <footer className="mastery-footer"><p><strong>This tree is also the backlog.</strong> Nodes unlock only after their code is merged and every listed acceptance criterion passes. A failed regression can relock a skill.</p><a href={repositoryUrl} target="_blank" rel="noreferrer">View Rangabot on GitHub <CraftIcon name="external" size={12} /></a></footer>
       {selected && <div className="mastery-modal" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setSelected(null); }}>
         <section role="dialog" aria-modal="true" aria-labelledby="selected-mastery-title" data-status={selected.status}>
@@ -61,6 +63,7 @@ export default function MasteryPage() {
           <a className="detail-checklist" href={`${repositoryUrl}/blob/main/docs/PATH_TO_MASTERY.md#${selected.id}`} target="_blank" rel="noreferrer">Open the complete public checklist <CraftIcon name="external" size={12} /></a>
           <h3>Dependencies</h3><p className="detail-tags">{selected.dependencies.length ? selected.dependencies.map((dependency) => <span key={dependency}>{dependency.replaceAll("-", " ")}</span>) : <span>Foundation node</span>}</p>
           <h3>Evidence</h3><p className="detail-tags">{selected.evidence.length ? selected.evidence.map((evidence) => <span key={evidence}>{evidence}</span>) : <span>No verified evidence yet</span>}</p>
+          <h3>Contributors</h3>{selectedContributors.length ? <ul className="detail-contributors">{selectedContributors.map((contributor) => { const claim = contributor.claims.find((item) => item.nodeId === selected.id); return <li key={contributor.github}><strong>{contributor.name}</strong><span>{claim?.contribution}</span><small>{claim?.evidence.map((item) => item.reference).join(" · ")}</small></li>; })}</ul> : <p>No official contribution claim recorded yet.</p>}
           <div className="detail-next"><small>Next backlog item</small><strong>{selected.backlog}</strong></div>
         </section>
       </div>}

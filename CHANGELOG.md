@@ -9,6 +9,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Governed, evidence-backed mastery attribution with CODEOWNER protection, a
+  public claim workflow, local-only optional portraits, node-level contributor
+  credits, and founder recognition covering 19 verified capabilities.
 - A shared Japanese-craft-inspired SVG icon language across navigation, chat,
   creation tools, local privacy controls, Knowledge Brief and Path to Mastery,
   replacing platform-dependent Unicode symbols with restrained local geometry.

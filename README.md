@@ -221,7 +221,10 @@ a separately approved disclosure and consent design.
 
 [Path to Mastery](docs/PATH_TO_MASTERY.md) is the evidence-backed public skill
 tree and backlog: contributors can see dependencies, unlock requirements,
-current scores and the next bounded task for every capability.
+current scores and the next bounded task for every capability. Official
+contribution claims must use the Mastery contribution issue template, cite
+merged evidence and pass the [official approval process](docs/mastery-claims.md);
+direct self-awards are rejected.
 
 Rangabot welcomes community development. Read
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), the

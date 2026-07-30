@@ -23,6 +23,7 @@
     "privacy:check": "node --experimental-strip-types scripts/check-private-files.ts",
     "mastery:generate": "node --experimental-strip-types scripts/generate-mastery-tree.ts",
     "mastery:check": "node --experimental-strip-types scripts/generate-mastery-tree.ts --check",
+    "mastery:governance": "node --experimental-strip-types scripts/check-mastery-governance.ts",
     "knowledge:init": "node --experimental-strip-types scripts/knowledge-cli.ts init",
     "knowledge:status": "node --experimental-strip-types scripts/knowledge-cli.ts status",
     "knowledge:doctor": "node --experimental-strip-types scripts/knowledge-cli.ts doctor",

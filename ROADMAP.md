@@ -27,6 +27,9 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 
 ## Approved
 
+- [x] Govern official mastery attribution through evidence-backed claims,
+  CODEOWNER approval and node-level contributor recognition.
+
 - [x] Path to Mastery: canonical evidence-backed skill tree, interactive app
   view, generated public backlog and regression-safe unlock states
 - [ ] Persistent local web-domain allowlist with editable capability scopes,

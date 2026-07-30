@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   validate:
@@ -24,5 +25,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Enforce official mastery approval
+        run: node --experimental-strip-types scripts/check-mastery-governance.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - run: npm run check
       - run: npm audit --omit=dev
