@@ -51,12 +51,11 @@ body:has(.mastery-shell) { margin: 0; color: var(--mastery-ink); background: #07
 .branch-glyph i { font-style: normal; transform: rotate(-45deg); }
 .mastery-branch h2 { margin: 2px 0 0; font: 500 24px Georgia, serif; }
 .mastery-branch > p { min-height: 36px; margin: 18px 3px; color: #a4a5a4; font-size: 13px; line-height: 1.5; }
-.mastery-branch ol { margin: 0; padding: 12px 0 0; display: grid; gap: 27px; list-style: none; }
+.mastery-branch ol { margin: 0; padding: 12px 0 0; position: relative; display: grid; gap: 27px; list-style: none; }
+.mastery-branch ol::before { content: ""; position: absolute; top: 0; bottom: 22px; left: 22px; width: 1px; background: linear-gradient(transparent, color-mix(in srgb, var(--branch-color) 58%, #8190a0) 7%, color-mix(in srgb, var(--branch-color) 42%, #8190a0) 93%, transparent); }
 .mastery-branch li { min-height: 52px; position: relative; }
-.mastery-branch li::before { content: ""; position: absolute; top: -29px; left: 23px; width: 1px; height: 31px; background: linear-gradient(color-mix(in srgb, var(--status) 25%, transparent), color-mix(in srgb, var(--status) 76%, transparent)); }
-.mastery-branch li:first-child::before { top: -33px; height: 35px; }
 .mastery-branch button { width: 100%; padding: 3px 0; display: grid; grid-template-columns: 48px 1fr; align-items: center; gap: 12px; color: inherit; border: 0; background: transparent; text-align: left; cursor: pointer; }
-.node-emblem { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--status) 72%, #111); background: radial-gradient(circle, color-mix(in srgb, var(--status) 18%, #10141a), #0b0e13 68%); transform: rotate(45deg); box-shadow: 0 0 14px var(--status-glow); transition: transform .2s ease, box-shadow .2s ease; }
+.node-emblem { width: 44px; height: 44px; position: relative; z-index: 1; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--status) 72%, #111); background: radial-gradient(circle, color-mix(in srgb, var(--status) 18%, #10141a), #0b0e13 68%); transform: rotate(45deg); box-shadow: 0 0 14px var(--status-glow); transition: transform .2s ease, box-shadow .2s ease; }
 .node-emblem i { color: var(--status); font-size: 14px; font-style: normal; transform: rotate(-45deg); }
 .mastery-branch button:hover .node-emblem, .mastery-branch button:focus-visible .node-emblem { transform: rotate(45deg) scale(1.08); box-shadow: 0 0 24px var(--status-glow); }
 .node-copy strong { display: block; color: #ddd9d1; font-size: 13px; font-weight: 600; }
