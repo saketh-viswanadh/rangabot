@@ -31,7 +31,12 @@ if (!requiresMasteryApproval(files)) {
   process.exit(0);
 }
 
-const labels = event.pull_request?.labels?.flatMap((label) => label.name ? [label.name] : []) ?? [];
+const pullRequestResponse = await fetch(`https://api.github.com/repos/${repository}/pulls/${number}`, {
+  headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28" },
+});
+if (!pullRequestResponse.ok) throw new Error(`Mastery governance could not inspect current approval labels (${pullRequestResponse.status}).`);
+const pullRequest = await pullRequestResponse.json() as { labels?: Array<{ name?: string }> };
+const labels = pullRequest.labels?.flatMap((label) => label.name ? [label.name] : []) ?? [];
 if (!hasMasteryApproval(labels)) {
   throw new Error("Protected mastery data changed without the owner-controlled 'mastery-approved' label. Open a claim issue and request official approval.");
 }
