@@ -48,6 +48,8 @@ model server.
 - Dedicated Knowledge Brief panel with news cards, vault status and app changelog
 - Offline welcome library with 100 quotes, 100 jokes and 100 thoughts, plus a 60-item no-repeat window
 - No cloud transmission
+- Interactive **Path to Mastery** at `/mastery`, generated from the same strict
+  capability data used by the public contributor backlog
 
 Conversation data stays in `data/rangabot.db` on this computer. The database and
 its journal files are excluded from Git.
@@ -217,10 +219,15 @@ a separately approved disclosure and consent design.
 
 ## Contributing
 
+[Path to Mastery](docs/PATH_TO_MASTERY.md) is the evidence-backed public skill
+tree and backlog: contributors can see dependencies, unlock requirements,
+current scores and the next bounded task for every capability.
+
 Rangabot welcomes community development. Read
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), the
 [architecture](docs/architecture.md), [privacy model](docs/privacy.md), and
-[model guide](docs/models.md). Run `npm run check` before submitting a pull
+[model guide](docs/models.md). Interface contributions should follow the
+[Rangabot design language](docs/design-language.md). Run `npm run check` before submitting a pull
 request. Codex is optional; all required maintenance paths are normal scripts,
 documentation and GitHub workflows.
 

@@ -1,5 +1,26 @@
 # Daily progress
 
+## 2026-07-30 — Path to Mastery
+
+- Established Rangabot's shared icon craft language: one 20-pixel grid, quiet
+  monoline geometry, purposeful negative space and no platform-dependent emoji.
+- Replaced functional glyphs throughout the main app and Path to Mastery, added
+  design documentation and regression coverage for future contributors.
+- Defined Rangabot's final state as an ever-loyal local-first personal assistant
+  with permissioned, allowlisted web help only when local knowledge is missing.
+- Added eight mastery paths and 40 subskills that double as the public backlog.
+- Added strict Vision, Locked, Ready, In progress, Training, Unlocked, Mastered
+  and Regressed states; merging code alone never unlocks a skill.
+- Added an interactive connected mastery view with node details, scores,
+  dependencies, evidence, acceptance criteria and the next task.
+- Added canonical JSON, generated Markdown and validation that prevents unknown
+  dependencies or unapproved web research from silently appearing unlocked.
+- Reworked the first visual draft after direct user review: restored page
+  scrolling, reduced the tree to two readable columns, reused the social banner,
+  added hover/focus unlock guidance and linked full checklists.
+- Added opt-in contributor achievements and locally stored portraits so public
+  recognition never causes a hidden runtime request to GitHub.
+
 ## 2026-07-30 — Conversation-aware follow-up retrieval
 
 - Added a bounded local query-planning step for context-dependent follow-ups.

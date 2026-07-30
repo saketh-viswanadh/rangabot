@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "title": "Path to Mastery",
+  "updatedAt": "2026-07-30",
+  "vision": "An ever-loyal, local-first personal assistant that uses private models, approved knowledge and local tools first, then asks permission before using allowlisted web or external services.",
+  "core": {
+    "id": "rangabot",
+    "name": "Rangabot",
+    "subtitle": "Loyal local personal assistant",
+    "status": "training",
+    "score": 2.6,
+    "description": "The central intelligence connecting conversation, planning, knowledge, memory, tools, creation and trust.",
+    "unlockCriteria": [
+      "Every mastery path has at least one dependable end-to-end capability",
+      "Local-first permission boundaries pass security review",
+      "Core quality and latency targets remain green for two releases"
+    ]
+  },
+  "branches": [
+    {
+      "id": "mind",
+      "name": "Mind & Memory",
+      "glyph": "◉",
+      "summary": "Understand intent, plan work and learn locally without hidden model mutation.",
+      "score": 1.9,
+      "nodes": [
+        {"id":"local-conversation","name":"Natural conversation","status":"unlocked","score":4.0,"description":"Stream private local-model conversations with stop control and structured history.","dependencies":[],"acceptance":["Streaming and stop controls pass","Conversation history persists locally","No remote provider receives content"],"evidence":["Local chat tests","Ollama provider boundary"],"backlog":"Maintain reliability across supported local models"},
+        {"id":"intent-planning","name":"Intent planning","status":"training","score":2.5,"description":"Classify requests and plan retrieval or artifact work using bounded context.","dependencies":["local-conversation"],"acceptance":["Resolve follow-up references","Separate retrieval, creation and tool intents","Pass ambiguous-intent fixtures"],"evidence":["Conversation-aware retrieval planning"],"backlog":"Add inspectable multi-step plans"},
+        {"id":"local-memory","name":"Inspectable local memory","status":"ready","score":0.5,"description":"Remember preferences, proficiency, corrections and approved conclusions with provenance.","dependencies":["intent-planning"],"acceptance":["Every memory has origin and confidence","Users can inspect, edit, export and delete","No conversation silently becomes universal fact"],"evidence":[],"backlog":"Design the local memory schema and review UI"},
+        {"id":"learning-progress","name":"Learning progress","status":"locked","score":0.0,"description":"Track what the user understands and adapt explanations without profiling invisibly.","dependencies":["local-memory"],"acceptance":["Proficiency changes are explainable","User can reset a subject profile","Teaching evaluation improves"],"evidence":[],"backlog":"Unlock after inspectable memory"},
+        {"id":"self-review","name":"Self-review loop","status":"training","score":2.5,"description":"Review grounding, completeness and contradictions before returning important work.","dependencies":["intent-planning"],"acceptance":["Grounding at least 95%","Known contradictions rejected","Revision never replaces a stronger draft"],"evidence":["Teacher grounding audit","60-question evaluation"],"backlog":"Replace lexical checks with stronger entailment review"}
+      ]
+    },
+    {
+      "id": "scholar",
+      "name": "Scholar",
+      "glyph": "◇",
+      "summary": "Turn private books and approved research into clear, cited teaching.",
+      "score": 3.0,
+      "nodes": [
+        {"id":"vault-ingestion","name":"Knowledge Vault","status":"unlocked","score":3.8,"description":"Incrementally ingest supported local documents with hierarchy, embeddings and rollback.","dependencies":[],"acceptance":["Supported files ingest locally","Incompatible files are visible","Backup and rollback pass"],"evidence":["Knowledge doctor","Ingestion tests"],"backlog":"Improve OCR guidance and extraction coverage"},
+        {"id":"hybrid-retrieval","name":"Hybrid retrieval","status":"unlocked","score":3.7,"description":"Combine keyword and vector search while guarding relevance and subject boundaries.","dependencies":["vault-ingestion"],"acceptance":["Retrieval pass rate at least 90%","No measured cross-subject contamination","Every passage has a locator"],"evidence":["90% retrieval benchmark","sqlite-vec index"],"backlog":"Raise the unlock floor to 95%"},
+        {"id":"teacher-mode","name":"Reliable Teacher","status":"training","score":2.8,"description":"Synthesize original explanations from several books and labelled model background.","dependencies":["hybrid-retrieval","self-review"],"acceptance":["Answer pass rate at least 90%","Grounding at least 95%","Median latency below 30 seconds","No subject below 80%"],"evidence":["83.3% answer pass","90% grounding"],"backlog":"Fix mythology variance, synthesis and latency"},
+        {"id":"concept-layer","name":"Cross-book concepts","status":"locked","score":1.0,"description":"Maintain rebuildable concepts, relationships, agreements and disagreements across sources.","dependencies":["teacher-mode","local-memory"],"acceptance":["Rebuild after source changes","Preserve conflicting interpretations","Every relation has provenance"],"evidence":["Multi-source evidence planning"],"backlog":"Design the derived concept store"},
+        {"id":"current-awareness","name":"Current awareness","status":"training","score":2.0,"description":"Maintain meaningful weekly and monthly offline intelligence with evidence classes.","dependencies":["vault-ingestion"],"acceptance":["Only meaningful developments included","Dates and primary links verified","Indexed versus source-tracked status visible"],"evidence":["Weekly Knowledge Brief"],"backlog":"Broaden sources and automate freshness validation"}
+      ]
+    },
+    {
+      "id": "analyst",
+      "name": "Analyst",
+      "glyph": "△",
+      "summary": "Execute Python, SQL and models locally, then explain results without inventing data.",
+      "score": 0.8,
+      "nodes": [
+        {"id":"analysis-knowledge","name":"Analytics knowledge","status":"training","score":3.0,"description":"Teach Python, SQL, statistics, ML, visualization and data platforms from local sources.","dependencies":["teacher-mode"],"acceptance":["Every technical subject passes 90%","Examples are executable","Version-sensitive claims are sourced"],"evidence":["Technical evaluation fixtures"],"backlog":"Deepen statistics and platform-specific coverage"},
+        {"id":"safe-runtime","name":"Safe local runtime","status":"ready","score":0.5,"description":"Run approved Python and SQL in a bounded local sandbox with visible inputs and outputs.","dependencies":["intent-planning"],"acceptance":["Explicit data and folder approval","Time, memory and filesystem limits","Complete execution log"],"evidence":[],"backlog":"Choose the first Python and SQL sandbox design"},
+        {"id":"evidence-analysis","name":"Evidence-backed analysis","status":"locked","score":0.0,"description":"Base conclusions on actual executed queries, checks and model results.","dependencies":["safe-runtime","analysis-knowledge","self-review"],"acceptance":["Never fabricate outputs","Every finding links to executed evidence","Data-quality warnings precede conclusions"],"evidence":[],"backlog":"Unlock after safe runtime"},
+        {"id":"model-lab","name":"Local model lab","status":"locked","score":0.0,"description":"Train or evaluate approved local models and interpret reproducible results.","dependencies":["evidence-analysis"],"acceptance":["Reproducible experiment manifests","Baseline and holdout evaluation","Resource use visible"],"evidence":[],"backlog":"Unlock after evidence-backed analysis"},
+        {"id":"analytics-report","name":"Analytical reports","status":"locked","score":0.5,"description":"Create decision-ready reports with validated charts, tables, caveats and sources.","dependencies":["evidence-analysis","word-create"],"acceptance":["Calculations reproducible","Visuals validated","Claims cite data outputs"],"evidence":[],"backlog":"Unlock after execution and artifact quality"}
+      ]
+    },
+    {
+      "id": "builder",
+      "name": "Builder",
+      "glyph": "⌘",
+      "summary": "Understand, change, test and document approved local software projects.",
+      "score": 1.8,
+      "nodes": [
+        {"id":"repo-context","name":"Repository context","status":"unlocked","score":3.5,"description":"Allowlist repositories and attach bounded, revalidated code previews.","dependencies":[],"acceptance":["Explicit allowlist","Symlink-safe bounded previews","Secret checks pass"],"evidence":["Repository search tests"],"backlog":"Improve file selection and preview UX"},
+        {"id":"code-understanding","name":"Code understanding","status":"training","score":2.0,"description":"Explain selected code and answer scoped project questions using the local model.","dependencies":["repo-context","local-conversation"],"acceptance":["References exact files and lines","Distinguishes evidence from assumptions","Cross-file evaluation passes"],"evidence":["Single-preview chat attachment"],"backlog":"Add multi-file context planning"},
+        {"id":"coding-agent","name":"Coding agent","status":"locked","score":0.0,"description":"Plan, edit, run and verify code inside an explicitly approved project.","dependencies":["code-understanding","safe-runtime"],"acceptance":["Diff preview before risky changes","Tests run after edits","Rollback remains available"],"evidence":[],"backlog":"Unlock after safe execution"},
+        {"id":"technical-docs","name":"Technical documentation","status":"locked","score":1.0,"description":"Create repository-grounded documentation, architecture summaries and diagrams.","dependencies":["code-understanding","word-create"],"acceptance":["Claims trace to repository evidence","Diagrams validate against code","Output passes artifact gates"],"evidence":[],"backlog":"Design documentation fixtures"},
+        {"id":"project-delivery","name":"Project delivery","status":"vision","score":0.0,"description":"Coordinate specifications, implementation, verification and release notes locally.","dependencies":["coding-agent","technical-docs"],"acceptance":["Inspectable task plan","Verified acceptance criteria","No automatic publishing"],"evidence":[],"backlog":"Future mastery milestone"}
+      ]
+    },
+    {
+      "id": "creator",
+      "name": "Creator",
+      "glyph": "✦",
+      "summary": "Create polished documents, writing, slides and spreadsheets through normal chat.",
+      "score": 0.9,
+      "nodes": [
+        {"id":"word-create","name":"Word creation","status":"training","score":2.2,"description":"Gather a brief in chat and create a validated DOCX with local previews.","dependencies":["local-conversation","self-review"],"acceptance":["Factual content grounded","Genre fixtures pass","Rendered pages reviewed","No planning scaffolding leaks"],"evidence":["DOCX pipeline tests","Curated story pack"],"backlog":"Reach general gold-standard quality"},
+        {"id":"word-edit","name":"Word editing","status":"ready","score":0.0,"description":"Safely revise a user-selected document while preserving unaffected content and layout.","dependencies":["word-create"],"acceptance":["Explicit file selection","Change preview","Round-trip preservation tests"],"evidence":[],"backlog":"Implement the next artifact vertical slice"},
+        {"id":"email-writing","name":"Email & writing studio","status":"ready","score":1.0,"description":"Draft, revise and critique audience-aware email and long-form writing locally.","dependencies":["intent-planning","self-review"],"acceptance":["Dedicated briefs and rubrics","Tone and factual checks","No sending without confirmation"],"evidence":["Generic chat prompting only"],"backlog":"Build dedicated writing quality gates"},
+        {"id":"pdf-slides","name":"PDF & presentations","status":"locked","score":0.0,"description":"Create printable PDFs and story-led presentation decks with visual QA.","dependencies":["word-create","word-edit"],"acceptance":["Deterministic rendering","Visual QA","Accessible export"],"evidence":[],"backlog":"Unlock after Word mastery"},
+        {"id":"spreadsheets","name":"Spreadsheets","status":"ready","score":0.0,"description":"Create validated XLSX workbooks with formulas, charts and explanations.","dependencies":["safe-runtime"],"acceptance":["Formula validation","Data-quality checks","Rendered workbook review"],"evidence":[],"backlog":"Design the spreadsheet execution boundary"}
+      ]
+    },
+    {
+      "id": "assistant",
+      "name": "Personal Assistant",
+      "glyph": "⌁",
+      "summary": "Help with files, research, email, calendar and routines under explicit permissions.",
+      "score": 0.5,
+      "nodes": [
+        {"id":"projects","name":"Local projects","status":"unlocked","score":3.0,"description":"Organize chats into local project folders without granting filesystem access.","dependencies":["local-conversation"],"acceptance":["Project-scoped chats","Deletion preserves chats safely","No implicit file access"],"evidence":["Project persistence tests"],"backlog":"Evolve projects into permission-aware workspaces"},
+        {"id":"web-allowlist","name":"Web allowlist","status":"ready","score":0.0,"description":"Let users persistently approve, inspect and revoke trusted web domains locally.","dependencies":["local-memory"],"acceptance":["Local editable domain list","Query preview","Private context excluded by default","Per-domain capability scopes"],"evidence":["User-approved product decision"],"backlog":"Implement permission storage and review UI"},
+        {"id":"web-research","name":"Permissioned web research","status":"locked","score":0.0,"description":"Search allowlisted sources only when local knowledge is insufficient, with citations and dates.","dependencies":["web-allowlist","self-review"],"acceptance":["Local-first attempt recorded","Only approved query leaves device","Sources and retrieval dates shown","Vault ingestion requires separate approval"],"evidence":[],"backlog":"Unlock after persistent allowlists"},
+        {"id":"email-calendar","name":"Email & calendar","status":"locked","score":0.0,"description":"Read and prepare personal workflows while requiring confirmation before mutations.","dependencies":["web-allowlist","intent-planning"],"acceptance":["Read scopes are explicit","Send and calendar changes always confirmed","Audit log remains local"],"evidence":[],"backlog":"Design connector permission scopes"},
+        {"id":"daily-assistant","name":"Daily companion","status":"vision","score":0.0,"description":"Prepare local briefs, reminders and proactive suggestions without becoming intrusive.","dependencies":["local-memory","email-calendar","web-research"],"acceptance":["User controls frequency","Every source visible","No action without authority"],"evidence":[],"backlog":"Future personal-assistant mastery"}
+      ]
+    },
+    {
+      "id": "guardian",
+      "name": "Guardian",
+      "glyph": "◆",
+      "summary": "Keep permissions, evidence, execution and external handoffs safe and inspectable.",
+      "score": 3.1,
+      "nodes": [
+        {"id":"local-first","name":"Local-first boundary","status":"unlocked","score":4.0,"description":"Bind locally and reject remote model endpoints unless a future consent system exists.","dependencies":[],"acceptance":["Loopback enforcement","Private data Git-ignored","Cloud mode disabled by default"],"evidence":["Privacy checks","Runtime configuration tests"],"backlog":"Keep the boundary covered as tools expand"},
+        {"id":"permissions","name":"Permission centre","status":"ready","score":1.5,"description":"Show and revoke every repository, web, file, connector and execution permission.","dependencies":["local-first"],"acceptance":["One inspectable local registry","Scope and expiry visible","Revocation immediate"],"evidence":["Repository allowlist"],"backlog":"Generalize repository approval into capability permissions"},
+        {"id":"provenance","name":"Evidence provenance","status":"training","score":3.0,"description":"Distinguish vault evidence, model background, executed results and web sources.","dependencies":["self-review","local-first"],"acceptance":["Every factual evidence class visible","No invented citations","Contradiction checks pass"],"evidence":["Teacher citation audit"],"backlog":"Add entailment-aware verification"},
+        {"id":"evaluation","name":"Quality evaluation","status":"unlocked","score":3.5,"description":"Measure retrieval, answers, grounding, regressions and latency using local fixtures.","dependencies":["local-first"],"acceptance":["Balanced public fixtures","Private fixtures remain ignored","Checkpointed repeatable reports"],"evidence":["60-question benchmarks","73 automated tests"],"backlog":"Add external and adversarial validation"},
+        {"id":"authentication","name":"Local authentication","status":"locked","score":0.0,"description":"Prevent other local processes from freely invoking sensitive Rangabot APIs.","dependencies":["permissions"],"acceptance":["Authenticated session","CSRF protections","Network binding remains disabled until complete"],"evidence":["Critical audit finding"],"backlog":"Required before any network exposure"}
+      ]
+    },
+    {
+      "id": "companion",
+      "name": "Companion",
+      "glyph": "◌",
+      "summary": "Make private intelligence calm, beautiful, accessible and easy to understand.",
+      "score": 3.3,
+      "nodes": [
+        {"id":"chat-experience","name":"Chat experience","status":"unlocked","score":3.8,"description":"Responsive chat, themes, Markdown, replies, thinking states and scroll control.","dependencies":["local-conversation"],"acceptance":["Light and dark themes","Keyboard flows","Responsive layout","Reduced-motion support"],"evidence":["UI implementation","Scroll tests"],"backlog":"Run broader accessibility and device testing"},
+        {"id":"ranga-personality","name":"Ranga personality","status":"training","score":3.0,"description":"A restrained golden-retriever identity with helpful, non-intrusive personality.","dependencies":["chat-experience"],"acceptance":["Animation respects reduced motion","Personality never obscures work","Theme contrast passes"],"evidence":["Current mascot treatment"],"backlog":"Test personality with users"},
+        {"id":"mastery-tree","name":"Path to Mastery","status":"in-progress","score":2.0,"description":"A public evidence-backed skill tree that doubles as the contributor backlog.","dependencies":["evaluation"],"acceptance":["Generated from one canonical file","Every node has dependencies and acceptance criteria","Daily changes use PRs","No private evidence published"],"evidence":["Current implementation branch"],"backlog":"Ship the first interactive tree"},
+        {"id":"skill-discovery","name":"Skill discovery","status":"locked","score":0.5,"description":"Help users understand what Rangabot can do now and which abilities are still training.","dependencies":["mastery-tree"],"acceptance":["Capabilities reflect live status","Suggested tasks never advertise locked skills","Accessible explanations"],"evidence":["Welcome starters"],"backlog":"Connect starters to mastery status"},
+        {"id":"community-growth","name":"Community growth","status":"training","score":3.0,"description":"Let contributors claim well-scoped nodes with public acceptance criteria and evidence.","dependencies":["mastery-tree"],"acceptance":["Every claim maps to an issue","Contributor guidance is clear","Unlock evidence reviewed in PR"],"evidence":["Open-source contribution foundation"],"backlog":"Generate claimable GitHub issue links"}
+      ]
+    }
+  ]
+}

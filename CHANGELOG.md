@@ -9,6 +9,17 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- A shared Japanese-craft-inspired SVG icon language across navigation, chat,
+  creation tools, local privacy controls, Knowledge Brief and Path to Mastery,
+  replacing platform-dependent Unicode symbols with restrained local geometry.
+- **Path to Mastery**, an interactive Assassin-inspired capability tree whose
+  main paths, subskills, strict scores, dependencies, acceptance criteria and
+  next tasks also form Rangabot's public contributor backlog.
+- A canonical mastery JSON model and generated Markdown view, including an
+  approved persistent web-allowlist node that must unlock before web research.
+- A spacious, scrollable mastery layout with Rangabot banner art, hover and
+  keyboard unlock previews, complete public checklists, and an opt-in local
+  contributor achievement wall that never fetches GitHub avatars at runtime.
 - Conversation-aware local retrieval planning for context-dependent follow-up
   questions, using the latest substantive user topic without changing the
   question Rangabot answers.
