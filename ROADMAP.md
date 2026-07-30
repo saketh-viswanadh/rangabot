@@ -79,8 +79,11 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   rebuild, mutation invalidation, and a portable JavaScript fallback
 - [ ] Learning Core 3: Evidence synthesis that compares, connects, deduplicates,
   and preserves disagreements before composing an original explanation
-- [ ] Learning Core 4: Inspectable local memory for user preferences, proficiency,
-  corrections, learning progress, and approved conclusions
+- [x] Learning Core 4a: Explicit inspectable local memory for user-approved
+  preferences, facts, and instructions with origin, confidence, edit, export,
+  delete, and bounded chat context
+- [ ] Learning Core 4b: Explainable proficiency, corrections, learning progress,
+  reviewed import, and conflict handling
 - [ ] Learning Core 5: Draft, grounding review, and revision with visible separation
   between vault evidence, local-model background, and unresolved uncertainty
 - [x] Learning Core 5a: Teacher Mode citation audit, one bounded local revision,

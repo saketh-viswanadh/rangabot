@@ -3,7 +3,7 @@ import type { ReactNode, SVGProps } from "react";
 export type CraftIconName =
   | "add" | "arrow" | "attach" | "chat" | "chevron" | "close" | "code"
   | "document" | "edit" | "external" | "folder" | "knowledge" | "mail"
-  | "mastery" | "moon" | "pin" | "reply" | "search" | "send" | "shield"
+  | "mastery" | "memory" | "moon" | "pin" | "reply" | "search" | "send" | "shield"
   | "spark" | "stop" | "sun" | "trash";
 
 type CraftIconProps = Omit<SVGProps<SVGSVGElement>, "name"> & { name: CraftIconName; size?: number };
@@ -24,6 +24,7 @@ export function CraftIcon({ name, size = 18, className = "", ...props }: CraftIc
     knowledge: <><path d="M10 5.2C8.5 3.8 6.3 3.6 4.5 4.4v10c1.8-.8 4-.6 5.5.8Z" /><path d="M10 5.2c1.5-1.4 3.7-1.6 5.5-.8v10c-1.8-.8-4-.6-5.5.8Z" /></>,
     mail: <><rect x="3.5" y="5" width="13" height="10" rx="1.5" /><path d="m4 6 6 5 6-5" /></>,
     mastery: <><path d="m10 2.8 2 5.2 5.2 2-5.2 2-2 5.2L8 12l-5.2-2L8 8Z" /><circle cx="10" cy="10" r="1.5" /></>,
+    memory: <><path d="M7 5.2a3 3 0 0 1 5.6-1.4A3 3 0 0 1 15 8.6a3 3 0 0 1-1.2 5.7A3 3 0 0 1 8.4 16 3 3 0 0 1 5 12.6a3 3 0 0 1 .7-5.3A3 3 0 0 1 7 5.2Z" /><path d="M8 6.5c1.5.2 2.2 1 2.2 2.3M6.2 10c1.2-.6 2.5-.4 3.3.5M10.4 13.8c-.6-1.2-.4-2.4.5-3.2M12.5 6.7c-1 .8-1.2 2-.8 3" /></>,
     moon: <path d="M14.8 13.8A6.5 6.5 0 0 1 6.2 5.2a6.5 6.5 0 1 0 8.6 8.6Z" />,
     pin: <><path d="m7 4 6 1-1 3 2 2-4 1-3 5 .5-5L5 9l3-1Z" /><path d="m10 11-3 5" /></>,
     reply: <><path d="m8 5-5 5 5 5" /><path d="M4 10h6c4 0 6 2 6 5" /></>,

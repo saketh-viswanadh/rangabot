@@ -254,3 +254,14 @@ quality evaluation, and it can be validated without changing model weights.
 - Added story-specific Word rendering without the business purpose/audience table.
 - Added a curated local Ramayana pack covering Rama's exile, Bharata's sandals, Hanuman's journey to Sita, and Jatayu's courage so `llama3.2:3b` cannot invent plot outcomes.
 - Verified the exact chat scenario end-to-end. The resulting two-page DOCX contains four complete stories and was rendered to PNG for visual inspection.
+
+## 2026-07-30 — Inspectable local memory
+
+- Added a private SQLite memory store for explicitly approved preferences,
+  user-provided facts, and standing instructions.
+- Added a sidebar review panel with visible origin and confidence, plus create,
+  edit, JSON export, and delete controls.
+- Supplied a bounded set of approved memories to ordinary and Teacher Mode local
+  chats while prohibiting silent inference or automatic profile building.
+- Added validation and lifecycle tests; automatic proficiency tracking and
+  memory import remain separate follow-up milestones.
