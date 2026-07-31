@@ -102,6 +102,12 @@ are rejected rather than being advertised as searchable knowledge. Run
 processed with a local OCR tool such as OCRmyPDF.
 DOCX, HTML, Markdown, and plain-text files are also supported.
 
+Knowledge Doctor streams file signatures and stops its deep synchronization scan
+after 30 seconds instead of appearing frozen on a large vault. The basic document,
+passage, storage, and compatibility status still prints first. For a deliberate
+long scan, set `KNOWLEDGE_DOCTOR_TIMEOUT_MS` from `1000` to `300000` milliseconds,
+for example `KNOWLEDGE_DOCTOR_TIMEOUT_MS=120000 npm run knowledge:doctor`.
+
 Ingestion format v2 preserves document, heading hierarchy, section path, and PDF
 page ranges on each passage. DOCX and HTML headings are retained, Markdown
 headings are interpreted directly, and common plain-text chapter/section labels
