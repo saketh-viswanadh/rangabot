@@ -268,3 +268,11 @@ quality evaluation, and it can be validated without changing model weights.
 - Hardened direct recall after a real name-memory failure: identity and memory
   review questions now resolve against approved records before model generation,
   including an explicit no-guess response when the requested fact is absent.
+
+## 2026-07-31 — Visible memory-use receipts
+
+- Added a persistent answer-level receipt showing when approved Local memory was
+  supplied to the model and when deterministic direct recall answered instead.
+- Preserved the receipt across conversation reopen and Markdown backup/restore.
+- Added strict metadata validation so imported or API-supplied messages cannot
+  invent arbitrary memory-use states.

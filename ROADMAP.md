@@ -81,7 +81,7 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   and preserves disagreements before composing an original explanation
 - [x] Learning Core 4a: Explicit inspectable local memory for user-approved
   preferences, facts, and instructions with origin, confidence, edit, export,
-  delete, and bounded chat context
+  delete, bounded chat context, and persistent per-answer usage receipts
 - [ ] Learning Core 4b: Explainable proficiency, corrections, learning progress,
   reviewed import, and conflict handling
 - [ ] Learning Core 5: Draft, grounding review, and revision with visible separation

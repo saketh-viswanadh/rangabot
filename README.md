@@ -212,7 +212,9 @@ each item requires an explicit **Approve and remember** action and records its
 origin, confidence, and timestamps in the private local SQLite database
 `data/rangabot-memory.db`. Approved memories are supplied as bounded context to
 ordinary and Teacher Mode chats. The panel supports review, editing, JSON export,
-and deletion; no memory is sent to a remote service.
+and deletion; no memory is sent to a remote service. Answers visibly show
+**MEMORY** when approved context was supplied and **DIRECT RECALL** when a saved
+fact was resolved deterministically rather than left to model improvisation.
 
 ## Next milestones
 

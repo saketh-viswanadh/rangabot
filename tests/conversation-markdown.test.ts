@@ -12,7 +12,7 @@ test("round-trips a readable Markdown conversation without losing message metada
     updatedAt: "2026-07-28T00:01:00.000Z",
     messages: [
       { role: "user" as const, content: "Show me `SELECT 1`." },
-      { role: "assistant" as const, content: "```sql\nSELECT 1;\n```", replyTo: { role: "user" as const, excerpt: "Show me SELECT 1" } },
+      { role: "assistant" as const, content: "```sql\nSELECT 1;\n```", replyTo: { role: "user" as const, excerpt: "Show me SELECT 1" }, memoryUse: "context" as const },
     ],
   };
   const markdown = serializeConversationMarkdown(conversation);
