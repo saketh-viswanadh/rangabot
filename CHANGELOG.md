@@ -14,6 +14,8 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   export, and bounded context injection into ordinary and Teacher Mode chats.
 - Deterministic direct-memory recall for identity and memory-list questions so
   small local models cannot ignore a saved fact or improvise an answer.
+- Persistent per-answer memory receipts distinguish ordinary approved-context
+  use from deterministic direct recall in both live and reopened conversations.
 - Governed, evidence-backed mastery attribution with CODEOWNER protection, a
   public claim workflow, local-only optional portraits, node-level contributor
   credits, and founder recognition covering 19 verified capabilities.

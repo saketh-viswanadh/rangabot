@@ -5,6 +5,7 @@ export interface ChatMessage {
   content: string;
   artifactIntent?: "word";
   retrievalMode?: "hybrid" | "keyword-only";
+  memoryUse?: "context" | "direct";
   wordArtifact?: {
     id: string;
     title: string;
