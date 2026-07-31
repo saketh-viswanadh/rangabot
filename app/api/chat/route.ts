@@ -11,7 +11,7 @@ import { buildConversationSummaryFallback, buildWordConversationPrompt, buildWor
 import { findStoryPack } from "@/lib/story-packs";
 import { isValidChatMessages } from "@/lib/chat-validation";
 import { buildKnowledgeSearchQuery } from "@/lib/knowledge-query-planning";
-import { formatMemoryContext } from "@/lib/memories";
+import { answerDirectMemoryQuestion, formatMemoryContext } from "@/lib/memories";
 
 export const runtime = "nodejs";
 
@@ -52,6 +52,19 @@ export async function POST(request: Request) {
     }
     if (body.codeContext !== undefined && !isCodeContextRequest(body.codeContext)) {
       return NextResponse.json({ error: "The attached code reference is invalid." }, { status: 400 });
+    }
+
+    const latestQuestion = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
+    const directMemoryAnswer = answerDirectMemoryQuestion(latestQuestion);
+    if (directMemoryAnswer) {
+      return new Response(directMemoryAnswer, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          "X-Rangabot-Memory": "direct",
+        },
+      });
     }
 
     let localCodeContext: string | null = null;
@@ -115,7 +128,7 @@ export async function POST(request: Request) {
     let messages = body.messages;
     let knowledgeSources: KnowledgeResult[] = [];
     let knowledgeSearchMode: KnowledgeSearchMode | null = null;
-    const question = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
+    const question = latestQuestion;
     const usesVault = body.mode === "teach" || (body.mode === "smart" && shouldAutoSearchKnowledge(question));
     if (usesVault) {
       if (!localCodeContext && isKnowledgeCatalogQuestion(question)) {
