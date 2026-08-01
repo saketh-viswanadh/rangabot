@@ -633,25 +633,6 @@ export default function Home() {
           </div>)}
           <form className="project-create" onSubmit={createNewProject}><input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="New project" maxLength={60} aria-label="New project name" /><button type="submit" disabled={!newProjectName.trim()} aria-label="Create project"><CraftIcon name="add" /></button></form>
         </section>
-        <section className="repositories" aria-label="Allowed local repositories">
-          <div className="repository-heading"><span>Local repositories</span><span>{allowedRepositories.length}</span></div>
-          {allowedRepositories.map((repository) => <div className="repository-item" key={repository.id} title={repository.path}>
-            <button type="button" className="repository-open" onClick={() => openRepositorySearch(repository)} aria-label={`Search ${repository.name}`}><CraftIcon name="folder" /><span><strong>{repository.name}</strong><small>{repository.path}</small></span></button>
-            <button type="button" onClick={() => void revokeLocalRepository(repository)} aria-label={`Revoke ${repository.name}`}><CraftIcon name="close" size={14} /></button>
-          </div>)}
-          <form className="repository-create" onSubmit={allowLocalRepository}>
-            <input value={repositoryPath} onChange={(event) => setRepositoryPath(event.target.value)} placeholder="/absolute/path/to/project" aria-label="Repository folder path" maxLength={1024} />
-            <button type="submit" disabled={!repositoryPath.trim()}>Allow</button>
-          </form>
-          <p className="repository-disclosure">Only approval is stored now. Rangabot will ask again before code search reads files.</p>
-          {repositoryMessage && <p className="repository-status" role="status">{repositoryMessage}</p>}
-        </section>
-        <button type="button" className="knowledge-launcher" onClick={() => openKnowledgeBrief()}>
-          <span><strong>Knowledge Brief</strong><small>{knowledgeStatus ? `${knowledgeStatus.documents} docs · ${(knowledgeStatus.usedBytes / 1024 ** 2).toFixed(0)} MB` : "Loading…"}</small></span>
-          <span className="knowledge-launcher-action">{unreadKnowledge > 0 ? <b>{unreadKnowledge} new</b> : "Explore"} <CraftIcon name="chevron" size={14} /></span>
-        </button>
-        <a className="mastery-launcher" href="/mastery"><CraftIcon name="mastery" /><span><strong>Path to Mastery</strong><small>Skills, scores and public backlog</small></span><CraftIcon name="chevron" size={14} /></a>
-        <button type="button" className="memory-launcher" onClick={() => setMemoryPanelOpen(true)}><CraftIcon name="memory" /><span><strong>Local memory</strong><small>Approved facts and preferences</small></span><CraftIcon name="chevron" size={14} /></button>
         <label className="conversation-search">
           <CraftIcon name="search" size={15} />
           <input value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Search chats" aria-label="Search conversations" maxLength={120} />
@@ -676,19 +657,39 @@ export default function Home() {
             </div>
           ))}
         </nav>
-        <div className="privacy-card">
-          <span className="shield"><CraftIcon name="shield" /></span>
-          <div><strong>Private by default</strong><p>Nothing is sent to the cloud in this milestone.</p></div>
-        </div>
       </aside>
 
       <section className="chat-panel">
         <header>
           <div><h1>Rangabot</h1><p>Code, think, and build privately</p></div>
           <div className="header-actions">
-            <button type="button" className="knowledge-header-button" onClick={() => openKnowledgeBrief()} aria-label={`Open Knowledge Brief${unreadKnowledge ? `, ${unreadKnowledge} new items` : ""}`}>
-              <CraftIcon name="knowledge" size={15} /><span>Brief</span>{unreadKnowledge > 0 && <b>{unreadKnowledge}</b>}
-            </button>
+            <nav className="utility-rail" aria-label="Rangabot tools">
+              <button type="button" className="utility-button" onClick={() => openKnowledgeBrief()} aria-label={`Open Knowledge Brief${unreadKnowledge ? `, ${unreadKnowledge} new items` : ""}`}>
+                <CraftIcon name="knowledge" size={15} /><span>Brief</span>{unreadKnowledge > 0 && <b>{unreadKnowledge}</b>}
+              </button>
+              <button type="button" className="utility-button" onClick={() => setMemoryPanelOpen(true)} aria-label="Open Local memory"><CraftIcon name="memory" size={15} /><span>Memory</span></button>
+              <a className="utility-button" href="/mastery" aria-label="Open Path to Mastery"><CraftIcon name="mastery" size={15} /><span>Mastery</span></a>
+              <details className="repository-menu">
+                <summary className="utility-button"><CraftIcon name="folder" size={15} /><span>Folders</span>{allowedRepositories.length > 0 && <b>{allowedRepositories.length}</b>}</summary>
+                <section className="repository-popover" aria-label="Allowed local repositories">
+                  <header><div><strong>Local folders</strong><small>Private, explicitly allowed</small></div><CraftIcon name="folder" size={16} /></header>
+                  <div className="repository-popover-list">
+                    {allowedRepositories.map((repository) => <div className="repository-item" key={repository.id} title={repository.path}>
+                      <button type="button" className="repository-open" onClick={() => openRepositorySearch(repository)} aria-label={`Search ${repository.name}`}><CraftIcon name="search" /><span><strong>{repository.name}</strong><small>{repository.path}</small></span></button>
+                      <button type="button" onClick={() => void revokeLocalRepository(repository)} aria-label={`Revoke ${repository.name}`}><CraftIcon name="close" size={14} /></button>
+                    </div>)}
+                    {!allowedRepositories.length && <p>No folders allowed yet.</p>}
+                  </div>
+                  <form className="repository-create" onSubmit={allowLocalRepository}>
+                    <input value={repositoryPath} onChange={(event) => setRepositoryPath(event.target.value)} placeholder="/absolute/path/to/project" aria-label="Repository folder path" maxLength={1024} />
+                    <button type="submit" disabled={!repositoryPath.trim()}>Allow</button>
+                  </form>
+                  <p className="repository-disclosure">Approval is stored locally. Files are read only after you choose a folder and search it.</p>
+                  {repositoryMessage && <p className="repository-status" role="status">{repositoryMessage}</p>}
+                </section>
+              </details>
+              <span className="privacy-indicator" title="Private by default · nothing is sent to the cloud"><CraftIcon name="shield" size={15} /><span>Local</span></span>
+            </nav>
             <div className="theme-picker" aria-label="Theme settings">
               <button type="button" className="appearance-toggle" onClick={() => changeAppearance(appearance === "dark" ? "light" : "dark")} aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}><CraftIcon name={appearance === "dark" ? "sun" : "moon"} size={15} /></button>
               {(["sand", "sage", "lavender"] as Palette[]).map((choice) => <button type="button" key={choice} className={`palette-dot ${choice} ${palette === choice ? "selected" : ""}`} onClick={() => changePalette(choice)} aria-label={`Use ${choice} palette`} />)}

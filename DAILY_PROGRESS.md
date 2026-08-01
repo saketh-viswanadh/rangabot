@@ -308,3 +308,13 @@ quality evaluation, and it can be validated without changing model weights.
 - Added persistent title-only receipts such as `Answer style` and `Preferred
   name`; saved values are never copied into the visible receipt.
 - Added selector, privacy, metadata-validation, and receipt tests.
+
+## 2026-08-01 — Chat-focused navigation
+
+- Removed Knowledge Brief, Local memory, Path to Mastery, repository management,
+  and the large privacy card from the conversation sidebar.
+- Added a compact header utility rail for Brief, Memory, Mastery, local folders,
+  and local-only status, with responsive icon-only behavior at narrower widths.
+- Moved repository allowlisting, search launch, and revocation into an anchored
+  folder popover so the capability remains available without crowding chats.
+- Added structural tests that keep future non-chat tools out of the sidebar.
