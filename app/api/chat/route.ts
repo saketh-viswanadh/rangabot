@@ -11,7 +11,7 @@ import { buildConversationSummaryFallback, buildWordConversationPrompt, buildWor
 import { findStoryPack } from "@/lib/story-packs";
 import { isValidChatMessages } from "@/lib/chat-validation";
 import { buildKnowledgeSearchQuery } from "@/lib/knowledge-query-planning";
-import { answerDirectMemoryQuestion, formatMemoryContext } from "@/lib/memories";
+import { answerDirectMemoryQuestion, buildRelevantMemoryContext, directMemoryTitles } from "@/lib/memories";
 
 export const runtime = "nodejs";
 
@@ -57,12 +57,14 @@ export async function POST(request: Request) {
     const latestQuestion = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
     const directMemoryAnswer = answerDirectMemoryQuestion(latestQuestion);
     if (directMemoryAnswer) {
+      const titles = directMemoryTitles(latestQuestion);
       return new Response(directMemoryAnswer, {
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
           "Cache-Control": "no-store",
           "X-Content-Type-Options": "nosniff",
           "X-Rangabot-Memory": "direct",
+          ...(titles.length ? { "X-Rangabot-Memory-Titles": encodeURIComponent(JSON.stringify(titles)) } : {}),
         },
       });
     }
@@ -161,8 +163,9 @@ export async function POST(request: Request) {
         : message);
     }
 
-    const memoryContext = formatMemoryContext();
-    if (memoryContext) messages = [{ role: "system", content: memoryContext }, ...messages];
+    const relevantMemory = buildRelevantMemoryContext(question);
+    if (relevantMemory) messages = [{ role: "system", content: relevantMemory.context }, ...messages];
+    const memoryTitleHeader = relevantMemory ? encodeURIComponent(JSON.stringify(relevantMemory.titles)) : undefined;
 
     if (body.mode === "teach" && usesVault) {
       const grounded = await generateGroundedTeacherAnswer(messages, knowledgeSources, completeTextWithOllama);
@@ -175,7 +178,8 @@ export async function POST(request: Request) {
           "X-Rangabot-Retrieval": knowledgeSearchMode ?? "keyword-only",
           "X-Rangabot-Grounding": grounded.audit.passed ? (grounded.separated ? "separated-and-passed" : grounded.revised ? "revised-and-passed" : "passed") : "warning",
           "X-Rangabot-Code-Context": localCodeContext ? "used" : "not-used",
-          "X-Rangabot-Memory": memoryContext ? "used" : "not-used",
+          "X-Rangabot-Memory": relevantMemory ? "used" : "not-used",
+          ...(memoryTitleHeader ? { "X-Rangabot-Memory-Titles": memoryTitleHeader } : {}),
         },
       });
     }
@@ -189,7 +193,8 @@ export async function POST(request: Request) {
         "X-Rangabot-Knowledge": usesVault ? "used" : "not-used",
         ...(knowledgeSearchMode ? { "X-Rangabot-Retrieval": knowledgeSearchMode } : {}),
         "X-Rangabot-Code-Context": localCodeContext ? "used" : "not-used",
-        "X-Rangabot-Memory": memoryContext ? "used" : "not-used",
+        "X-Rangabot-Memory": relevantMemory ? "used" : "not-used",
+        ...(memoryTitleHeader ? { "X-Rangabot-Memory-Titles": memoryTitleHeader } : {}),
       },
     });
   } catch (error) {

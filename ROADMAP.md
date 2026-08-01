@@ -86,8 +86,9 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   delete, bounded chat context, and persistent per-answer usage receipts
 - [x] Learning Core 4b: Reviewed Local memory JSON import with duplicate detection,
   conservative conflicts, and explicit keep-or-replace approval
-- [ ] Learning Core 4c: Title-only relevance disclosure, explainable proficiency,
-  corrections, and learning progress
+- [x] Learning Core 4c: Deterministic relevance selection with bounded prompt
+  context and title-only per-answer disclosure
+- [ ] Learning Core 4d: Explainable proficiency, corrections, and learning progress
 - [ ] Learning Core 5: Draft, grounding review, and revision with visible separation
   between vault evidence, local-model background, and unresolved uncertainty
 - [x] Learning Core 5a: Teacher Mode citation audit, one bounded local revision,

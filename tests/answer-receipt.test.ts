@@ -13,3 +13,7 @@ test("distinguishes deterministic memory recall", () => {
 test("combines knowledge and memory receipts without hiding retrieval mode", () => {
   assert.equal(formatAnswerReceipt({ knowledgeUsed: true, retrievalMode: "hybrid", memoryUse: "context" }), "LOCAL · KNOWLEDGE VAULT · HYBRID · MEMORY");
 });
+
+test("discloses relevant memories by title only", () => {
+  assert.equal(formatAnswerReceipt({ memoryUse: "context", memoryTitles: ["Answer style", "Technical preference"] }), "LOCAL · MEMORY · Answer style · Technical preference");
+});
