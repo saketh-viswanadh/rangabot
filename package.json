@@ -30,6 +30,8 @@
     "knowledge:vector-index": "node --experimental-strip-types scripts/knowledge-cli.ts vector-index",
     "knowledge:evaluate": "node --experimental-strip-types scripts/evaluate-knowledge.ts",
     "knowledge:evaluate:answers": "node --experimental-strip-types scripts/evaluate-knowledge-answers.ts",
+    "conversation:evaluate": "node --experimental-strip-types scripts/evaluate-conversation.ts",
+    "conversation:evaluate:baseline": "node --experimental-strip-types scripts/evaluate-conversation.ts --baseline",
     "knowledge:validate": "node --experimental-strip-types scripts/knowledge-cli.ts validate",
     "knowledge:backup": "node --experimental-strip-types scripts/knowledge-cli.ts backup",
     "knowledge:rollback": "node --experimental-strip-types scripts/knowledge-cli.ts rollback",

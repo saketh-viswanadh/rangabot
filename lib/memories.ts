@@ -129,14 +129,18 @@ function relevanceScore(memory: LocalMemory, question: string) {
   return score;
 }
 
-export function selectRelevantMemories(question: string, limit = 6): LocalMemory[] {
+export function selectRelevantMemoriesFrom(memories: LocalMemory[], question: string, limit = 6): LocalMemory[] {
   if (!question.trim()) return [];
-  return listMemories()
+  return memories
     .map((memory) => ({ memory, score: relevanceScore(memory, question) }))
     .filter(({ score }) => score >= 2)
     .sort((a, b) => b.score - a.score || b.memory.updatedAt.localeCompare(a.memory.updatedAt))
     .slice(0, Math.max(0, Math.min(limit, 8)))
     .map(({ memory }) => memory);
+}
+
+export function selectRelevantMemories(question: string, limit = 6): LocalMemory[] {
+  return selectRelevantMemoriesFrom(listMemories(), question, limit);
 }
 
 export function buildRelevantMemoryContext(question: string, limit = 6): RelevantMemoryContext | null {

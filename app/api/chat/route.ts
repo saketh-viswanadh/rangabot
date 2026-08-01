@@ -11,7 +11,8 @@ import { buildConversationSummaryFallback, buildWordConversationPrompt, buildWor
 import { findStoryPack } from "@/lib/story-packs";
 import { isValidChatMessages } from "@/lib/chat-validation";
 import { buildKnowledgeSearchQuery } from "@/lib/knowledge-query-planning";
-import { answerDirectMemoryQuestion, buildRelevantMemoryContext, directMemoryTitles } from "@/lib/memories";
+import { answerDirectMemoryQuestion, directMemoryTitles, listMemories } from "@/lib/memories";
+import { answerUnavailableExternalAction, buildConversationMessagesWithSelected, formatSelectedMemoryContext, selectConversationMemories } from "@/lib/conversation-orchestration";
 
 export const runtime = "nodejs";
 
@@ -55,6 +56,12 @@ export async function POST(request: Request) {
     }
 
     const latestQuestion = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
+    const unavailableActionAnswer = answerUnavailableExternalAction(latestQuestion);
+    if (unavailableActionAnswer) {
+      return new Response(unavailableActionAnswer, {
+        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Rangabot-Capability": "unavailable" },
+      });
+    }
     const directMemoryAnswer = answerDirectMemoryQuestion(latestQuestion);
     if (directMemoryAnswer) {
       const titles = directMemoryTitles(latestQuestion);
@@ -163,9 +170,18 @@ export async function POST(request: Request) {
         : message);
     }
 
-    const relevantMemory = buildRelevantMemoryContext(question);
-    if (relevantMemory) messages = [{ role: "system", content: relevantMemory.context }, ...messages];
-    const memoryTitleHeader = relevantMemory ? encodeURIComponent(JSON.stringify(relevantMemory.titles)) : undefined;
+    const approvedMemories = listMemories();
+    const selectedMemories = selectConversationMemories(approvedMemories, body.messages);
+    const relevantMemory = selectedMemories.length > 0;
+    const memoryTitles = relevantMemory ? buildConversationMessagesWithSelected([], selectedMemories).memoryTitles : [];
+    const memoryTitleHeader = relevantMemory ? encodeURIComponent(JSON.stringify(memoryTitles)) : undefined;
+
+    if (body.mode === "teach" && usesVault) {
+      const memoryContext = formatSelectedMemoryContext(selectedMemories);
+      if (memoryContext) messages = [{ role: "system", content: memoryContext }, ...messages];
+    } else {
+      messages = buildConversationMessagesWithSelected(messages, selectedMemories).messages;
+    }
 
     if (body.mode === "teach" && usesVault) {
       const grounded = await generateGroundedTeacherAnswer(messages, knowledgeSources, completeTextWithOllama);
