@@ -40,6 +40,8 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Guided/non-interactive setup, doctor and privacy-check commands
 - [x] Public local-model registry with hardware and upstream-license guidance
 - [x] Self-service Knowledge Vault initialization, validation, backup and rollback
+- [x] Bounded Knowledge Doctor deep scans with streamed hashing, visible progress,
+  and a configurable timeout for large private vaults
 - [x] Pull-request CI and community issue templates
 - [x] Fresh-clone and cross-platform open-source release rehearsal
 - [x] Final Ranga artwork and Rangabot branding license decision

@@ -86,6 +86,8 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Changed
 
+- Knowledge Doctor now streams large-file hashing, reports when its deep scan
+  starts, and returns a clear incomplete-check warning after a bounded timeout.
 - Ollama chat and embedding configuration is now centrally validated as
   loopback-only, with the documented lightweight model as the single fallback.
 - Answer evaluations exclude execution errors from completed-case quality and

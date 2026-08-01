@@ -302,10 +302,36 @@ export function getKnowledgeSourceStates(): KnowledgeSourceState[] {
   }).sort((left, right) => left.status.localeCompare(right.status) || left.name.localeCompare(right.name));
 }
 
+const pageMarkerRemainderSql = `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(c.content), '[page ', ''), ']', ''), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), ' ', ''), CHAR(10), ''), CHAR(13), '')`;
+const nonWhitespaceLengthSql = `LENGTH(REPLACE(REPLACE(REPLACE(REPLACE(c.content, ' ', ''), CHAR(10), ''), CHAR(13), ''), CHAR(9), ''))`;
+
 export function indexedDocumentUsefulCharacters(path: string) {
-  const rows = getDatabase().prepare(`SELECT c.content FROM chunks c JOIN documents d ON d.id = c.document_id WHERE d.path = ? ORDER BY c.ordinal`)
-    .all(path) as unknown as Array<{ content: string }>;
-  return rows.map((row) => row.content).join(" ").replace(/\[Page\s+\d+\]/gi, "").match(/[\p{L}\p{N}]/gu)?.length ?? 0;
+  const result = getDatabase().prepare(`
+    SELECT COALESCE(SUM(
+      CASE
+        WHEN LENGTH(${pageMarkerRemainderSql}) = 0 THEN 0
+        ELSE ${nonWhitespaceLengthSql}
+      END
+    ), 0) AS usefulCharacters
+    FROM chunks c
+    JOIN documents d ON d.id = c.document_id
+    WHERE d.path = ?
+  `).get(path) as { usefulCharacters: number };
+  return result.usefulCharacters;
+}
+
+export function listIndexedDocumentUsefulCharacters() {
+  return getDatabase().prepare(`
+    SELECT d.path, COALESCE(SUM(
+      CASE
+        WHEN LENGTH(${pageMarkerRemainderSql}) = 0 THEN 0
+        ELSE ${nonWhitespaceLengthSql}
+      END
+    ), 0) AS usefulCharacters
+    FROM documents d
+    LEFT JOIN chunks c ON c.document_id = d.id
+    GROUP BY d.id, d.path
+  `).all() as unknown as Array<{ path: string; usefulCharacters: number }>;
 }
 
 export function saveKnowledgeDocument(document: KnowledgeDocumentInput) {

@@ -276,3 +276,14 @@ quality evaluation, and it can be validated without changing model weights.
 - Preserved the receipt across conversation reopen and Markdown backup/restore.
 - Added strict metadata validation so imported or API-supplied messages cannot
   invent arbitrary memory-use states.
+
+## 2026-07-31 — Bounded Knowledge Doctor scans
+
+- Traced the apparent Doctor freeze to synchronous hashing of the full 1.36 GB
+  vault rather than to Ollama or embedding generation.
+- Replaced full-file buffering with sequential streamed SHA-256 hashing and an
+  immediate deep-scan progress message.
+- Added a 30-second default overall deadline, a bounded environment override,
+  and an explicit incomplete-check warning instead of an indefinite wait.
+- Replaced Doctor's full passage-text materialization with a SQL aggregate that
+  ignores page-marker-only chunks without loading the entire index into memory.
