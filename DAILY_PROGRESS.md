@@ -318,3 +318,14 @@ quality evaluation, and it can be validated without changing model weights.
 - Moved repository allowlisting, search launch, and revocation into an anchored
   folder popover so the capability remains available without crowding chats.
 - Added structural tests that keep future non-chat tools out of the sidebar.
+
+## 2026-08-01 — Conversation focus stack
+
+- Reworked recent chats into a title-only resting state with no space reserved
+  for hidden actions.
+- Added a restrained focus animation: the hovered or keyboard-focused chat grows,
+  reveals up to two title lines and its controls, while neighboring chats recede.
+- Preserved pinned state with a minimal accent point instead of a permanently
+  visible control.
+- Redrew All chats and folder icons as layered local SVG linework and added
+  regression tests for the interaction and icon contracts.
