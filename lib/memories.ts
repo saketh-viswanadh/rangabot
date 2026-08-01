@@ -17,6 +17,16 @@ export type LocalMemory = {
   createdAt: string;
   updatedAt: string;
 };
+export type MemoryImportItem = { sourceId: string; content: string; kind: MemoryKind };
+export type MemoryImportConflict = { incoming: MemoryImportItem; existing: LocalMemory; reason: "same-id" | "different-kind" | "same-subject" };
+export type MemoryImportPreview = {
+  newItems: MemoryImportItem[];
+  duplicates: Array<{ incoming: MemoryImportItem; existing: LocalMemory }>;
+  conflicts: MemoryImportConflict[];
+};
+
+export const maxMemoryImportBytes = 300_000;
+export const maxMemoryImportItems = 200;
 
 const defaultDatabasePath = resolve(process.cwd(), "data", "rangabot-memory.db");
 let databasePath = defaultDatabasePath;
@@ -111,6 +121,95 @@ export function answerDirectMemoryQuestion(question: string): string | null {
 
 export function exportMemoriesJson(exportedAt = new Date().toISOString()): string {
   return `${JSON.stringify({ version: 1, exportedAt, memories: listMemories() }, null, 2)}\n`;
+}
+
+function normalizedMemoryContent(content: string) {
+  return content.normalize("NFKC").trim().replace(/\s+/g, " ").replace(/[.!?]+$/, "").toLowerCase();
+}
+
+function memorySubject(content: string) {
+  return /^(?:my name is|call me)\s+/i.test(content.trim()) ? "identity:name" : null;
+}
+
+export function parseMemoryExport(payload: unknown): MemoryImportItem[] {
+  if (!payload || typeof payload !== "object") throw new Error("Choose a Rangabot memory JSON export.");
+  const candidate = payload as { version?: unknown; exportedAt?: unknown; memories?: unknown };
+  if (candidate.version !== 1 || typeof candidate.exportedAt !== "string" || !Number.isFinite(Date.parse(candidate.exportedAt))) {
+    throw new Error("This is not a supported Rangabot memory export.");
+  }
+  if (!Array.isArray(candidate.memories) || candidate.memories.length > maxMemoryImportItems) {
+    throw new Error(`Memory exports may contain at most ${maxMemoryImportItems} items.`);
+  }
+  const sourceIds = new Set<string>();
+  const contents = new Set<string>();
+  const subjects = new Set<string>();
+  return candidate.memories.map((value) => {
+    if (!value || typeof value !== "object") throw new Error("The memory export contains an invalid item.");
+    const item = value as Record<string, unknown>;
+    if (typeof item.id !== "string" || !item.id.trim() || item.id.length > 80 || item.origin !== "user-approved" || item.confidence !== 1) {
+      throw new Error("Every imported memory must have a valid ID and explicit user-approved provenance.");
+    }
+    const valid = validateMemoryInput(item.content, item.kind);
+    const normalized = normalizedMemoryContent(valid.content);
+    const subject = memorySubject(valid.content);
+    if (sourceIds.has(item.id) || contents.has(normalized) || (subject && subjects.has(subject))) {
+      throw new Error("The import file contains duplicate or internally conflicting memories.");
+    }
+    sourceIds.add(item.id); contents.add(normalized); if (subject) subjects.add(subject);
+    return { sourceId: item.id, ...valid };
+  });
+}
+
+export function previewMemoryImport(payload: unknown): MemoryImportPreview {
+  const incoming = parseMemoryExport(payload);
+  const existing = listMemories();
+  const preview: MemoryImportPreview = { newItems: [], duplicates: [], conflicts: [] };
+  for (const item of incoming) {
+    const normalized = normalizedMemoryContent(item.content);
+    const duplicate = existing.find((memory) => memory.kind === item.kind && normalizedMemoryContent(memory.content) === normalized);
+    if (duplicate) { preview.duplicates.push({ incoming: item, existing: duplicate }); continue; }
+    const sameId = existing.find((memory) => memory.id === item.sourceId);
+    if (sameId) { preview.conflicts.push({ incoming: item, existing: sameId, reason: "same-id" }); continue; }
+    const differentKind = existing.find((memory) => memory.kind !== item.kind && normalizedMemoryContent(memory.content) === normalized);
+    if (differentKind) { preview.conflicts.push({ incoming: item, existing: differentKind, reason: "different-kind" }); continue; }
+    const subject = memorySubject(item.content);
+    const sameSubject = subject ? existing.find((memory) => memorySubject(memory.content) === subject) : undefined;
+    if (sameSubject) { preview.conflicts.push({ incoming: item, existing: sameSubject, reason: "same-subject" }); continue; }
+    preview.newItems.push(item);
+  }
+  return preview;
+}
+
+export function applyMemoryImport(payload: unknown, replaceSourceIds: unknown) {
+  if (!Array.isArray(replaceSourceIds) || !replaceSourceIds.every((id) => typeof id === "string")) throw new Error("Import conflict selections are invalid.");
+  const preview = previewMemoryImport(payload);
+  const replace = new Set(replaceSourceIds);
+  const validConflictIds = new Set(preview.conflicts.map((conflict) => conflict.incoming.sourceId));
+  if ([...replace].some((id) => !validConflictIds.has(id))) throw new Error("An import selection no longer matches the reviewed conflicts.");
+  const db = getDatabase();
+  const now = new Date().toISOString();
+  db.exec("BEGIN");
+  try {
+    for (const item of preview.newItems) {
+      db.prepare("INSERT INTO memories (id, content, kind, origin, confidence, created_at, updated_at) VALUES (?, ?, ?, 'user-approved', 1, ?, ?)")
+        .run(randomUUID(), item.content, item.kind, now, now);
+    }
+    for (const conflict of preview.conflicts) {
+      if (!replace.has(conflict.incoming.sourceId)) continue;
+      db.prepare("UPDATE memories SET content = ?, kind = ?, updated_at = ? WHERE id = ?")
+        .run(conflict.incoming.content, conflict.incoming.kind, now, conflict.existing.id);
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  return {
+    imported: preview.newItems.length,
+    replaced: preview.conflicts.filter((conflict) => replace.has(conflict.incoming.sourceId)).length,
+    skippedDuplicates: preview.duplicates.length,
+    keptExisting: preview.conflicts.filter((conflict) => !replace.has(conflict.incoming.sourceId)).length,
+  };
 }
 
 export function closeMemoryDatabaseForTests() { database?.close(); database = undefined; }

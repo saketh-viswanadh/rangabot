@@ -41,3 +41,37 @@ test("answers direct identity recall from approved memory without model improvis
   memories.deleteMemory(name.id);
   assert.match(memories.answerDirectMemoryQuestion("What's my name?") ?? "", /won't guess/);
 });
+
+test("previews duplicates and conflicts before an explicitly reviewed import", () => {
+  const preference = memories.createMemory("Prefer concise answers", "preference");
+  const name = memories.createMemory("My name is Saketh", "fact");
+  const payload = {
+    version: 1,
+    exportedAt: "2026-08-01T00:00:00.000Z",
+    memories: [
+      { id: "duplicate", content: "prefer concise answers.", kind: "preference", origin: "user-approved", confidence: 1 },
+      { id: "new", content: "Use dark mode by default", kind: "preference", origin: "user-approved", confidence: 1 },
+      { id: "new-name", content: "My name is Ranga", kind: "fact", origin: "user-approved", confidence: 1 },
+    ],
+  };
+  const preview = memories.previewMemoryImport(payload);
+  assert.equal(preview.duplicates.length, 1);
+  assert.equal(preview.newItems.length, 1);
+  assert.equal(preview.conflicts[0]?.reason, "same-subject");
+  const result = memories.applyMemoryImport(payload, ["new-name"]);
+  assert.deepEqual(result, { imported: 1, replaced: 1, skippedDuplicates: 1, keptExisting: 0 });
+  assert.match(memories.answerDirectMemoryQuestion("What is my name?") ?? "", /Ranga/);
+  for (const memory of memories.listMemories()) memories.deleteMemory(memory.id);
+  assert.equal(memories.deleteMemory(preference.id), false);
+  assert.equal(memories.deleteMemory(name.id), false);
+});
+
+test("rejects untrusted or internally ambiguous memory exports", () => {
+  assert.throws(() => memories.parseMemoryExport({ version: 1, exportedAt: "bad", memories: [] }), /supported/);
+  assert.throws(() => memories.parseMemoryExport({
+    version: 1,
+    exportedAt: "2026-08-01T00:00:00.000Z",
+    memories: [{ id: "x", content: "Secret", kind: "fact", origin: "inferred", confidence: 0.4 }],
+  }), /user-approved provenance/);
+  assert.throws(() => memories.applyMemoryImport({ version: 1, exportedAt: "2026-08-01T00:00:00.000Z", memories: [] }, ["not-reviewed"]), /no longer matches/);
+});

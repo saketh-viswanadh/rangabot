@@ -222,6 +222,13 @@ and deletion; no memory is sent to a remote service. Answers visibly show
 **MEMORY** when approved context was supplied and **DIRECT RECALL** when a saved
 fact was resolved deterministically rather than left to model improvisation.
 
+Use **Import JSON** to restore or migrate a Rangabot memory export. Import is a
+two-step local review: new items, skipped duplicates, and conflicts are shown
+before any write. Existing memories win every conflict by default; replacing one
+requires selecting that specific imported version and then approving the review.
+Imports are capped at 200 memories and 300 KB, require explicit user-approved
+provenance, and never contact a cloud service.
+
 ## Next milestones
 
 1. Add conversation-aware query planning and multi-book evidence synthesis using the

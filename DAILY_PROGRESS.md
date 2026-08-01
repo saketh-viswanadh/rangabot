@@ -287,3 +287,14 @@ quality evaluation, and it can be validated without changing model weights.
   and an explicit incomplete-check warning instead of an indefinite wait.
 - Replaced Doctor's full passage-text materialization with a SQL aggregate that
   ignores page-marker-only chunks without loading the entire index into memory.
+
+## 2026-08-01 — Review-first Local memory import
+
+- Added strict parsing for versioned Rangabot memory exports with explicit
+  provenance, 200-item, and 300 KB boundaries.
+- Added a no-write preview that separates new memories, exact duplicates, and
+  conflicts caused by matching IDs, kinds, or recognized identity subjects.
+- Existing memories win by default; users must select each imported replacement
+  and approve the complete review before a transaction writes anything.
+- Added streamed API body limits and local lifecycle tests covering duplicate,
+  conflict, replacement, and untrusted-export behavior.

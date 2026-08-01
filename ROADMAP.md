@@ -84,8 +84,10 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Learning Core 4a: Explicit inspectable local memory for user-approved
   preferences, facts, and instructions with origin, confidence, edit, export,
   delete, bounded chat context, and persistent per-answer usage receipts
-- [ ] Learning Core 4b: Explainable proficiency, corrections, learning progress,
-  reviewed import, and conflict handling
+- [x] Learning Core 4b: Reviewed Local memory JSON import with duplicate detection,
+  conservative conflicts, and explicit keep-or-replace approval
+- [ ] Learning Core 4c: Title-only relevance disclosure, explainable proficiency,
+  corrections, and learning progress
 - [ ] Learning Core 5: Draft, grounding review, and revision with visible separation
   between vault evidence, local-model background, and unresolved uncertainty
 - [x] Learning Core 5a: Teacher Mode citation audit, one bounded local revision,
