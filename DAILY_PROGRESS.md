@@ -298,3 +298,13 @@ quality evaluation, and it can be validated without changing model weights.
   and approve the complete review before a transaction writes anything.
 - Added streamed API body limits and local lifecycle tests covering duplicate,
   conflict, replacement, and untrusted-export behavior.
+
+## 2026-08-01 — Relevance-aware Local memory
+
+- Replaced all-memory prompt injection with deterministic request matching and a
+  six-item maximum, keeping unrelated personal facts outside the model context.
+- Preserved broadly applicable response-style preferences while requiring topic
+  or intent evidence for personal facts and technical instructions.
+- Added persistent title-only receipts such as `Answer style` and `Preferred
+  name`; saved values are never copied into the visible receipt.
+- Added selector, privacy, metadata-validation, and receipt tests.

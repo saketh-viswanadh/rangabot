@@ -19,7 +19,7 @@ test("creates, lists, edits and deletes explicit local memories", () => {
   assert.equal(memories.listMemories()[0]?.id, created.id);
   const updated = memories.updateMemory(created.id, "Prefer concise explanations with examples", "instruction");
   assert.equal(updated?.kind, "instruction");
-  assert.match(memories.formatMemoryContext() ?? "", /user-approved local memory/i);
+  assert.match(memories.formatMemoryContext("How should you explain this?") ?? "", /user-approved local memory/i);
   const exported = JSON.parse(memories.exportMemoriesJson("2026-07-30T00:00:00.000Z"));
   assert.equal(exported.version, 1);
   assert.equal(exported.memories[0].origin, "user-approved");
@@ -74,4 +74,36 @@ test("rejects untrusted or internally ambiguous memory exports", () => {
     memories: [{ id: "x", content: "Secret", kind: "fact", origin: "inferred", confidence: 0.4 }],
   }), /user-approved provenance/);
   assert.throws(() => memories.applyMemoryImport({ version: 1, exportedAt: "2026-08-01T00:00:00.000Z", memories: [] }, ["not-reviewed"]), /no longer matches/);
+});
+
+test("selects only memories relevant to the current request", () => {
+  const concise = memories.createMemory("Prefer concise answers with examples", "preference");
+  const python = memories.createMemory("Use Python for data analysis", "instruction");
+  const city = memories.createMemory("I live in Gurugram", "fact");
+
+  const general = memories.buildRelevantMemoryContext("Explain database indexes");
+  assert.deepEqual(general?.titles, ["Answer style"]);
+  assert.match(general?.context ?? "", /concise answers/i);
+  assert.doesNotMatch(general?.context ?? "", /Gurugram|Python/i);
+
+  const technical = memories.buildRelevantMemoryContext("Help with Python data analysis");
+  assert.deepEqual(technical?.titles, ["Technical preference", "Answer style"]);
+  assert.match(technical?.context ?? "", /Use Python/i);
+  assert.doesNotMatch(technical?.context ?? "", /Gurugram/i);
+
+  memories.deleteMemory(concise.id);
+  memories.deleteMemory(python.id);
+  memories.deleteMemory(city.id);
+});
+
+test("uses a title-only identity disclosure without leaking the saved value", () => {
+  const name = memories.createMemory("My name is Saketh", "fact");
+  const style = memories.createMemory("Prefer concise answers", "preference");
+  const relevant = memories.buildRelevantMemoryContext("Write a short bio about me");
+  assert.deepEqual(relevant?.titles, ["Preferred name", "Answer style"]);
+  assert.equal(relevant?.titles.join(" ").includes("Saketh"), false);
+  assert.deepEqual(memories.directMemoryTitles("What is my name?"), ["Preferred name"]);
+  assert.deepEqual(memories.directMemoryTitles("What do you remember about me?"), ["Answer style", "Preferred name"]);
+  memories.deleteMemory(name.id);
+  memories.deleteMemory(style.id);
 });

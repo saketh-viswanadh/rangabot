@@ -216,11 +216,15 @@ Open **Local memory** in the sidebar to save a preference, user-provided fact,
 or standing instruction. Rangabot never infers durable memories from a chat:
 each item requires an explicit **Approve and remember** action and records its
 origin, confidence, and timestamps in the private local SQLite database
-`data/rangabot-memory.db`. Approved memories are supplied as bounded context to
-ordinary and Teacher Mode chats. The panel supports review, editing, JSON export,
+`data/rangabot-memory.db`. Rangabot deterministically selects at most six
+memories relevant to the current request; unrelated saved facts are not placed
+in the model prompt. Broad answer-style preferences remain available when they
+apply across subjects. The panel supports review, editing, JSON export,
 and deletion; no memory is sent to a remote service. Answers visibly show
-**MEMORY** when approved context was supplied and **DIRECT RECALL** when a saved
-fact was resolved deterministically rather than left to model improvisation.
+**MEMORY** only when selected context was supplied and add safe titles such as
+**Answer style** or **Preferred name**—never the saved value itself. **DIRECT
+RECALL** identifies a fact resolved deterministically rather than left to model
+improvisation.
 
 Use **Import JSON** to restore or migrate a Rangabot memory export. Import is a
 two-step local review: new items, skipped duplicates, and conflicts are shown

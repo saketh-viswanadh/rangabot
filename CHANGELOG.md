@@ -19,6 +19,8 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - Review-first Local memory JSON import with strict provenance and size checks,
   duplicate skipping, conservative conflict detection, and explicit per-conflict
   replacement approval.
+- Relevance-aware Local memory selection prevents unrelated approved facts from
+  entering a model request and discloses only safe memory titles on each answer.
 - Governed, evidence-backed mastery attribution with CODEOWNER protection, a
   public claim workflow, local-only optional portraits, node-level contributor
   credits, and founder recognition covering 19 verified capabilities.

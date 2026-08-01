@@ -19,5 +19,7 @@ test("rejects unbounded or malformed persisted message metadata", () => {
   assert.equal(isValidChatMessages([{ role: "assistant", content: "Done", wordArtifact: { id: "id", title: "Title", filename: "file.docx", previewPages: 2 } }]), true);
   assert.equal(isValidChatMessages([{ role: "assistant", content: "Your name is Saketh.", memoryUse: "direct" }]), true);
   assert.equal(isValidChatMessages([{ role: "assistant", content: "Done", memoryUse: "inferred" }]), false);
+  assert.equal(isValidChatMessages([{ role: "assistant", content: "Done", memoryUse: "context", memoryTitles: ["Answer style"] }]), true);
+  assert.equal(isValidChatMessages([{ role: "assistant", content: "Done", memoryTitles: ["x".repeat(81)] }]), false);
   assert.equal(isValidChatMessages([{ role: "assistant", content: "Done", replyTo: { role: "system", excerpt: "bad" } }]), false);
 });

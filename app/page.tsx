@@ -395,7 +395,7 @@ export default function Home() {
     const userMessage: DisplayMessage = { id: crypto.randomUUID(), role: "user", content, replyTo: reference, codeContext };
     const assistantId = crypto.randomUUID();
     const nextMessages = [...messages, userMessage];
-    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply, codeContext: code, artifactIntent, wordArtifact, retrievalMode, memoryUse }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}), ...(code ? { codeContext: code } : {}), ...(artifactIntent ? { artifactIntent } : {}), ...(wordArtifact ? { wordArtifact } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(memoryUse ? { memoryUse } : {}) }));
+    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply, codeContext: code, artifactIntent, wordArtifact, retrievalMode, memoryUse, memoryTitles }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}), ...(code ? { codeContext: code } : {}), ...(artifactIntent ? { artifactIntent } : {}), ...(wordArtifact ? { wordArtifact } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(memoryUse ? { memoryUse } : {}), ...(memoryTitles?.length ? { memoryTitles } : {}) }));
     let conversationId = activeConversationId;
     if (!conversationId) {
       const createResponse = await fetch("/api/conversations", {
@@ -428,6 +428,7 @@ export default function Home() {
     let responseArtifactIntent: ChatMessage["artifactIntent"];
     let responseWordArtifact: ChatMessage["wordArtifact"];
     let responseMemoryUse: ChatMessage["memoryUse"];
+    let responseMemoryTitles: ChatMessage["memoryTitles"];
 
     try {
       const response = await fetch("/api/chat", {
@@ -468,11 +469,20 @@ export default function Home() {
       const retrievalMode = retrievalHeader === "hybrid" || retrievalHeader === "keyword-only" ? retrievalHeader : undefined;
       const memoryHeader = response.headers.get("X-Rangabot-Memory");
       responseMemoryUse = memoryHeader === "direct" ? "direct" : memoryHeader === "used" ? "context" : undefined;
+      const encodedMemoryTitles = response.headers.get("X-Rangabot-Memory-Titles");
+      if (encodedMemoryTitles) {
+        try {
+          const parsed = JSON.parse(decodeURIComponent(encodedMemoryTitles));
+          if (Array.isArray(parsed) && parsed.every((title) => typeof title === "string")) responseMemoryTitles = parsed.slice(0, 8);
+        } catch {
+          responseMemoryTitles = undefined;
+        }
+      }
       if (knowledgeUsed) {
         setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, knowledgeUsed: true, retrievalMode } : message));
       }
       if (responseMemoryUse) {
-        setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, memoryUse: responseMemoryUse } : message));
+        setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, memoryUse: responseMemoryUse, memoryTitles: responseMemoryTitles } : message));
       }
 
       const reader = response.body.getReader();
@@ -498,7 +508,7 @@ export default function Home() {
         )));
       }
       if (!receivedContent) throw new Error("The local model returned an empty response.");
-      finalAssistant = { role: "assistant", content: generatedContent, ...(responseArtifactIntent ? { artifactIntent: responseArtifactIntent } : {}), ...(responseWordArtifact ? { wordArtifact: responseWordArtifact } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(responseMemoryUse ? { memoryUse: responseMemoryUse } : {}) };
+      finalAssistant = { role: "assistant", content: generatedContent, ...(responseArtifactIntent ? { artifactIntent: responseArtifactIntent } : {}), ...(responseWordArtifact ? { wordArtifact: responseWordArtifact } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(responseMemoryUse ? { memoryUse: responseMemoryUse } : {}), ...(responseMemoryTitles?.length ? { memoryTitles: responseMemoryTitles } : {}) };
     } catch (error) {
       const stopped = abortController.signal.aborted;
       finalAssistant = {

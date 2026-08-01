@@ -24,6 +24,11 @@ export type MemoryImportPreview = {
   duplicates: Array<{ incoming: MemoryImportItem; existing: LocalMemory }>;
   conflicts: MemoryImportConflict[];
 };
+export type RelevantMemoryContext = {
+  context: string;
+  titles: string[];
+  memories: LocalMemory[];
+};
 
 export const maxMemoryImportBytes = 300_000;
 export const maxMemoryImportItems = 200;
@@ -89,10 +94,63 @@ export function deleteMemory(id: string): boolean {
   return getDatabase().prepare("DELETE FROM memories WHERE id = ?").run(id).changes > 0;
 }
 
-export function formatMemoryContext(limit = 20): string | null {
-  const memories = listMemories().slice(0, Math.max(0, Math.min(limit, 20)));
+const memoryStopWords = new Set([
+  "a", "about", "an", "and", "are", "as", "at", "be", "can", "do", "for", "from", "how", "i", "in", "is", "it", "me", "my", "of", "on", "or", "please", "should", "that", "the", "this", "to", "use", "what", "when", "with", "you",
+]);
+
+function memoryTokens(value: string) {
+  return new Set(value.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]+/gu)?.filter((token) => token.length > 2 && !memoryStopWords.has(token)) ?? []);
+}
+
+export function memoryTitle(memory: Pick<LocalMemory, "content" | "kind">): string {
+  const content = memory.content.trim();
+  if (/^(?:my name is|call me)\s+/i.test(content)) return "Preferred name";
+  if (/\b(?:concise|brief|short|detailed|step[- ]by[- ]step|examples?|bullet|tone|format|language)\b/i.test(content)) return "Answer style";
+  if (/\b(?:python|sql|pyspark|databricks|snowflake|typescript|javascript|coding|code)\b/i.test(content)) return "Technical preference";
+  if (memory.kind === "instruction") return "Standing instruction";
+  if (memory.kind === "preference") return "Saved preference";
+  return "Saved fact";
+}
+
+function isGenerallyRelevantPreference(memory: LocalMemory) {
+  return memory.kind !== "fact" && /\b(?:concise|brief|short|detailed|step[- ]by[- ]step|examples?|bullet|tone|format|language)\b/i.test(memory.content);
+}
+
+function relevanceScore(memory: LocalMemory, question: string) {
+  const questionTokens = memoryTokens(question);
+  const contentTokens = memoryTokens(memory.content);
+  let overlap = 0;
+  for (const token of contentTokens) if (questionTokens.has(token)) overlap += 1;
+  let score = overlap * 3;
+  if (isGenerallyRelevantPreference(memory)) score += 2;
+  if (/^(?:my name is|call me)\s+/i.test(memory.content)
+    && /\b(?:my name|who am i|about me|bio|biography|introduce me|introduction)\b/i.test(question)) score += 6;
+  if (memory.kind === "instruction" && overlap > 0) score += 1;
+  return score;
+}
+
+export function selectRelevantMemories(question: string, limit = 6): LocalMemory[] {
+  if (!question.trim()) return [];
+  return listMemories()
+    .map((memory) => ({ memory, score: relevanceScore(memory, question) }))
+    .filter(({ score }) => score >= 2)
+    .sort((a, b) => b.score - a.score || b.memory.updatedAt.localeCompare(a.memory.updatedAt))
+    .slice(0, Math.max(0, Math.min(limit, 8)))
+    .map(({ memory }) => memory);
+}
+
+export function buildRelevantMemoryContext(question: string, limit = 6): RelevantMemoryContext | null {
+  const memories = selectRelevantMemories(question, limit);
   if (!memories.length) return null;
-  return `USER-APPROVED LOCAL MEMORY:\n${memories.map((memory) => `- [${memory.kind}] ${memory.content}`).join("\n")}\nUse these only when relevant. Treat them as user-provided context, not independently verified facts. Never claim you inferred or learned anything beyond this list.`;
+  return {
+    memories,
+    titles: [...new Set(memories.map(memoryTitle))],
+    context: `RELEVANT USER-APPROVED LOCAL MEMORY:\n${memories.map((memory) => `- [${memory.kind}] ${memory.content}`).join("\n")}\nUse only the entries that help answer the current request. Treat them as user-provided context, not independently verified facts. Never reveal unrelated memories or claim you inferred anything beyond this list.`,
+  };
+}
+
+export function formatMemoryContext(question: string, limit = 6): string | null {
+  return buildRelevantMemoryContext(question, limit)?.context ?? null;
 }
 
 function savedName(memories: LocalMemory[]) {
@@ -101,6 +159,15 @@ function savedName(memories: LocalMemory[]) {
     if (match?.[1]) return match[1].trim();
   }
   return null;
+}
+
+export function directMemoryTitles(question: string): string[] {
+  const normalized = question.trim().toLowerCase().replace(/[’]/g, "'");
+  if (/^(?:what(?:'s| is) my name|do you (?:know|remember) my name|who am i)[?.!]*$/i.test(normalized)) return ["Preferred name"];
+  if (/^(?:what do you remember about me|show (?:me )?(?:my |your )?(?:saved )?memories|what have i asked you to remember)[?.!]*$/i.test(normalized)) {
+    return [...new Set(listMemories().map(memoryTitle))].sort((a, b) => a.localeCompare(b));
+  }
+  return [];
 }
 
 export function answerDirectMemoryQuestion(question: string): string | null {

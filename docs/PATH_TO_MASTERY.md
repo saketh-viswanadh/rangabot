@@ -33,7 +33,7 @@ Understand intent, plan work and learn locally without hidden model mutation.
 |---|---:|---:|---|
 | [Natural conversation](#local-conversation) | Unlocked | 4.0/5 | Maintain reliability across supported local models |
 | [Intent planning](#intent-planning) | Training | 2.5/5 | Add inspectable multi-step plans |
-| [Inspectable local memory](#local-memory) | In Progress | 3.0/5 | Add title-only relevance disclosure before unlock review |
+| [Inspectable local memory](#local-memory) | In Progress | 3.4/5 | Add corrections and explainable learning progress before unlock review |
 | [Learning progress](#learning-progress) | Locked | 0.0/5 | Unlock after inspectable memory |
 | [Self-review loop](#self-review) | Training | 2.5/5 | Replace lexical checks with stronger entailment review |
 
@@ -67,8 +67,8 @@ Remember explicitly approved preferences, facts and instructions with provenance
 - **State:** In Progress
 - **Dependencies:** intent-planning
 - **Unlock requirements:** Every memory has origin and confidence; Users can inspect, edit, export and delete; No conversation silently becomes universal fact
-- **Verified evidence:** Local SQLite memory CRUD; Explicit approval and review UI; Bounded prompt-context tests; Persistent per-answer usage receipts; Review-first import with conflict handling
-- **Next:** Add title-only relevance disclosure before unlock review
+- **Verified evidence:** Local SQLite memory CRUD; Explicit approval and review UI; Bounded prompt-context tests; Persistent per-answer usage receipts; Review-first import with conflict handling; Relevance-gated selection with title-only disclosure
+- **Next:** Add corrections and explainable learning progress before unlock review
 
 <a id="learning-progress"></a>
 ### Learning progress

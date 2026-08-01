@@ -3,13 +3,16 @@ import type { ChatMessage } from "./providers/types";
 export const MAX_CHAT_MESSAGES = 200;
 export const MAX_CHAT_MESSAGE_CHARS = 50_000;
 export const MAX_CHAT_TOTAL_CHARS = 1_000_000;
-const messageKeys = new Set(["role", "content", "artifactIntent", "wordArtifact", "codeContext", "replyTo", "retrievalMode", "memoryUse"]);
+const messageKeys = new Set(["role", "content", "artifactIntent", "wordArtifact", "codeContext", "replyTo", "retrievalMode", "memoryUse", "memoryTitles"]);
 
 function validOptionalMetadata(message: Record<string, unknown>) {
   if (!Object.keys(message).every((key) => messageKeys.has(key))) return false;
   if (message.artifactIntent !== undefined && message.artifactIntent !== "word") return false;
   if (message.retrievalMode !== undefined && !["hybrid", "keyword-only"].includes(String(message.retrievalMode))) return false;
   if (message.memoryUse !== undefined && !["context", "direct"].includes(String(message.memoryUse))) return false;
+  if (message.memoryTitles !== undefined && (!Array.isArray(message.memoryTitles)
+    || message.memoryTitles.length > 8
+    || !message.memoryTitles.every((title) => typeof title === "string" && title.length > 0 && title.length <= 80))) return false;
   if (message.replyTo !== undefined) {
     if (!message.replyTo || typeof message.replyTo !== "object") return false;
     const reply = message.replyTo as Record<string, unknown>;
