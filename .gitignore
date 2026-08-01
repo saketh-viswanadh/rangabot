@@ -18,5 +18,6 @@ data/knowledge/*.private.*
 data/knowledge/LOCAL_*
 data/knowledge/evaluations/*.private.json
 data/knowledge/evaluations/results/
+data/evaluations/results/
 work/
 outputs/

@@ -9,6 +9,12 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- A model-independent conversation orchestration layer now gives every local
+  model the same directness, truthfulness, recency, correction, hard-constraint,
+  and memory-precedence contract before ordinary chat generation.
+- A private synthetic Mind & Memory stress suite measures instruction following,
+  continuity, reasoning, honest capability boundaries, adaptation, memory use,
+  memory privacy, and latency without reading real conversations or memories.
 - A chat-focused sidebar keeps projects, search, transfers, and conversation
   history together while moving Brief, Memory, Mastery, local folders, and the
   privacy indicator into a compact responsive header utility rail.

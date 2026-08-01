@@ -237,6 +237,22 @@ requires selecting that specific imported version and then approving the review.
 Imports are capped at 200 memories and 300 KB, require explicit user-approved
 provenance, and never contact a cloud service.
 
+### Conversation quality evaluation
+
+Run `npm run conversation:evaluate` to stress the configured local model against
+synthetic conversations covering helpfulness, format compliance, follow-up
+continuity, corrections, uncertainty, reasoning, tone, and Local memory safety.
+The evaluator never reads real chats or the live memory database. Full answers
+and latency are written only to the ignored local directory
+`data/evaluations/results/`, making regressions inspectable without publishing
+private model output. `npm run conversation:evaluate:baseline` preserves the
+pre-orchestration behavior for diagnostic comparison.
+
+Ordinary chat now uses a provider-independent Rangabot contract and a bounded
+recent-history window. Relevant approved memories may shape an answer, but the
+latest explicit user correction always wins and unrelated memories remain
+outside the model request.
+
 ## Next milestones
 
 1. Add conversation-aware query planning and multi-book evidence synthesis using the

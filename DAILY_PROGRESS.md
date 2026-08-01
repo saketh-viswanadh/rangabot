@@ -329,3 +329,20 @@ quality evaluation, and it can be validated without changing model weights.
   visible control.
 - Redrew All chats and folder icons as layered local SVG linework and added
   regression tests for the interaction and icon contracts.
+
+## 2026-08-01 — Mind & Memory quality foundation
+
+- Added a synthetic, private end-to-end conversation benchmark spanning direct
+  answers, hard instructions, follow-up continuity, corrections, ambiguity,
+  reasoning, honest uncertainty, capability boundaries, tone, and memory safety.
+- The baseline exposed a critical failure: the model admitted live data was
+  unavailable and then invented an exact price. The shared conversation contract
+  now explicitly prohibits that behavior and tells every configured model to
+  respect current-turn corrections and hard output constraints.
+- Memory retrieval now uses recent user context for short follow-ups, while
+  unrelated facts remain excluded and the current request overrides a conflicting
+  saved preference.
+- Added bounded recent-history shaping so long chats do not crowd the newest user
+  request out of a local model's context window.
+- Kept all evaluated answers and timing data in an ignored local directory; no
+  real conversation, saved memory, or model output was committed or uploaded.

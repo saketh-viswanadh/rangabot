@@ -27,6 +27,13 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 
 ## Approved
 
+- [x] Establish a repeatable synthetic Mind & Memory benchmark and a shared
+  model-independent conversation contract for directness, truthfulness,
+  correction precedence, bounded history, and selective local memory
+- [ ] Expand Mind & Memory evaluation across every supported model profile and
+  publish comparable local scorecards without committing private outputs
+- [ ] Add inspectable correction and memory-conflict workflows so outdated facts
+  can be superseded without silently deleting provenance
 - [x] Govern official mastery attribution through evidence-backed claims,
   CODEOWNER approval and node-level contributor recognition.
 
