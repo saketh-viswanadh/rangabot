@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const page = readFileSync("app/page.tsx", "utf8");
+const styles = readFileSync("app/globals.css", "utf8");
+const icons = readFileSync("app/components/craft-icon.tsx", "utf8");
 const sidebar = page.slice(page.indexOf('<aside className="sidebar">'), page.indexOf('</aside>'));
 const header = page.slice(page.indexOf('<section className="chat-panel">'), page.indexOf('<div\n          className="messages"'));
 
@@ -21,4 +23,16 @@ test("places secondary tools in the compact header utility rail", () => {
   assert.match(header, />Folders</);
   assert.match(header, /repository-popover/);
   assert.match(header, /privacy-indicator/);
+});
+
+test("keeps chat titles primary and reveals actions only on focus", () => {
+  assert.match(styles, /grid-template-columns: minmax\(0, 1fr\) 0 0/);
+  assert.match(styles, /\.history:has\(\.history-row:hover\)/);
+  assert.match(styles, /-webkit-line-clamp: 2/);
+  assert.match(styles, /\.history-row:hover \.delete-chat/);
+});
+
+test("uses layered hand-drawn collection and folder marks", () => {
+  assert.match(icons, /chat: <><path[^>]+\/><path/);
+  assert.match(icons, /folder: <><path[^>]+\/><path/);
 });

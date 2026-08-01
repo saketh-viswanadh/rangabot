@@ -32,6 +32,8 @@ model server.
 - Local SQLite conversation history with reopen, search, pin, Markdown backup/restore and delete controls
 - Chat-focused sidebar with a compact top rail for Brief, Memory, Mastery,
   approved local folders, themes, privacy, and model status
+- Title-first conversation focus stack with readable hover expansion and
+  on-demand pin/delete controls
 - Markdown responses, GitHub-style tables, syntax-highlighted code, and copy controls
 - Local project folders and project-scoped chats
 - Explicit local repository allowlisting with reversible access approval
