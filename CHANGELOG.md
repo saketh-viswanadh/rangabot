@@ -9,6 +9,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- A chat-focused sidebar keeps projects, search, transfers, and conversation
+  history together while moving Brief, Memory, Mastery, local folders, and the
+  privacy indicator into a compact responsive header utility rail.
 - Inspectable local memory for explicitly approved preferences, facts, and
   standing instructions, with visible provenance, edit/delete controls, JSON
   export, and bounded context injection into ordinary and Teacher Mode chats.
