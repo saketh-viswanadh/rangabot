@@ -228,5 +228,42 @@ header p { color: var(--muted); font-size: 12px; margin: 0; }
   .repository-popover { position: fixed; top: 62px; right: 10px; }
 }
 @keyframes knowledge-sheet { from { transform: translateY(28px); opacity: .5; } }
+.sql-panel { width: min(880px, calc(100vw - 40px)); height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); color: var(--text); background: color-mix(in srgb, var(--surface) 97%, transparent); border-left: .5px solid var(--line); box-shadow: -22px 0 70px #0005; animation: knowledge-slide .28s cubic-bezier(.22,.8,.25,1) both; }
+.sql-panel .knowledge-panel-header small, .sql-datasets > header small, .sql-datasets > p { color: var(--muted); font-size: 8px; line-height: 1.4; }
+.sql-panel-content { min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr); }
+.sql-datasets { min-height: 0; overflow-y: auto; border-right: .5px solid var(--line); padding: 16px 13px; }
+.sql-datasets > header, .sql-result > header, .sql-proposal > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sql-datasets > header div, .sql-result > header div, .sql-proposal > header div { display: grid; gap: 3px; }
+.sql-datasets > header strong { font-size: 12px; }
+.sql-datasets > header > span { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 50%; color: #fff; background: var(--accent); font-size: 9px; }
+.sql-dataset-list { display: grid; gap: 6px; margin: 14px 0 10px; }
+.sql-dataset-list > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; border: .5px solid var(--line); border-radius: 10px; padding: 3px; }
+.sql-dataset-list > div.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.sql-dataset-list button { border: 0; color: var(--muted); background: transparent; cursor: pointer; }
+.sql-dataset-list button:first-child { min-width: 0; display: grid; gap: 3px; padding: 7px; text-align: left; }
+.sql-dataset-list strong, .sql-dataset-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sql-dataset-list strong { color: var(--text); font-size: 10px; }.sql-dataset-list small { font-size: 8px; }
+.sql-allow-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; }
+.sql-allow-form input { min-width: 0; border: .5px solid var(--line); outline: 0; color: var(--text); background: var(--surface-raised); border-radius: 9px; padding: 8px; font-size: 9px; }
+.sql-allow-form input:focus, .sql-query-form textarea:focus { border-color: var(--accent); }
+.sql-allow-form button, .sql-query-form button, .sql-proposal footer button { border: 0; border-radius: 9px; padding: 8px 11px; font-size: 9px; font-weight: 700; cursor: pointer; }
+.sql-allow-form button, .sql-query-form button, .sql-run { color: #fff; background: var(--accent); }
+.sql-allow-form button:disabled, .sql-query-form button:disabled, .sql-run:disabled { opacity: .4; }
+.sql-workbench { min-width: 0; min-height: 0; overflow-y: auto; padding: 18px; }
+.sql-query-form { display: grid; gap: 8px; }.sql-query-form label { font-size: 10px; font-weight: 700; }
+.sql-query-form textarea { width: 100%; resize: vertical; border: .5px solid var(--line); outline: 0; color: var(--text); background: var(--bg); border-radius: 12px; padding: 12px; font: 10px/1.6 "SFMono-Regular", Consolas, monospace; }
+.sql-query-form button { justify-self: end; }
+.sql-proposal, .sql-result { margin-top: 16px; border: .5px solid color-mix(in srgb, var(--accent) 52%, var(--line)); border-radius: 15px; background: var(--surface-raised); padding: 15px; box-shadow: 0 12px 36px #0002; }
+.sql-proposal header span, .sql-result header span { color: var(--accent); font-size: 8px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
+.sql-proposal header strong, .sql-result header strong { font-size: 12px; }.sql-proposal time, .sql-result header small { color: var(--muted); font-size: 8px; }
+.sql-proposal pre { max-height: 180px; overflow: auto; border-radius: 10px; background: var(--bg); padding: 11px; font: 10px/1.55 "SFMono-Regular", Consolas, monospace; white-space: pre-wrap; }
+.sql-proposal dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 11px 0; }.sql-proposal dl > div { min-width: 0; display: grid; gap: 3px; border: .5px solid var(--line); border-radius: 9px; padding: 8px; }
+.sql-proposal dt { color: var(--muted); font-size: 7px; text-transform: uppercase; }.sql-proposal dd { margin: 0; overflow: hidden; color: var(--text); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.sql-proposal footer { display: flex; justify-content: flex-end; gap: 7px; }.sql-reject { color: var(--muted); background: transparent; border: .5px solid var(--line) !important; }
+.sql-result-table { max-height: 260px; overflow: auto; margin-top: 12px; border: .5px solid var(--line); border-radius: 10px; }.sql-result table { min-width: 100%; border-collapse: collapse; font: 9px/1.45 "SFMono-Regular", Consolas, monospace; }
+.sql-result th, .sql-result td { max-width: 240px; border-bottom: .5px solid var(--line); padding: 7px 9px; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }.sql-result th { position: sticky; top: 0; color: var(--text); background: var(--surface-raised); }.sql-result td { color: var(--muted); }
+.sql-result details { margin-top: 10px; color: var(--muted); font-size: 8px; }.sql-result summary { cursor: pointer; }.sql-result details code { display: block; overflow-wrap: anywhere; margin-top: 4px; }
+.sql-empty { display: grid; place-items: center; gap: 8px; min-height: 220px; color: var(--muted); text-align: center; }.sql-empty .craft-icon { color: var(--accent); }.sql-empty strong { color: var(--text); font-size: 13px; }.sql-empty p { max-width: 330px; margin: 0; font-size: 10px; line-height: 1.5; }.sql-status { margin: 12px 2px 0; color: var(--accent); font-size: 9px; line-height: 1.4; }
+@media (max-width: 720px) { .sql-panel { align-self: flex-end; width: 100%; height: min(92dvh, 820px); border-top: .5px solid var(--line); border-left: 0; border-radius: 22px 22px 0 0; animation-name: knowledge-sheet; }.sql-panel-content { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }.sql-datasets { max-height: 230px; border-right: 0; border-bottom: .5px solid var(--line); }.sql-proposal dl { grid-template-columns: 1fr; } }
 .attach-code-button { position: sticky; top: 0; z-index: 1; margin: 0 4px 10px; border: .5px solid var(--line); border-radius: 9px; background: var(--accent); color: #fff; padding: 7px 10px; font-size: 9px; font-weight: 700; cursor: pointer; }
 .chat-word-artifact { display: flex; gap: 10px; width: min(440px, 100%); border: .5px solid var(--line); background: var(--surface-raised); border-radius: 14px; margin: 4px 0 9px; padding: 11px; }.chat-word-artifact > span { display: grid; place-items: center; flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px; color: #fff; background: var(--accent); font-size: 16px; font-weight: 750; }.chat-word-artifact > div { min-width: 0; display: grid; gap: 4px; }.chat-word-artifact strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }.chat-word-artifact small { color: var(--muted); font-size: 9px; }.chat-word-artifact nav { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 3px; }.chat-word-artifact a { border-radius: 7px; color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); padding: 5px 7px; font-size: 9px; font-weight: 700; text-decoration: none; }
