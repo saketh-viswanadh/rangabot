@@ -7,10 +7,9 @@ photograph or third-party mascot artwork was incorporated.
 
 Tracked assets:
 
-- `ranga-idle.png` — static transparent mascot frame.
-- `ranga-idle.gif` — restrained idle animation.
-- `ranga-running.gif` — compact motion animation retained for compatible UI use.
-- `spritesheet.webp` — project animation atlas.
+- `ranga-idle.png` — the single optimized runtime mascot asset. Rangabot's
+  restrained motion is implemented with CSS so the public application does not
+  ship duplicate GIF and sprite-atlas payloads.
 
 The project owner reviewed these files as the intended redistributable Ranga
 asset set on 2026-07-28. They are licensed under CC BY 4.0 as described in

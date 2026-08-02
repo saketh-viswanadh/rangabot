@@ -326,7 +326,7 @@ function renderPreview(documentPath: string, directory: string, checks: QualityC
   mkdirSync(renderHome, { recursive: true });
   const office = spawnSync("soffice", [`-env:UserInstallation=${pathToFileURL(renderHome).href}`, "--headless", "--convert-to", "pdf", "--outdir", directory, documentPath], { encoding: "utf8", timeout: 60_000 });
   const pdfPath = resolve(directory, `${basename(documentPath, ".docx")}.pdf`);
-  if (office.status !== 0 || !existsSync(pdfPath)) {
+  if (office.status !== 0 || !existsSync(/* turbopackIgnore: true */ pdfPath)) {
     checks.push({ id: "visual-review", label: "Visual preview", status: "warning", detail: "LibreOffice rendering is unavailable; inspect the DOCX in Word before final use." });
     return 0;
   }
@@ -336,7 +336,7 @@ function renderPreview(documentPath: string, directory: string, checks: QualityC
     return 0;
   }
   let pages = 0;
-  while (existsSync(resolve(directory, `preview-${pages + 1}.png`))) pages += 1;
+  while (existsSync(/* turbopackIgnore: true */ resolve(directory, `preview-${pages + 1}.png`))) pages += 1;
   checks.push({ id: "visual-review", label: "Rendered preview", status: pages ? "passed" : "warning", detail: pages ? `${pages} page${pages === 1 ? "" : "s"} rendered locally for review.` : "No preview pages were produced." });
   return pages;
 }
@@ -344,13 +344,13 @@ function renderPreview(documentPath: string, directory: string, checks: QualityC
 export function resolveArtifactFile(id: string, filename: string) {
   if (!safeId.test(id) || basename(filename) !== filename) return null;
   const path = resolve(artifactsRoot, id, filename);
-  return existsSync(path) ? path : null;
+  return existsSync(/* turbopackIgnore: true */ path) ? path : null;
 }
 
 export function readArtifactMetadata(id: string) {
   const path = safeId.test(id) ? resolve(artifactsRoot, id, "artifact.json") : "";
-  if (!path || !existsSync(path)) return null;
-  return JSON.parse(readFileSync(path, "utf8")) as { artifact: WordArtifact };
+  if (!path || !existsSync(/* turbopackIgnore: true */ path)) return null;
+  return JSON.parse(readFileSync(/* turbopackIgnore: true */ path, "utf8")) as { artifact: WordArtifact };
 }
 
 export function setArtifactsRootForTests(path: string) {

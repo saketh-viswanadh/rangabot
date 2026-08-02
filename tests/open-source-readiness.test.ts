@@ -47,6 +47,18 @@ test("keeps public demo content synthetic and free of local paths", () => {
   assert.doesNotMatch(page, /\/Users\//);
 });
 
+test("centralizes runtime product and repository identity", () => {
+  const product = JSON.parse(readFileSync("config/product.json", "utf8")) as { name?: string; repositoryUrl?: string };
+  assert.equal(product.name, "Rangabot");
+  assert.match(product.repositoryUrl ?? "", /^https:\/\/github\.com\/[\w-]+\/[\w-]+$/);
+  assert.doesNotMatch(readFileSync("app/mastery/page.tsx", "utf8"), /github\.com\/saketh-viswanadh\/rangabot/);
+});
+
+test("does not track generated Next.js environment declarations", () => {
+  assert.ok(readFileSync(".gitignore", "utf8").split(/\r?\n/).includes("next-env.d.ts"));
+  assert.match(readFileSync("package.json", "utf8"), /next typegen && tsc --noEmit/);
+});
+
 test("keeps private runtime and Knowledge Vault material ignored", () => {
   const ignore = readFileSync(".gitignore", "utf8");
   for (const entry of [".env.local", "data/*.db", "data/artifacts/", "data/knowledge/inbox/", "data/knowledge/indexes/", "data/knowledge/backups/"]) {

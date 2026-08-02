@@ -346,3 +346,25 @@ quality evaluation, and it can be validated without changing model weights.
   request out of a local model's context window.
 - Kept all evaluated answers and timing data in an ignored local directory; no
   real conversation, saved memory, or model output was committed or uploaded.
+
+## 2026-08-02 — Critical maintenance and weight audit
+
+- Reconciled the checkout with merged PR #62 and audited runtime constants,
+  dependencies, assets, generated files, GitHub metadata, issues and branches.
+- Centralized product/repository identity and derived default model IDs from the
+  reviewed registry instead of maintaining duplicate runtime literals.
+- Followed current Next.js guidance by untracking generated `next-env.d.ts` and
+  generating route types explicitly before TypeScript validation.
+- Enabled unused-code compiler checks and removed the stale import they found.
+- Eliminated the whole-project Turbopack trace warning by marking private vault,
+  artifact, allowlist and approved-folder reads as runtime-only.
+- Removed about 3 MB of unused mascot animation and stale screenshot assets; the
+  live PNG/CSS mascot appearance is unchanged.
+- Split infrequently needed Memory UI and Markdown/highlighting code from the
+  initial client path. The main application-specific chunk fell from about 362 KB
+  to 57 KB; the 301 KB renderer now loads when content first needs it.
+- Enabled GitHub's automatic merged-branch cleanup, deleted only ten branches
+  verified as merged into `main`, and closed completed issues #23 and #25.
+- Kept safe loopback defaults, bounded limits, protocol header names, benchmark
+  fixtures and product-policy thresholds explicit: these are reviewed constants,
+  not accidental hardcoding.

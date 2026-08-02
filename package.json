@@ -37,7 +37,7 @@
     "knowledge:rollback": "node --experimental-strip-types scripts/knowledge-cli.ts rollback",
     "knowledge:ingest": "node --experimental-strip-types scripts/ingest-knowledge.ts",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "cheerio": "^1.2.0",
@@ -54,8 +54,8 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.0.0",
     "typescript": "^5.9.0"

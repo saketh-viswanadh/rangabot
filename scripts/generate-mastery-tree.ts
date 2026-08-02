@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { masteryProgress, validateMasteryTree, type MasteryTree } from "../lib/mastery-tree.ts";
+import { masteryProgress, validateMasteryTree } from "../lib/mastery-tree.ts";
 import { normalizeLineEndings } from "../lib/text-normalization.ts";
 import { validateMasteryContributors } from "../lib/mastery-contributors.ts";
 
