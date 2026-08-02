@@ -9,6 +9,12 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Evaluation
 
+- A conservative verified-reasoning ledger now computes recognized speedup and
+  equal-majority class-baseline facts locally, injects them into the shared
+  answer contract, and preserves essential facts if model repair omits them.
+  The complete v1.0.11 candidate improved from 56/60 to 59/60, reasoning from
+  3/5 to 5/5, and mean latency from 6.7s to 5.9s while retaining 22/22 critical.
+
 - Leading-premise verification and a deterministic minimum causal invariant now
   prevent local models from silently accepting false premises or omitting the
   shared-variable explanation after a failed repair. The complete candidate is

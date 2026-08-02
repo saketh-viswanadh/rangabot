@@ -136,3 +136,10 @@ The first candidate after premise-verification hardening passed a complete
 rescored transparently under v1.0.11 to 56/60 and 22/22 critical at 6.7 seconds,
 but reasoning finished at only 3/5 after incorrect class-imbalance and speedup
 answers. The verdict therefore remains **fail** under the per-capability gate.
+
+The verified-reasoning-ledger candidate then derived bounded speedup arithmetic
+and equal-majority class baselines locally before generation. Three targeted
+repeats passed 2/2. The unchanged complete v1.0.11 suite finished at 59/60,
+22/22 critical, 5/5 reasoning, and 5.9 seconds mean latency, with every category
+at least 4/5. This restores a **conditional pass**: repeated critical evidence
+for this exact candidate and blinded human usefulness review remain required.

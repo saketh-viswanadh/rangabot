@@ -1,5 +1,22 @@
 # Daily progress
 
+## 2026-08-02 — Verified local reasoning ledger
+
+- Added a conservative model-independent reasoning ledger that recognizes only
+  locally verifiable relationships, computes them deterministically, and places
+  the resulting facts in the current-turn contract.
+- Initial repeats exposed an incomplete statistical invariant; tightened it to
+  preserve the majority percentage, negative baseline, precision, and recall.
+- Speedup arithmetic now uses the verified division result instead of trusting
+  fluent model arithmetic. Missing verified facts are restored before final
+  normalization, while unrecognized calculations remain model-generated.
+- Three final targeted repeats passed 2/2. The unchanged complete v1.0.11 suite
+  scored 59/60 overall, 22/22 critical, 5/5 reasoning, and 5.9-second mean
+  latency. The prior comparable candidate was 56/60, 22/22 critical, 3/5
+  reasoning, and 6.7 seconds.
+- Status returns to **conditional pass**. Direct diagnostic usefulness remains
+  4/5; exact-candidate critical repetition and human blind review remain open.
+
 ## 2026-08-02 — Premise and causal-reasoning hardening
 
 - Compiled leading premises into the model-independent current-turn contract so
