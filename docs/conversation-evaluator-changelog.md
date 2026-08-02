@@ -4,6 +4,26 @@ Rubric changes are versioned separately from production behavior. A rubric
 repair must explain its effect on comparability; it must never conceal a real
 model or orchestration failure.
 
+## 1.0.8 — 2026-08-02
+
+- Added `write` and `list` to `tone-01`. The preserved answer gave one concrete
+  action for tonight—write a list of three specific things to look forward to—
+  and was neither generic motivation nor over the word limit. Restricting valid
+  actions to rehearsal, sleep, breathing, or notes was a semantic false negative.
+- The preserved complete 1.0.7 output rescored from 56/60 to 57/60 and from 3/5
+  to 4/5 adaptation. No prompt, limit, critical designation, category, or release
+  gate changed.
+
+## 1.0.7 — 2026-08-02
+
+- Added `chance` and `likely` to `memory-no-claim-01`. Preserved answers that
+  explain a p-value using likelihood under chance while avoiding all forbidden
+  memory claims satisfy the requested simple explanation; requiring only the
+  technical nouns `probability`, `null`, or `assuming` was a semantic false
+  negative.
+- Preserved 1.0.6 outputs can be rescored. No case, privacy exclusion, critical
+  designation, category, or release gate changed.
+
 ## 1.0.6 — 2026-08-02
 
 - Added `unable` and singular `log` to `uncertainty-03`; the preserved answer

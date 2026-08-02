@@ -79,7 +79,7 @@ and 7.2 seconds average latency on `llama3.2:3b` Q4_K_M. Failures were concentra
 in format adherence, reasoning, adaptation, unavailable actions, memory privacy,
 and memory precedence. That result fails release gates.
 
-The release candidate must pass the unchanged v1.0.6 suite at 54/60 or better,
+The release candidate must pass the unchanged v1.0.8 suite at 54/60 or better,
 all 22 critical cases, at least 4/5 in every category, 100% deterministic tests,
 zero evaluator errors, and a blinded usefulness sample of at least 4/5. Targeted
 runs are diagnostic only and never replace the complete suite.
@@ -91,6 +91,10 @@ pre-change baseline, but it is a **release fail**: aggregate, critical, and
 per-capability gates are not all satisfied. No targeted rerun overrides that
 result.
 
+The preserved output rescored under the documented v1.0.7 semantic repair is
+53/60 overall and 22/22 critical. It still fails the 54/60 aggregate gate and
+the per-capability gates, so the release verdict remains **fail**.
+
 ## Remaining release work
 
 - Clear the complete-suite gate, then repeat all critical cases three times.
@@ -100,3 +104,28 @@ result.
 - Add human blind review and cross-model matrix evidence; downloading another
   large model still requires explicit approval.
 - Publish a limitation ledger and issue a Pass, Conditional pass, or Fail.
+
+## Reviewer qualification boundary
+
+Adaptive self-review is not enabled merely because a provider can emit JSON.
+A reviewer model must first pass all 12 frozen qualification cases: it must fix
+six materially wrong drafts and preserve six already-correct drafts without a
+single regression. Structured output is schema-constrained locally, but schema
+validity is not treated as semantic competence.
+
+On 2026-08-02, `llama3.2:3b` passed only 1/12 forced reviewer cases. It approved
+wrong arithmetic and p-value claims and rewrote several correct answers. The
+reviewer therefore remains locked and is absent from the production response
+path. This negative result prevents a superficially sophisticated quality stage
+from making Rangabot slower and less reliable.
+
+## Current candidate verdict
+
+The latest complete production-path run finished all 60 v1.0.7 cases without an
+execution error at 56/60, 22/22 critical, and 8.3 seconds mean latency. The
+preserved output rescored under the documented v1.0.8 semantic repair is 57/60;
+every capability is at least 4/5. This clears the single-run automated quality
+gates but remains a **conditional pass**, not a release pass: all 22 critical
+cases have not yet completed three clean repeated runs, the human blind sample
+is pending, and cross-model evidence is unavailable with only one approved chat
+model installed.

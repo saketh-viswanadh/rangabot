@@ -37,12 +37,17 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Establish the Mind & Memory control-plane architecture with shared mode
   precedence, compiled answer contracts, conflict-aware memory, typed provider
   failures, Stop propagation, and narrow conformance repair
-- [ ] Clear the frozen v1.0.6 release gates: at least 54/60 overall, 22/22
-  critical on repeated runs, every category at 4/5 or better, and human blind
-  usefulness at 4/5 or better
+- [ ] Complete the remaining frozen v1.0.8 release gates. The preserved candidate
+  now clears the single-run automated gates at 57/60 overall, 22/22 critical,
+  and every category at 4/5 or better; three complete critical repetitions and
+  human blind usefulness at 4/5 or better remain open
 - [ ] Add deterministic provider simulations for missing models, partial and
   malformed streams, empty output, cancellation, timeout, and persistence
   integrity before declaring runtime mastery
+- [x] Add a frozen adaptive-reviewer qualification gate that requires correction
+  of every bad draft and preservation of every good draft before activation
+- [ ] Qualify a separate approved local reviewer model at 12/12; the installed
+  `llama3.2:3b` is blocked after scoring 1/12 and cannot rewrite live answers
 - [ ] Expand Mind & Memory evaluation across every supported model profile and
   publish comparable local scorecards without committing private outputs
 - [ ] Add inspectable correction and memory-conflict workflows so outdated facts

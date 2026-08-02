@@ -90,6 +90,19 @@ export function semanticContractRepairs(answer: string, contract: AnswerContract
   return repairs;
 }
 
+export function chooseSemanticRepair(original: string, candidate: string, contract: AnswerContract): string {
+  const normalizedOriginal = normalizeContractAnswer(original, contract);
+  const normalizedCandidate = normalizeContractAnswer(candidate, contract);
+  const originalIssues = semanticContractRepairs(normalizedOriginal, contract).length;
+  const candidateIssues = semanticContractRepairs(normalizedCandidate, contract).length;
+  if (candidateIssues >= originalIssues) return normalizedOriginal;
+  const originalWords = normalizedOriginal.split(/\s+/).filter(Boolean).length;
+  const candidateWords = normalizedCandidate.split(/\s+/).filter(Boolean).length;
+  const minimumUsefulWords = contract.exactWords ?? (contract.maxWords && contract.maxWords < 8 ? Math.min(contract.maxWords, 3) : 8);
+  if (candidateWords < minimumUsefulWords && candidateWords < Math.ceil(originalWords * 0.5)) return normalizedOriginal;
+  return normalizedCandidate;
+}
+
 export function formatAnswerContract(contract: AnswerContract): string | null {
   const rules: string[] = [];
   if (contract.exactLiteral) rules.push(`Return exactly this single token with no punctuation: ${contract.exactLiteral}`);
@@ -133,7 +146,7 @@ export function needsBufferedConformance(contract: AnswerContract) {
 }
 
 export function normalizeContractAnswer(answer: string, contract: AnswerContract): string {
-  let trimmed = answer.trim();
+  let trimmed = answer.trim().replace(/^(?:assistant|answer|response)\s*:?\s*(?:\r?\n)+/i, "");
   if (contract.allowedLiterals) {
     const match = contract.allowedLiterals.find((literal) => new RegExp(`^${literal}\\b`, "i").test(trimmed));
     if (match) return match;
@@ -169,8 +182,11 @@ export function normalizeContractAnswer(answer: string, contract: AnswerContract
     if (end >= 0) trimmed = trimmed.slice(0, end + 1);
   }
   if (contract.maxWords) {
-    const tokens = trimmed.split(/\s+/).filter(Boolean);
-    if (tokens.length > contract.maxWords) trimmed = tokens.slice(0, contract.maxWords).join(" ").replace(/[,;:]$/, "") + (/[.!?]$/.test(tokens[contract.maxWords - 1]) ? "" : "…");
+    const tokens = [...trimmed.matchAll(/\S+/g)];
+    if (tokens.length > contract.maxWords) {
+      const finalToken = tokens[contract.maxWords - 1];
+      trimmed = trimmed.slice(0, finalToken.index! + finalToken[0].length).replace(/[,;:]$/, "") + (/[.!?]$/.test(finalToken[0]) ? "" : "…");
+    }
   }
   return trimmed;
 }

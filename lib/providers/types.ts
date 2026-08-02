@@ -49,6 +49,7 @@ export interface GenerationOptions {
   numPredict?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
+  jsonSchema?: Record<string, unknown>;
 }
 
 export interface LocalChatProvider {
