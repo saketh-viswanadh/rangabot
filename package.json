@@ -12,7 +12,7 @@
     "url": "https://github.com/saketh-viswanadh/rangabot.git"
   },
   "scripts": {
-    "dev": "next dev --hostname 127.0.0.1",
+    "dev": "node --experimental-strip-types scripts/start-dev.ts",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1",
     "test": "node --test --experimental-strip-types tests/*.test.ts",

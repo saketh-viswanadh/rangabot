@@ -9,6 +9,15 @@
 - Chat Send remains distinct from **Review query** and **Run once**; neither
   preview confirmation nor execution occurs automatically.
 
+## 2026-08-02 — macOS development crash recovery
+
+- Reproduced false 404 responses for the app and API after repeated
+  `EMFILE: too many open files, watch` errors.
+- Confirmed the failure came from the macOS desktop session's 256-file soft
+  limit, not DuckDB, the dataset registry, Ollama, or user data.
+- Added a cross-platform launcher that selects one-second polling only on macOS.
+- Verified `/` and `/api/datasets` return HTTP 200 without watcher errors.
+
 ## 2026-08-02 — Visible SQL approval workspace
 
 - Added a local dataset allowlist UI and an inspectable SQL proposal card.
