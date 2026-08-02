@@ -1,5 +1,16 @@
 # Daily progress
 
+## 2026-08-02 — Public product showcase
+
+- Captured the current Rangabot UI at 1280×720 using an empty conversation and
+  public project intelligence only: fresh chat, Knowledge Brief, and Path to
+  Mastery.
+- Added a compact README showcase beneath the brand banner so the public landing
+  page demonstrates the real product, local intelligence, and transparent
+  capability roadmap.
+- Documented privacy and refresh rules for future screenshots; personal chats,
+  memories, repositories, local paths, and private vault documents are forbidden.
+
 ## 2026-08-02 — Public truth and frozen conversation baseline
 
 - Confirmed the GitHub landing page still showed a stale pre-redesign Teacher

@@ -9,6 +9,10 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- A privacy-safe public product showcase now presents the current conversation
+  workspace, local Knowledge Brief, and Path to Mastery beneath the repository
+  banner instead of using brand art as the only visual evidence of Rangabot.
+
 - Frozen Core Conversation Contract v1 and a balanced 60-case synthetic suite
   replace the earlier 20-case exploratory check. Results now record suite,
   commit, model, Ollama, context, hardware, run-state, completion, critical-trust,

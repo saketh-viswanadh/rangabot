@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import test from "node:test";
 
 test("publishes usable model choices with hardware and license guidance", () => {
@@ -45,6 +45,15 @@ test("keeps public demo content synthetic and free of local paths", () => {
   assert.match(page, /demo.*knowledge/);
   assert.match(page, /NumPy 2\.5/);
   assert.doesNotMatch(page, /\/Users\//);
+});
+
+test("showcases the current product with privacy-safe maintained captures", () => {
+  const readme = readFileSync("README.md", "utf8");
+  for (const image of ["rangabot-product-home.png", "rangabot-product-brief.png", "rangabot-product-mastery.png"]) {
+    assert.match(readme, new RegExp(`docs/media/${image.replace(".", "\\.")}`));
+    assert.ok(statSync(`docs/media/${image}`).size > 10_000, `${image} must be a real product capture`);
+  }
+  assert.doesNotMatch(readme, /rangabot-dark-teacher\.png/);
 });
 
 test("centralizes runtime product and repository identity", () => {

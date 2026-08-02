@@ -13,6 +13,26 @@ local Knowledge Vault; cloud handoff remains disabled.
 > [the Core Conversation Contract](docs/CORE_CONVERSATION_CONTRACT.md); a merged
 > feature is not automatically a mastered capability.
 
+## Product showcase
+
+### A calm local workspace
+
+Start with a private conversation, choose local or knowledge-assisted routing,
+organize chats into projects, and reach memory, folders, and mastery without
+turning the interface into a control panel.
+
+![Rangabot fresh conversation workspace with local model status, projects, themes, and conversation starters](docs/media/rangabot-product-home.png)
+
+### Local intelligence and an honest roadmap
+
+| Knowledge Brief | Path to Mastery |
+| --- | --- |
+| Meaningful technical developments, primary links, and local-vault status in a focused reading pane. | Every capability exposes its score, state, dependencies, and unlock criteria instead of implying that unfinished work is complete. |
+| ![Rangabot Knowledge Brief showing locally saved data-science developments](docs/media/rangabot-product-brief.png) | ![Rangabot Path to Mastery showing its public capability roadmap](docs/media/rangabot-product-mastery.png) |
+
+All showcase content is synthetic or public project metadata. No personal chat,
+memory, repository content, or private Knowledge Vault document is shown.
+
 ## First run
 
 1. Install Node.js 24+ and [Ollama](https://ollama.com/).
