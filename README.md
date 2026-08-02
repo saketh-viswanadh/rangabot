@@ -109,8 +109,14 @@ then choose **Run once** or **Reject**. Each approval expires after five minutes
 and is consumed on its first execution attempt. The kernel disables external
 access before untrusted SQL, applies resource and row limits, and returns an
 inspectable execution receipt. Ordinary chat messages and model output cannot
-trigger execution; model-proposed SQL remains a later, separately gated step. See
+trigger execution. See
 [`docs/LOCAL_EXECUTION_ARCHITECTURE.md`](docs/LOCAL_EXECUTION_ARCHITECTURE.md).
+
+To ask Rangabot for a query, open **Analyze**, select an approved dataset, and
+choose **Use selected data in chat**. The local model receives the dataset schema
+but no result rows, drafts one validated read-only query, and opens it in the SQL
+workspace. You must still choose **Review query** and then **Run once**; sending a
+chat message never counts as execution approval.
 
 ## Artifact skills
 

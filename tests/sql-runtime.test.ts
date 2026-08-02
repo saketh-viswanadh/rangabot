@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { executeReadOnlySql, validateApprovedDataset } from "../lib/sql-runtime.ts";
+import { executeReadOnlySql, inspectDatasetSchema, validateApprovedDataset } from "../lib/sql-runtime.ts";
 
 function fixture(name: string, content: string) {
   const path = join(tmpdir(), `rangabot-${process.pid}-${name}`);
@@ -40,4 +40,9 @@ test("caps result rows and records truncation", async () => {
 test("validates the approved dataset boundary", () => {
   const unsupported = fixture("notes.txt", "secret");
   assert.throws(() => validateApprovedDataset(unsupported), /Only CSV and Parquet/);
+});
+
+test("inspects only the approved dataset schema for local query planning", async () => {
+  const path = fixture("schema.csv", "region,amount\nNorth,12.5\n");
+  assert.deepEqual(await inspectDatasetSchema(path), [{ name: "region", type: "VARCHAR" }, { name: "amount", type: "DOUBLE" }]);
 });

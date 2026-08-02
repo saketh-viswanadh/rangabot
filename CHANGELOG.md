@@ -7,6 +7,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+- Approved datasets can now be explicitly attached to chat. Rangabot sends only
+  their schema to local Ollama, validates the returned read-only `SELECT`, and
+  opens the draft in the SQL review workspace. Query review and **Run once**
+  remain separate required actions; the model cannot approve execution.
+
 - Fixed a macOS development-server crash where the desktop session's file
   watcher limit caused repeated `EMFILE` errors and false 404 responses. The
   launcher now uses bounded polling on macOS while preserving native watching

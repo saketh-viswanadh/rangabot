@@ -26,6 +26,8 @@ export type SqlExecutionResult = {
   receipt: SqlExecutionReceipt;
 };
 
+export type DatasetColumn = { name: string; type: string };
+
 function digest(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -50,6 +52,22 @@ export function validateApprovedDataset(path: string) {
   if (stat.size === 0) throw new Error("The approved dataset is empty.");
   if (stat.size > maxInputBytes) throw new Error("The approved dataset exceeds the 100 MB execution limit.");
   return { canonical, extension, sizeBytes: stat.size, filename: basename(canonical) };
+}
+
+export async function inspectDatasetSchema(path: string): Promise<DatasetColumn[]> {
+  const dataset = validateApprovedDataset(path);
+  const instance = await DuckDBInstance.create(":memory:", { max_memory: "256MB", threads: "2", enable_external_access: "true" });
+  const connection = await instance.connect();
+  try {
+    const reader = dataset.extension === ".csv" ? "read_csv_auto($path)" : "read_parquet($path)";
+    await connection.run(`CREATE TABLE dataset AS SELECT * FROM ${reader}`, { path: dataset.canonical });
+    await connection.run("SET enable_external_access = false");
+    const result = await connection.runAndReadAll("DESCRIBE dataset");
+    return (result.getRows() as unknown[][]).map((row) => ({ name: String(row[0]), type: String(row[1]) })).slice(0, 500);
+  } finally {
+    connection.closeSync();
+    instance.closeSync();
+  }
 }
 
 export async function executeReadOnlySql(input: { approvedDatasetPath: string; query: string; timeoutMs?: number; expectedInputSha256?: string }): Promise<SqlExecutionResult> {

@@ -1,5 +1,14 @@
 # Daily progress
 
+## 2026-08-02 — Schema-bound conversational SQL drafting
+
+- Added an explicit **Use selected data in chat** action for approved datasets.
+- Local Ollama receives column names and types, not dataset rows or file paths.
+- Model output is parsed through a fixed JSON schema and the existing read-only
+  SQL validator before it can appear in the review workspace.
+- Chat Send remains distinct from **Review query** and **Run once**; neither
+  preview confirmation nor execution occurs automatically.
+
 ## 2026-08-02 — macOS development crash recovery
 
 - Reproduced false 404 responses for the app and API after repeated
