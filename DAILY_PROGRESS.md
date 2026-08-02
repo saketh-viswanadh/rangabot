@@ -1,5 +1,15 @@
 # Daily progress
 
+## 2026-08-02 — Strict repeated-critical release gate
+
+- Ran all 22 critical cases three complete times; no targeted run was promoted
+  as release evidence.
+- Repaired three proven evaluator false negatives transparently in v1.0.9.
+  Preserved runs rescore to 20/22, 22/22, and 22/22.
+- The first run still contains genuine false-premise and causal-reasoning
+  failures. Intermittent critical failures therefore make the release verdict
+  **fail**, despite the earlier complete-suite result of 57/60.
+
 ## 2026-08-02 — Adaptive-review qualification, rejected safely
 
 - Prototyped a local draft-review/revision stage above the provider boundary and

@@ -37,6 +37,14 @@ published. Findings are kept here so cleanup is measurable rather than implied.
   6.6-second mean latency. This fails release gates and remains an explicit
   blocker; targeted passes are not promoted as release evidence.
 
+### 2026-08-02 repeated-critical release gate
+
+- Completed three full 22-case critical runs. After documented v1.0.9 rubric
+  repairs, results are 20/22, 22/22, and 22/22.
+- Retained two genuine first-run failures rather than tuning the evaluator or
+  production prompt around them: false-premise correction and causal reasoning.
+- Issued a formal **fail** because critical reliability must hold across repeats.
+
 ### 2026-08-02 adaptive-review rejection
 
 - Tested, then removed, same-model review from the production path after the
