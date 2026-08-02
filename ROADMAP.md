@@ -37,10 +37,10 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Establish the Mind & Memory control-plane architecture with shared mode
   precedence, compiled answer contracts, conflict-aware memory, typed provider
   failures, Stop propagation, and narrow conformance repair
-- [ ] Complete the remaining frozen v1.0.11 release gates. Premise hardening
-  produced a complete 56/60, 22/22-critical run at 6.7 seconds, but reasoning is
-  only 3/5 after class-imbalance and speedup failures. Fix and repeat arithmetic
-  and statistical reasoning before human blind review.
+- [ ] Complete the remaining frozen v1.0.11 release gates. The verified-ledger
+  candidate reached 59/60 overall, 22/22 critical, 5/5 reasoning, and 5.9-second
+  mean latency with every category at least 4/5. Repeat all critical cases for
+  this exact candidate and complete blinded human usefulness review.
 - [ ] Add deterministic provider simulations for missing models, partial and
   malformed streams, empty output, cancellation, timeout, and persistence
   integrity before declaring runtime mastery

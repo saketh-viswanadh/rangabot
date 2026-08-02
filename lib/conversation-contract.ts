@@ -1,6 +1,7 @@
 import type { ChatMessage } from "./providers/types.ts";
 
 export type ListConstraint = { count: number; style: "numbered" | "bullets" | "outline" };
+export type VerifiedReasoningFact = { statement: string; requiredTerms: string[] };
 export type AnswerContract = {
   latestRequest: string;
   maxWords?: number;
@@ -22,6 +23,7 @@ export type AnswerContract = {
   falseCausalPremise: boolean;
   missingSourceMaterial: boolean;
   requiredSubject?: string;
+  verifiedReasoningFacts: VerifiedReasoningFact[];
 };
 
 const numberWords: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
@@ -29,6 +31,29 @@ const numberWords: Record<string, number> = { one: 1, two: 2, three: 3, four: 4,
 function count(value: string | undefined) {
   if (!value) return undefined;
   return /^\d+$/.test(value) ? Number(value) : numberWords[value.toLowerCase()];
+}
+
+function compactNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)));
+}
+
+export function deriveVerifiedReasoningFacts(request: string): VerifiedReasoningFact[] {
+  const facts: VerifiedReasoningFact[] = [];
+  const speedup = request.match(/\b(?:takes?|runtime(?:\s+is)?|requires?)\s+(\d+(?:\.\d+)?)\s*(seconds?|minutes?|hours?)[\s\S]{0,100}?\b(\d+(?:\.\d+)?)\s*(?:times|x|×)\s+faster\b/i);
+  if (speedup) {
+    const original = Number(speedup[1]);
+    const factor = Number(speedup[3]);
+    if (Number.isFinite(original) && Number.isFinite(factor) && original >= 0 && factor > 0) {
+      const result = compactNumber(original / factor);
+      facts.push({ statement: `Verified speedup calculation: ${compactNumber(original)} / ${compactNumber(factor)} = ${result} ${speedup[2].toLowerCase()}.`, requiredTerms: [result] });
+    }
+  }
+  const imbalance = request.match(/\b(\d+(?:\.\d+)?)%\s+accuracy[\s\S]{0,100}?\b(\d+(?:\.\d+)?)%\s+(?:of\s+)?(?:the\s+)?(?:cases?\s+are\s+)?negative\b/i);
+  if (imbalance && Number(imbalance[1]) === Number(imbalance[2])) {
+    const baseline = compactNumber(Number(imbalance[2]));
+    facts.push({ statement: `Verified class-baseline check: predicting every case as negative also gives ${baseline}% accuracy, so assess the positive class with precision and recall.`, requiredTerms: [baseline, "negative", "precision", "recall"] });
+  }
+  return facts;
 }
 
 export function latestUserRequest(messages: ChatMessage[]) {
@@ -59,6 +84,7 @@ export function compileAnswerContract(messages: ChatMessage[]): AnswerContract {
   const requiredSubject = lower.match(/\bexplain\s+(?:the\s+)?(.+?)(?:\s+to\b|\s+for\b|\s+in\b|[,.?:]|$)/)?.[1]?.trim();
   const premiseVerification = /^(?:since|because|given that|assuming that|as)\b[\s\S]{0,220}\b(?:explain|tell me|show|prove|why)\b/.test(lower);
   const falseCausalPremise = /\b(?:correlation|association)\b[\s\S]{0,40}\b(?:proves?|means?|causes?|implies?)\b[\s\S]{0,20}\bcaus/.test(lower);
+  const verifiedReasoningFacts = deriveVerifiedReasoningFacts(latestRequest);
   return {
     latestRequest,
     ...(maxWords ? { maxWords } : {}),
@@ -78,6 +104,7 @@ export function compileAnswerContract(messages: ChatMessage[]): AnswerContract {
     outlineOnly: /\b(?:only|for now)\b[\s\S]{0,30}\boutline\b/.test(lower),
     premiseVerification,
     falseCausalPremise,
+    verifiedReasoningFacts,
     missingSourceMaterial: /\b(?:have not|haven't|not)\s+(?:shared|provided|attached|uploaded)\b[\s\S]{0,40}\b(?:data|file|document|values|logs?)\b/.test(lower),
     ...(requiredSubject && !falseCausalPremise && !/^(?:it|this|that|this relationship|that relationship)$/.test(requiredSubject) && requiredSubject.split(/\s+/).length <= 4 ? { requiredSubject } : {}),
   };
@@ -94,6 +121,10 @@ export function semanticContractRepairs(answer: string, contract: AnswerContract
     if (!/\b(?:confound\w*|common cause|shared (?:cause|factor)|third (?:factor|variable)|temperature|weather|season|summer|heat)\b/i.test(answer)) {
       repairs.push("Name a plausible confounder or common cause instead of stopping after rejecting the premise");
     }
+  }
+  for (const fact of contract.verifiedReasoningFacts) {
+    const missing = fact.requiredTerms.filter((term) => !lower.includes(term.toLowerCase()));
+    if (missing.length) repairs.push(`Preserve this locally verified reasoning fact: ${fact.statement}`);
   }
   return repairs;
 }
@@ -127,6 +158,7 @@ export function formatAnswerContract(contract: AnswerContract): string | null {
   if (contract.lowercaseWords) rules.push("Use lowercase words only");
   if (contract.premiseVerification) rules.push("The request supplies a premise: verify it independently before answering; if any part is false, correct it explicitly and do not continue as though it were true");
   if (contract.falseCausalPremise) rules.push("Correct the premise explicitly: correlation does not prove causation; name a plausible confounder or common cause");
+  for (const fact of contract.verifiedReasoningFacts) rules.push(fact.statement);
   if (contract.missingSourceMaterial) rules.push("Ask for the missing source material first; do not ask optional presentation preferences before it is available");
   if (!rules.length) return null;
   return `CURRENT-TURN OUTPUT CONTRACT (higher priority than history and memory):\n${rules.map((rule) => `- ${rule}`).join("\n")}\nSilently verify every rule before returning the answer.`;
@@ -151,7 +183,7 @@ export function deterministicContractAnswer(contract: AnswerContract): string | 
 }
 
 export function needsBufferedConformance(contract: AnswerContract) {
-  return Boolean(contract.maxWords || contract.sentenceCount || contract.outlineOnly || contract.allowedLiterals || contract.premiseVerification || contract.falseCausalPremise || contract.missingSourceMaterial || (contract.exactWords && contract.commaSeparatedOnly));
+  return Boolean(contract.maxWords || contract.sentenceCount || contract.outlineOnly || contract.allowedLiterals || contract.premiseVerification || contract.falseCausalPremise || contract.verifiedReasoningFacts.length || contract.missingSourceMaterial || (contract.exactWords && contract.commaSeparatedOnly));
 }
 
 export function normalizeContractAnswer(answer: string, contract: AnswerContract): string {
@@ -202,12 +234,16 @@ export function normalizeContractAnswer(answer: string, contract: AnswerContract
 
 export function enforceReasoningInvariants(answer: string, contract: AnswerContract): string {
   const normalized = normalizeContractAnswer(answer, contract);
-  if (!contract.falseCausalPremise) return normalized;
   const repairs = semanticContractRepairs(normalized, contract);
   const safeguards: string[] = [];
-  if (repairs.includes("State explicitly that correlation does not prove causation")) safeguards.push("Correlation does not prove causation.");
-  if (repairs.includes("Name a plausible confounder or common cause instead of stopping after rejecting the premise")) safeguards.push("A shared third variable can drive both outcomes.");
-  return safeguards.length ? `${safeguards.join(" ")}\n\n${normalized}` : normalized;
+  if (contract.falseCausalPremise) {
+    if (repairs.includes("State explicitly that correlation does not prove causation")) safeguards.push("Correlation does not prove causation.");
+    if (repairs.includes("Name a plausible confounder or common cause instead of stopping after rejecting the premise")) safeguards.push("A shared third variable can drive both outcomes.");
+  }
+  for (const fact of contract.verifiedReasoningFacts) {
+    if (fact.requiredTerms.some((term) => !normalized.toLowerCase().includes(term.toLowerCase()))) safeguards.push(fact.statement);
+  }
+  return safeguards.length ? normalizeContractAnswer(`${safeguards.join(" ")}\n\n${normalized}`, contract) : normalized;
 }
 
 export function applySelectedMemoryToContract(contract: AnswerContract, memories: Array<{ content: string }>): AnswerContract {

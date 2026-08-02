@@ -45,6 +45,17 @@ published. Findings are kept here so cleanup is measurable rather than implied.
   production prompt around them: false-premise correction and causal reasoning.
 - Issued a formal **fail** because critical reliability must hold across repeats.
 
+### 2026-08-02 verified reasoning ledger
+
+- Replaced model-only arithmetic trust for conservatively recognized speedup and
+  equal-majority class-baseline requests with locally derived contract facts.
+- Required every essential statistical term rather than accepting partial model
+  repetition; deterministic fallback preserves facts without supplying a
+  benchmark-specific answer.
+- The complete candidate reached 59/60, 22/22 critical, and 5/5 reasoning at
+  5.9 seconds mean latency. The one remaining failure is direct diagnostic
+  usefulness, not hidden or recategorized.
+
 ### 2026-08-02 adaptive-review rejection
 
 - Tested, then removed, same-model review from the production path after the

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { answerUnavailableAction, applySelectedMemoryToContract, chooseSemanticRepair, compileAnswerContract, deterministicContractAnswer, enforceReasoningInvariants, formatAnswerContract, memoryConflictsWithContract, needsBufferedConformance, normalizeContractAnswer, semanticContractRepairs } from "../lib/conversation-contract.ts";
+import { answerUnavailableAction, applySelectedMemoryToContract, chooseSemanticRepair, compileAnswerContract, deriveVerifiedReasoningFacts, deterministicContractAnswer, enforceReasoningInvariants, formatAnswerContract, memoryConflictsWithContract, needsBufferedConformance, normalizeContractAnswer, semanticContractRepairs } from "../lib/conversation-contract.ts";
 
 test("compiles current-turn output constraints without model-specific rules", () => {
   const contract = compileAnswerContract([{ role: "user", content: "Give exactly three Markdown bullets in at most 45 words. No introduction and do not mention Spark." }]);
@@ -73,6 +73,15 @@ test("normalizes narrow exact formats without rewriting semantic prose", () => {
   assert.equal(semanticContractRepairs("Correlation does not prove causation.", causal).length, 1);
   assert.equal(semanticContractRepairs("Correlation does not prove causation; summer heat is a common cause.", causal).length, 0);
   assert.match(enforceReasoningInvariants("There is no direct causal link.", causal), /^Correlation does not prove causation\. A shared third variable can drive both outcomes\./);
+  const speedup = compileAnswerContract([{ role: "user", content: "A task takes 12 seconds and becomes 3 times faster. Show the calculation." }]);
+  assert.deepEqual(deriveVerifiedReasoningFacts(speedup.latestRequest), [{ statement: "Verified speedup calculation: 12 / 3 = 4 seconds.", requiredTerms: ["4"] }]);
+  assert.match(formatAnswerContract(speedup) ?? "", /12 \/ 3 = 4 seconds/);
+  assert.match(enforceReasoningInvariants("12 × 3 = 36 seconds.", speedup), /^Verified speedup calculation: 12 \/ 3 = 4 seconds\./);
+  const imbalance = compileAnswerContract([{ role: "user", content: "A test has 95% accuracy where 95% of cases are negative. Why can accuracy mislead?" }]);
+  assert.equal(imbalance.verifiedReasoningFacts.length, 1);
+  const groundedImbalance = enforceReasoningInvariants("Accuracy can hide errors.", imbalance);
+  assert.match(groundedImbalance, /predicting every case as negative/i);
+  assert.match(groundedImbalance, /precision and recall/i);
   const pValue = compileAnswerContract([{ role: "user", content: "Explain a p-value simply." }]);
   assert.equal(chooseSemanticRepair("It estimates how surprising the data are under a null hypothesis.", "A p-value simply", pValue), "It estimates how surprising the data are under a null hypothesis.");
   assert.match(chooseSemanticRepair("This relationship is false.", "Correlation does not prove causation; summer heat can drive both outcomes.", causal), /summer heat/);
