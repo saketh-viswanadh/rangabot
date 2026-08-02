@@ -58,7 +58,7 @@ export function searchRepository(repository: AllowedRepository, rawQuery: string
       visited += 1;
       if (visited >= maxVisitedEntries || results.length >= maxResults) break;
       if (entry.isSymbolicLink()) continue;
-      const path = resolve(directory, entry.name);
+      const path = resolve(/* turbopackIgnore: true */ directory, entry.name);
       if (entry.isDirectory()) {
         if (!ignoredDirectories.has(entry.name) && !entry.name.startsWith(".")) pending.push(path);
         continue;
@@ -80,7 +80,7 @@ export function searchRepository(repository: AllowedRepository, rawQuery: string
 export function previewRepositoryFile(repository: AllowedRepository, relativePath: string, requestedLine = 1): CodePreview {
   if (!relativePath || relativePath.length > 1024) throw new Error("A valid relative file path is required.");
   const root = realpathSync(repository.path);
-  const candidate = resolve(root, relativePath);
+  const candidate = resolve(/* turbopackIgnore: true */ root, relativePath);
   let canonicalPath: string;
   try {
     canonicalPath = realpathSync(candidate);

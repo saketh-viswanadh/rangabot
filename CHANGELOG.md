@@ -9,6 +9,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Centralized runtime product identity, registry-derived default models, stricter
+  unused-code checks, runtime-only filesystem tracing, and generated Next type
+  handling reduce duplicated configuration and build noise.
+- Repository maintenance now automatically deletes future merged branches; ten
+  already-merged remote branches and two completed issues were reconciled.
 - A model-independent conversation orchestration layer now gives every local
   model the same directness, truthfulness, recency, correction, hard-constraint,
   and memory-precedence contract before ordinary chat generation.
@@ -102,6 +107,13 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   locally, and warns visibly when the revision remains insufficiently grounded.
 
 ### Changed
+
+- Removed unused mascot GIF/sprite-atlas and stale screenshot payloads while
+  retaining the PNG and CSS motion used by the live interface.
+- Deferred the Memory panel and 301 KB Markdown/highlighting implementation until
+  first use, reducing the main application-specific client chunk from roughly
+  362 KB to 57 KB in the audited production build.
+- Updated React type definitions to current compatible patch releases.
 
 - Knowledge Doctor now streams large-file hashing, reports when its deep scan
   starts, and returns a clear incomplete-check warning after a bounded timeout.

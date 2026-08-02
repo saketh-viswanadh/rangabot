@@ -1,6 +1,8 @@
+import modelRegistry from "../config/models.json" with { type: "json" };
+
 export const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
-export const DEFAULT_CHAT_MODEL = "llama3.2:3b";
-export const DEFAULT_EMBEDDING_MODEL = "nomic-embed-text";
+export const DEFAULT_CHAT_MODEL = modelRegistry.models[0].id;
+export const DEFAULT_EMBEDDING_MODEL = modelRegistry.embeddingModels[0].id;
 export const DEFAULT_KNOWLEDGE_BUDGET_BYTES = 4 * 1024 ** 3;
 
 function isLoopbackHostname(hostname: string) {

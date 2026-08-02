@@ -1,14 +1,22 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ProviderStatus } from "@/lib/providers/types";
-import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { appendWelcomeHistory, chooseWelcomeIndex, parseWelcomeHistory, welcomeLines } from "@/lib/welcome-content";
 import { isNearMessageBottom } from "@/lib/message-scroll";
 import { parseKnowledgeBrief } from "@/lib/knowledge-brief";
 import { CraftIcon } from "@/app/components/craft-icon";
-import { MemoryPanel } from "@/app/components/memory-panel";
 import { formatAnswerReceipt } from "@/lib/answer-receipt";
+
+const MemoryPanel = dynamic(
+  () => import("@/app/components/memory-panel").then((module) => module.MemoryPanel),
+  { ssr: false },
+);
+const MarkdownMessage = dynamic(
+  () => import("@/components/MarkdownMessage").then((module) => module.MarkdownMessage),
+  { ssr: false, loading: () => <span className="message-loading">Preparing response…</span> },
+);
 
 type Mode = "local" | "smart" | "teach" | "codex";
 type Appearance = "light" | "dark";

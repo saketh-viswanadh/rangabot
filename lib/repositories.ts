@@ -14,8 +14,8 @@ const defaultRegistryPath = resolve(process.cwd(), "data", "repositories.json");
 let registryPath = defaultRegistryPath;
 
 function readRegistry(): AllowedRepository[] {
-  if (!existsSync(registryPath)) return [];
-  const value: unknown = JSON.parse(readFileSync(registryPath, "utf8"));
+  if (!existsSync(/* turbopackIgnore: true */ registryPath)) return [];
+  const value: unknown = JSON.parse(readFileSync(/* turbopackIgnore: true */ registryPath, "utf8"));
   if (!Array.isArray(value) || !value.every((item) => (
     item && typeof item === "object"
     && typeof (item as AllowedRepository).id === "string"
@@ -48,12 +48,12 @@ export function allowRepository(inputPath: string): AllowedRepository {
   }
   let canonicalPath: string;
   try {
-    canonicalPath = realpathSync(candidate);
+    canonicalPath = realpathSync(/* turbopackIgnore: true */ candidate);
   } catch {
     throw new Error("That folder does not exist or cannot be accessed.");
   }
-  if (!statSync(canonicalPath).isDirectory()) throw new Error("The selected path is not a folder.");
-  if (canonicalPath === parse(canonicalPath).root || canonicalPath === realpathSync(homedir())) {
+  if (!statSync(/* turbopackIgnore: true */ canonicalPath).isDirectory()) throw new Error("The selected path is not a folder.");
+  if (canonicalPath === parse(canonicalPath).root || canonicalPath === realpathSync(/* turbopackIgnore: true */ homedir())) {
     throw new Error("Choose a specific project folder, not the filesystem root or your entire home folder.");
   }
   const repositories = readRegistry();

@@ -1,6 +1,6 @@
 # Critical code and repository review
 
-Last reviewed: 2026-07-29
+Last reviewed: 2026-08-02
 
 This is a release-blocking review of the tracked source tree, runtime boundaries,
 dependencies, tests, documentation, and public GitHub configuration. Private
@@ -23,6 +23,30 @@ published. Findings are kept here so cleanup is measurable rather than implied.
 - Production dependency audit currently reports zero vulnerabilities.
 
 ## Fixed in this review
+
+### 2026-08-02 maintenance pass
+
+- Removed the tracked generated `next-env.d.ts` file and made type checking run
+  `next typegen` first, matching current Next.js guidance and ending development-
+  versus-production import churn.
+- Centralized runtime product identity and repository links in
+  `config/product.json`; runtime model defaults now derive from the reviewed model
+  registry instead of duplicating model IDs in TypeScript.
+- Enabled unused-local and unused-parameter TypeScript checks and removed the
+  first stale import they exposed.
+- Removed unused GIF, sprite-atlas and stale screenshot payloads while preserving
+  the PNG actually rendered by Rangabot and its CSS motion.
+- Deferred the Memory panel and Markdown/highlighting stack until first use. In
+  the audited production build, the main application-specific client chunk fell
+  from roughly 362 KB to 57 KB and the 301 KB renderer became an on-demand chunk.
+- Marked private vault, artifact, registry and user-selected repository filesystem
+  reads as runtime-only for Turbopack tracing. The production build is now warning-
+  free instead of accidentally tracing the whole project.
+- Updated React type patch releases. All production dependencies remain used;
+  unsupported Node, TypeScript and ESLint major upgrades were deliberately not forced.
+- Enabled automatic merged-branch deletion, removed only remote branches proven
+  merged into `main`, and closed two GitHub issues whose acceptance criteria are
+  already implemented.
 
 ### Critical
 
@@ -88,31 +112,24 @@ published. Findings are kept here so cleanup is measurable rather than implied.
 2. The story-pack registry is an extension boundary, not a general automatic
    provenance system. Any new pack still needs reviewed source metadata and
    factual regression tests before registration.
-3. Next.js reports a whole-project file-tracing warning through repository path
-   handling. The build succeeds, but packaging boundaries should be narrowed.
-4. The generated `next-env.d.ts` import flips between development and production
-   paths. It is harmless but creates avoidable worktree noise.
-5. Full dependency audit reports development-only transitive findings through
+3. Full dependency audit reports development-only transitive findings through
    the ESLint toolchain. Production audit is clean. ESLint 10 was tested and
    rejected because the current Next React plugin fails at runtime; upgrade when
    that supported combination exists.
 
 ### Repository maintenance
 
-- Public `main` is current through PR #49 and its required CI passed.
-- The adaptive-grounding and review work is still local and is not on GitHub.
-- Release `v0.1.0` is 21 commits behind `main`; publish a new release only after
-  the current quality/security work is merged and retested.
-- The remote has 31 branches and automatic deletion after merge is disabled.
-  Enable automatic merged-branch deletion and prune only confirmed merged
-  branches; do not bulk-delete without review.
+- Public `main` is current through merged PR #62 and its Linux and Windows CI passed.
+- Release `v0.1.0` remains behind `main`; publish a new release only after the
+  reliability week finishes and the release candidate passes.
+- Automatic merged-branch deletion is enabled. Ten remote branches proven merged
+  into `main` were removed on 2026-08-02; unmerged branches were preserved.
+- GitHub issues #23 and #25 were closed because their synthetic retrieval
+  evaluation and repository allowlist/search contracts are implemented.
 - The GitHub homepage field is empty. Add a project/demo URL only when one exists;
   do not add a placeholder.
 
 ## Deliberately retained
 
-- The public Ranga GIFs and spritesheet are not used by the current CSS UI, but
-  they are documented redistribution assets for compatible community UIs. Treat
-  their removal as an artwork-package decision, not dead-code cleanup.
 - The 4 GB vault budget and evaluation rubrics are product policy/configuration,
   not accidental magic numbers. Both remain explicit and testable.

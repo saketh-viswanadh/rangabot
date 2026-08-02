@@ -169,7 +169,7 @@ export function buildKnowledgeNewsAnswer(question: string) {
   const path = wantsMonth ? knowledgeMonthlyBrief : knowledgeWeeklyBrief;
   const period = wantsMonth ? "monthly" : "weekly";
   try {
-    return `${readFileSync(path, "utf8").trim()}\n\n---\nThis is Rangabot's locally saved ${period} subject brief. Source links identify where each development was verified; items marked **indexed** can also be explored offline in Teacher Mode.`;
+    return `${readFileSync(/* turbopackIgnore: true */ path, "utf8").trim()}\n\n---\nThis is Rangabot's locally saved ${period} subject brief. Source links identify where each development was verified; items marked **indexed** can also be explored offline in Teacher Mode.`;
   } catch {
     return `No ${period} subject brief has been saved locally yet. The vault updater should only create one after finding a meaningful, source-verified development.`;
   }
@@ -515,9 +515,9 @@ function cosine(left: number[], right: number[]) {
 
 function directorySize(path: string): number {
   try {
-    return readdirSync(path, { withFileTypes: true }).reduce((total, entry) => {
+    return readdirSync(/* turbopackIgnore: true */ path, { withFileTypes: true }).reduce((total, entry) => {
       const child = resolve(path, entry.name);
-      return total + (entry.isDirectory() ? directorySize(child) : statSync(child).size);
+      return total + (entry.isDirectory() ? directorySize(child) : statSync(/* turbopackIgnore: true */ child).size);
     }, 0);
   } catch {
     return 0;
@@ -537,20 +537,20 @@ export function getKnowledgeStatus() {
 export function listInboxFiles() {
   mkdirSync(knowledgeInbox, { recursive: true });
   const supported = new Set([".pdf", ".docx", ".txt", ".md", ".markdown", ".html", ".htm"]);
-  return readdirSync(knowledgeInbox, { withFileTypes: true })
+  return readdirSync(/* turbopackIgnore: true */ knowledgeInbox, { withFileTypes: true })
     .filter((entry) => entry.isFile() && supported.has(extname(entry.name).toLowerCase()))
     .map((entry) => resolve(knowledgeInbox, entry.name));
 }
 
 export function listKnowledgeFiles() {
   return [...listInboxFiles(), ...[knowledgeWeeklyBrief, knowledgeMonthlyBrief].filter((path) => {
-    try { return statSync(path).isFile(); } catch { return false; }
+    try { return statSync(/* turbopackIgnore: true */ path).isFile(); } catch { return false; }
   })];
 }
 
 export function readSourceManifest() {
   const path = resolve(knowledgeRoot, "SOURCE_MANIFEST.json");
-  return JSON.parse(readFileSync(path, "utf8")) as unknown;
+  return JSON.parse(readFileSync(/* turbopackIgnore: true */ path, "utf8")) as unknown;
 }
 
 export function closeKnowledgeDatabaseForTests() {

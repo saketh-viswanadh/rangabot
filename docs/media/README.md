@@ -14,4 +14,7 @@ or transmit them to Ollama. Regenerate media after material UI changes and
 review every frame before publishing it.
 
 `rangabot-social-preview.png` is the 1280×640 public repository sharing card.
+
+Only screenshots referenced by current public documentation are retained. Older
+UI captures are deliberately removed rather than shipped as stale project media.
 It uses generated, project-owned launch artwork and contains no user content.

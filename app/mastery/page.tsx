@@ -8,10 +8,11 @@ import contributorsData from "@/content/mastery-contributors.json";
 import masteryBanner from "@/docs/media/rangabot-social-preview.png";
 import { CraftIcon, type CraftIconName } from "@/app/components/craft-icon";
 import { masteryProgress, type MasteryNode, type MasteryStatus, type MasteryTree } from "@/lib/mastery-tree";
+import { productConfig } from "@/lib/product-config";
 import "./mastery.css";
 
 const tree = treeData as MasteryTree;
-const repositoryUrl = "https://github.com/saketh-viswanadh/rangabot";
+const repositoryUrl = productConfig.repositoryUrl;
 const statusLabels: Record<MasteryStatus, string> = { vision: "Vision", locked: "Locked", ready: "Ready", "in-progress": "In progress", training: "Training", unlocked: "Unlocked", mastered: "Mastered", regressed: "Regressed" };
 type SelectedNode = MasteryNode & { branchName: string };
 const branchIcons: CraftIconName[] = ["spark", "knowledge", "search", "code", "document", "chat", "shield", "mastery"];
