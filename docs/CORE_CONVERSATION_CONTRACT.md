@@ -40,7 +40,7 @@ Rangabot must never claim or imply that it completed an unavailable action.
 
 ## Frozen v1 benchmark
 
-The tracked v1.0.8 suite contains 60 synthetic cases: five cases in each of twelve
+The tracked v1.0.9 suite contains 60 synthetic cases: five cases in each of twelve
 capability groups.
 
 1. Direct usefulness

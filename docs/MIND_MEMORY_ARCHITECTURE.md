@@ -79,7 +79,7 @@ and 7.2 seconds average latency on `llama3.2:3b` Q4_K_M. Failures were concentra
 in format adherence, reasoning, adaptation, unavailable actions, memory privacy,
 and memory precedence. That result fails release gates.
 
-The release candidate must pass the unchanged v1.0.8 suite at 54/60 or better,
+The release candidate must pass the unchanged v1.0.9 suite at 54/60 or better,
 all 22 critical cases, at least 4/5 in every category, 100% deterministic tests,
 zero evaluator errors, and a blinded usefulness sample of at least 4/5. Targeted
 runs are diagnostic only and never replace the complete suite.
@@ -124,8 +124,9 @@ from making Rangabot slower and less reliable.
 The latest complete production-path run finished all 60 v1.0.7 cases without an
 execution error at 56/60, 22/22 critical, and 8.3 seconds mean latency. The
 preserved output rescored under the documented v1.0.8 semantic repair is 57/60;
-every capability is at least 4/5. This clears the single-run automated quality
-gates but remains a **conditional pass**, not a release pass: all 22 critical
-cases have not yet completed three clean repeated runs, the human blind sample
-is pending, and cross-model evidence is unavailable with only one approved chat
-model installed.
+every capability is at least 4/5. Three subsequent complete critical runs,
+transparently rescored under v1.0.9, finished at 20/22, 22/22, and 22/22. The
+first run genuinely failed false-premise correction and causal reasoning.
+Because intermittent critical failures count as failures, the current formal
+release verdict is **fail**. Human review cannot override this gate, and
+cross-model evidence is unavailable with only one approved chat model installed.

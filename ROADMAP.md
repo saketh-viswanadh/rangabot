@@ -37,10 +37,10 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Establish the Mind & Memory control-plane architecture with shared mode
   precedence, compiled answer contracts, conflict-aware memory, typed provider
   failures, Stop propagation, and narrow conformance repair
-- [ ] Complete the remaining frozen v1.0.8 release gates. The preserved candidate
-  now clears the single-run automated gates at 57/60 overall, 22/22 critical,
-  and every category at 4/5 or better; three complete critical repetitions and
-  human blind usefulness at 4/5 or better remain open
+- [ ] Complete the remaining frozen v1.0.9 release gates. The preserved candidate
+  clears the single-run automated gates at 57/60 overall, but three complete
+  critical repetitions rescore to 20/22, 22/22, and 22/22. Fix the intermittent
+  false-premise and causal-reasoning failures before human blind review.
 - [ ] Add deterministic provider simulations for missing models, partial and
   malformed streams, empty output, cancellation, timeout, and persistence
   integrity before declaring runtime mastery

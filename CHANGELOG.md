@@ -7,6 +7,13 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+### Evaluation
+
+- Core evaluator v1.0.9 repairs three semantic false negatives without changing
+  production behavior or gates. Three complete critical repetitions rescore to
+  20/22, 22/22, and 22/22; the first run retains two genuine reasoning failures,
+  so Rangabot remains release-blocked.
+
 ### Added
 
 - A frozen reviewer-qualification gate now prevents an unproven local critic
