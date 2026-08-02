@@ -4,7 +4,14 @@ A beautiful, local-first assistant for private chat, coding, brainstorming and
 teaching from your own documents. Rangabot uses downloaded Ollama models and a
 local Knowledge Vault; cloud handoff remains disabled.
 
-![Rangabot Teacher Mode using synthetic local-vault content](docs/media/rangabot-dark-teacher.png)
+![Rangabot — private local AI with a golden-retriever guide](docs/media/rangabot-social-preview.png)
+
+> **Reliability status:** Rangabot is active pre-release software. Core chat,
+> local memory, retrieval, and document creation work today, but capability
+> quality varies with the installed model. The frozen conversation benchmark
+> and its strict acceptance gates are documented in
+> [the Core Conversation Contract](docs/CORE_CONVERSATION_CONTRACT.md); a merged
+> feature is not automatically a mastered capability.
 
 ## First run
 
@@ -242,11 +249,18 @@ provenance, and never contact a cloud service.
 Run `npm run conversation:evaluate` to stress the configured local model against
 synthetic conversations covering helpfulness, format compliance, follow-up
 continuity, corrections, uncertainty, reasoning, tone, and Local memory safety.
+The versioned 60-case suite balances twelve capability groups with five cases
+each. It records the suite version, Git commit, model, Ollama version, context
+configuration, host profile, cold/warm state, timing, and execution errors.
+Critical privacy and truthfulness cases are reported separately and must reach
+100%; the overall target is at least 90%, with no capability below 80%.
 The evaluator never reads real chats or the live memory database. Full answers
 and latency are written only to the ignored local directory
 `data/evaluations/results/`, making regressions inspectable without publishing
 private model output. `npm run conversation:evaluate:baseline` preserves the
-pre-orchestration behavior for diagnostic comparison.
+pre-orchestration behavior for diagnostic comparison. The earlier 20-case
+exploratory result is not comparable with the frozen v1 suite and must not be
+presented as a product-quality score.
 
 Ordinary chat now uses a provider-independent Rangabot contract and a bounded
 recent-history window. Relevant approved memories may shape an answer, but the

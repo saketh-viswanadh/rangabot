@@ -1,5 +1,29 @@
 # Daily progress
 
+## 2026-08-02 — Public truth and frozen conversation baseline
+
+- Confirmed the GitHub landing page still showed a stale pre-redesign Teacher
+  Mode screenshot with Ollama offline; replaced it with the current Rangabot
+  social banner and added an explicit pre-release reliability notice.
+- Audited the private 2026-08-01 conversation result. Its 90% headline was only
+  18/20 narrow cases, with one or two samples in most categories, reasoning at
+  0/2, surface-level substring scoring, and no suite, commit, model, Ollama,
+  hardware, context, or completion provenance. It is retained privately as an
+  exploratory result and is not comparable to the frozen baseline.
+- Versioned the Core Conversation Contract and expanded the frozen suite to 60
+  cases: five cases across each of twelve required capabilities, with explicit
+  critical privacy and trust cases and strict release gates.
+- Added result provenance for Git state, model, Ollama, configured context,
+  machine profile, cold/warm declaration, completion/errors, critical cases,
+  per-capability numerator/denominator, and latency.
+- Ran two complete 60-case diagnostics on `llama3.2:3b` Q4_K_M with Ollama
+  0.32.4 on the 8 GB M1 host. Both completed 60/60 with no execution errors.
+  The second preserved output scores 51/60 overall and 21/22 critical cases
+  under the transparently repaired 1.0.2 rubric, with 7.2-second mean latency.
+  Exact format, reasoning, adaptation/concision, and current-turn-over-memory
+  remain below release gates. Cross-run case changes also confirm meaningful
+  stochastic variance; one run must never be presented as mastery evidence.
+
 ## 2026-07-30 — Path to Mastery
 
 - Added official contributor-claim governance: CODEOWNERS, merged-evidence

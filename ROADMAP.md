@@ -2,6 +2,10 @@
 
 ## Current execution order
 
+From 2026-08-02 through 2026-08-08, the broader order below is frozen. The only
+active product priority is the versioned Core Conversation Reliability plan in
+[`docs/CORE_CONVERSATION_CONTRACT.md`](docs/CORE_CONVERSATION_CONTRACT.md).
+
 The completed foundation remains documented below. New work follows this order
 unless user feedback exposes a more urgent defect:
 
@@ -27,7 +31,7 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 
 ## Approved
 
-- [x] Establish a repeatable synthetic Mind & Memory benchmark and a shared
+- [x] Establish a versioned, balanced 60-case synthetic Mind & Memory benchmark and a shared
   model-independent conversation contract for directness, truthfulness,
   correction precedence, bounded history, and selective local memory
 - [ ] Expand Mind & Memory evaluation across every supported model profile and
