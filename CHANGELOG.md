@@ -28,6 +28,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Local dataset approvals and a five-minute, single-use SQL confirmation bind
+  execution to the exact previewed dataset fingerprint and query. Replay,
+  altered queries, changed files, expired tokens, and revoked approvals fail
+  closed. Chat-triggered execution remains locked pending the visible UI.
+
 - A backend-only safe DuckDB foundation can execute one bounded read-only query
   over an explicitly approved CSV or Parquet file in a fresh in-memory database.
   It disables external access before query execution and returns a local receipt;

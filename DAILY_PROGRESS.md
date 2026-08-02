@@ -1,5 +1,18 @@
 # Daily progress
 
+## 2026-08-02 — Exact SQL approval protocol
+
+- Added a private persistent allowlist for canonical CSV and Parquet files with
+  list, approve, and revoke APIs. Revocation never deletes the source file.
+- Added a five-minute SQL preview confirmation bound to the exact dataset ID,
+  dataset SHA-256, normalized query, query SHA-256, and a random token whose hash
+  alone is persisted locally.
+- Confirmations are single-use and consumed even on a changed query or changed
+  dataset attempt. Replay, expiry, token mismatch, revoked approval, and file
+  modification all require a new preview.
+- Added local preview and execute API boundaries, but deliberately left chat
+  integration locked until the visible confirmation component exists.
+
 ## 2026-08-02 — Safe DuckDB execution foundation
 
 - Selected DuckDB's supported Node Neo client instead of the deprecated Node

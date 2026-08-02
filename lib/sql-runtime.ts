@@ -36,6 +36,11 @@ async function hashFile(path: string) {
   return hash.digest("hex");
 }
 
+export async function inspectDatasetIdentity(path: string) {
+  const dataset = validateApprovedDataset(path);
+  return { ...dataset, sha256: await hashFile(dataset.canonical) };
+}
+
 export function validateApprovedDataset(path: string) {
   const canonical = realpathSync(path);
   const stat = statSync(canonical);
@@ -47,8 +52,9 @@ export function validateApprovedDataset(path: string) {
   return { canonical, extension, sizeBytes: stat.size, filename: basename(canonical) };
 }
 
-export async function executeReadOnlySql(input: { approvedDatasetPath: string; query: string; timeoutMs?: number }): Promise<SqlExecutionResult> {
-  const dataset = validateApprovedDataset(input.approvedDatasetPath);
+export async function executeReadOnlySql(input: { approvedDatasetPath: string; query: string; timeoutMs?: number; expectedInputSha256?: string }): Promise<SqlExecutionResult> {
+  const dataset = await inspectDatasetIdentity(input.approvedDatasetPath);
+  if (input.expectedInputSha256 && dataset.sha256 !== input.expectedInputSha256) throw new Error("The approved dataset changed after preview. Create a new preview.");
   const query = input.query.trim().replace(/;\s*$/, "");
   if (!query || query.length > 20_000) throw new Error("Provide one SQL query under 20,000 characters.");
   const timeoutMs = Math.min(Math.max(input.timeoutMs ?? defaultTimeoutMs, 100), 30_000);
@@ -83,7 +89,7 @@ export async function executeReadOnlySql(input: { approvedDatasetPath: string; q
       rows,
       receipt: {
         engine: "duckdb",
-        input: { filename: dataset.filename, sha256: await hashFile(dataset.canonical), sizeBytes: dataset.sizeBytes },
+        input: { filename: dataset.filename, sha256: dataset.sha256, sizeBytes: dataset.sizeBytes },
         querySha256: digest(query),
         readOnly: true,
         externalAccess: false,

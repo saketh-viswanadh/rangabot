@@ -46,8 +46,10 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   integrity before declaring runtime mastery
 - [x] Establish a bounded read-only DuckDB execution kernel with approved-file
   validation, external-access shutdown, resource caps, and receipts
-- [ ] Add persistent local dataset approvals plus exact SQL preview and explicit
-  execution confirmation before exposing DuckDB through conversation
+- [x] Add persistent local dataset approvals plus an exact-query, expiring,
+  single-use SQL preview and execution confirmation protocol
+- [ ] Add a conversation-visible SQL proposal card with dataset, query, limits,
+  approve/reject controls, results, and execution receipt; never auto-execute
 - [ ] Add a sandboxed Python runtime only after it can reuse the same approval,
   cancellation, limits, receipt, and result-validation contract
 - [x] Add a frozen adaptive-reviewer qualification gate that requires correction
