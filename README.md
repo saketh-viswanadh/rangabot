@@ -98,10 +98,11 @@ preview is read again at send time and supplied only to the local Ollama model.
 ### Local SQL execution foundation
 
 Rangabot includes a backend-only, read-only DuckDB execution kernel for
-explicitly approved CSV and Parquet files. It is not yet available through chat:
-the approval and query-preview interface must land before model-proposed SQL may
-run. The kernel disables external access before untrusted SQL, accepts one
-`SELECT`, applies resource and row limits, and returns an execution receipt. See
+explicitly approved CSV and Parquet files. Persistent dataset approval and an
+exact-query, five-minute, single-use confirmation protocol are implemented, but
+SQL is not yet available through chat: the visible confirmation UI must land
+before model-proposed SQL may run. The kernel disables external access before
+untrusted SQL, accepts one `SELECT`, applies resource and row limits, and returns an execution receipt. See
 [`docs/LOCAL_EXECUTION_ARCHITECTURE.md`](docs/LOCAL_EXECUTION_ARCHITECTURE.md).
 
 ## Artifact skills
