@@ -5,17 +5,20 @@ import Image from "next/image";
 import { useMemo, useState, type CSSProperties } from "react";
 import treeData from "@/content/path-to-mastery.json";
 import contributorsData from "@/content/mastery-contributors.json";
+import evidenceData from "@/content/mastery-evidence.json";
 import masteryBanner from "@/docs/media/rangabot-social-preview.png";
 import { CraftIcon, type CraftIconName } from "@/app/components/craft-icon";
-import { masteryProgress, type MasteryNode, type MasteryStatus, type MasteryTree } from "@/lib/mastery-tree";
+import { materializeMasteryTree, masteryProgress, type MasteryEvidenceRegistry, type MasteryNode, type MasteryStatus, type MasteryTreeSource } from "@/lib/mastery-tree";
 import { productConfig } from "@/lib/product-config";
 import "./mastery.css";
 
-const tree = treeData as MasteryTree;
+const tree = materializeMasteryTree(treeData as MasteryTreeSource);
+const evidence = evidenceData as MasteryEvidenceRegistry;
+const evidenceById = new Map(evidence.entries.map((entry) => [entry.id, entry]));
 const repositoryUrl = productConfig.repositoryUrl;
 const statusLabels: Record<MasteryStatus, string> = { vision: "Vision", locked: "Locked", ready: "Ready", "in-progress": "In progress", training: "Training", unlocked: "Unlocked", mastered: "Mastered", regressed: "Regressed" };
 type SelectedNode = MasteryNode & { branchName: string };
-const branchIcons: CraftIconName[] = ["spark", "knowledge", "search", "code", "document", "chat", "shield", "mastery"];
+const branchIcons: CraftIconName[] = ["spark", "knowledge", "search", "code", "document", "chat", "shield", "mastery", "folder"];
 
 export default function MasteryPage() {
   const progress = useMemo(() => masteryProgress(tree), []);
@@ -27,7 +30,7 @@ export default function MasteryPage() {
       <header className="mastery-header">
         <Link href="/" className="mastery-back"><CraftIcon name="chevron" size={15} /> Rangabot</Link>
         <div className="mastery-title"><span className="mastery-kicker">Public capability roadmap</span><h1>{tree.title}</h1><p>{tree.vision}</p></div>
-        <div className="mastery-summary" aria-label="Mastery summary"><strong>{progress.percent}%</strong><span>{progress.unlocked} unlocked · {progress.active} training · {progress.total} total</span><small>Verified {tree.updatedAt}</small></div>
+        <div className="mastery-summary" aria-label="Mastery summary"><strong>{progress.percent}%</strong><span>{progress.criteriaVerified}/{progress.criteriaTotal} criteria verified · {progress.unlocked}/{progress.total} capabilities unlocked</span><small>Evidence checked {tree.evidenceVerifiedAt}</small></div>
       </header>
       <section className="mastery-banner" aria-label="Rangabot local AI"><Image src={masteryBanner} alt="Rangabot, private local AI that learns from your documents" priority /></section>
       <section className="mastery-legend" aria-label="Skill status legend">
@@ -48,7 +51,7 @@ export default function MasteryPage() {
                 <span className="node-emblem"><i /></span>
                 <span className="node-copy"><strong>{node.name}</strong><small>{statusLabels[node.status]} · {node.score.toFixed(1)}/5</small></span>
               </button>
-              <aside className="node-unlock"><small>How to unlock</small><strong>{node.acceptance[0]}</strong>{node.acceptance[1] && <span>{node.acceptance[1]}</span>}<a href={`${repositoryUrl}/blob/main/docs/PATH_TO_MASTERY.md#${node.id}`} target="_blank" rel="noreferrer">Complete checklist <CraftIcon name="external" size={12} /></a></aside>
+              <aside className="node-unlock"><small>Evidence gate</small><strong>{node.criteria[0].text}</strong>{node.criteria[1] && <span>{node.criteria[1].text}</span>}<a href={`${repositoryUrl}/blob/main/docs/PATH_TO_MASTERY.md#${node.id}`} target="_blank" rel="noreferrer">Complete audit <CraftIcon name="external" size={12} /></a></aside>
             </li>)}</ol>
           </article>
         ))}
@@ -60,11 +63,11 @@ export default function MasteryPage() {
           <button className="mastery-close" type="button" onClick={() => setSelected(null)} aria-label="Close mastery details"><CraftIcon name="close" /></button>
           <span className="detail-path">{selected.branchName} · {statusLabels[selected.status]}</span><h2 id="selected-mastery-title">{selected.name}</h2>
           <div className="detail-score"><strong>{selected.score.toFixed(1)}</strong><span>/ 5 maturity</span></div><p>{selected.description}</p>
-          <h3>Unlock requirements</h3><ul>{selected.acceptance.map((criterion) => <li key={criterion}>{criterion}</li>)}</ul>
+          <h3>Criterion audit</h3><ul>{selected.criteria.map((criterion) => <li key={criterion.id}><strong>{criterion.state.toUpperCase()}</strong> — {criterion.text}{criterion.note ? ` — ${criterion.note}` : ""}</li>)}</ul>
           <a className="detail-checklist" href={`${repositoryUrl}/blob/main/docs/PATH_TO_MASTERY.md#${selected.id}`} target="_blank" rel="noreferrer">Open the complete public checklist <CraftIcon name="external" size={12} /></a>
           <h3>Dependencies</h3><p className="detail-tags">{selected.dependencies.length ? selected.dependencies.map((dependency) => <span key={dependency}>{dependency.replaceAll("-", " ")}</span>) : <span>Foundation node</span>}</p>
-          <h3>Evidence</h3><p className="detail-tags">{selected.evidence.length ? selected.evidence.map((evidence) => <span key={evidence}>{evidence}</span>) : <span>No verified evidence yet</span>}</p>
-          <h3>Contributors</h3>{selectedContributors.length ? <ul className="detail-contributors">{selectedContributors.map((contributor) => { const claim = contributor.claims.find((item) => item.nodeId === selected.id); return <li key={contributor.github}><strong>{contributor.name}</strong><span>{claim?.contribution}</span><small>{claim?.evidence.map((item) => item.reference).join(" · ")}</small></li>; })}</ul> : <p>No official contribution claim recorded yet.</p>}
+          <h3>Merged evidence</h3><p className="detail-tags">{[...new Set(selected.criteria.flatMap((criterion) => criterion.evidence))].length ? [...new Set(selected.criteria.flatMap((criterion) => criterion.evidence))].map((id) => { const item = evidenceById.get(id); return item ? <a key={id} href={item.url} target="_blank" rel="noreferrer">{item.reference} · {item.title}</a> : null; }) : <span>No merged evidence yet</span>}</p>
+          <h3>Contributors</h3>{selectedContributors.length ? <ul className="detail-contributors">{selectedContributors.map((contributor) => { const claim = contributor.claims.find((item) => item.nodeId === selected.id); return <li key={contributor.github}><strong>{contributor.name}</strong><span>{claim?.contribution}</span><small>{claim?.evidence.map((id) => evidenceById.get(id)?.reference ?? id).join(" · ")}</small></li>; })}</ul> : <p>No official contribution claim recorded yet.</p>}
           <div className="detail-next"><small>Next backlog item</small><strong>{selected.backlog}</strong></div>
         </section>
       </div>}
