@@ -37,6 +37,21 @@ published. Findings are kept here so cleanup is measurable rather than implied.
   6.6-second mean latency. This fails release gates and remains an explicit
   blocker; targeted passes are not promoted as release evidence.
 
+### 2026-08-02 adaptive-review rejection
+
+- Tested, then removed, same-model review from the production path after the
+  installed 3B model approved material errors and revised correct answers into
+  incorrect ones.
+- Added schema-constrained local JSON support, but did not mistake valid syntax
+  for semantic judgment. The forced reviewer qualification scored 1/12 and is a
+  hard activation failure.
+- Preserved the useful infrastructure as an offline qualification command. No
+  unqualified reviewer can alter a user's answer.
+- Added monotonic semantic-repair selection after the existing repair path
+  collapsed an explanation to three words. The affected critical case passed
+  3/3 targeted repeats; the complete production path reached 56/60 and 22/22
+  critical, rescoring transparently to 57/60 under v1.0.8.
+
 ### 2026-08-02 public truth and evaluation audit
 
 - Replaced the stale README hero screenshot, which showed an obsolete sidebar

@@ -287,6 +287,12 @@ trust diagnostic. It is deliberately marked as a partial selection and cannot
 replace the complete-suite result. The current request path and invariants are
 documented in the [Mind & Memory release architecture](docs/MIND_MEMORY_ARCHITECTURE.md).
 
+`npm run conversation:reviewer:qualify` tests whether the configured local model
+is safe to use as an answer critic. Qualification requires 12/12: six incorrect
+drafts corrected and six correct drafts preserved. A failed qualification exits
+non-zero and never enables review in the app. Full reviewer outputs remain in
+the ignored private evaluation directory.
+
 Ordinary chat now uses a provider-independent Rangabot contract and a bounded
 recent-history window. Relevant approved memories may shape an answer, but the
 latest explicit user correction always wins and unrelated memories remain

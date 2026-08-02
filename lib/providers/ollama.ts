@@ -66,7 +66,7 @@ export async function completeJsonWithOllama(messages: ChatMessage[], options?: 
     body: JSON.stringify({
       model: configuredModel,
       messages: messages.map(({ role, content }) => ({ role, content })),
-      format: "json",
+      format: options?.jsonSchema ?? "json",
       stream: false,
       options: { num_predict: options?.numPredict ?? 1800 },
     }),

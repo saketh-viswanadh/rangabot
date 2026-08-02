@@ -34,6 +34,7 @@
     "conversation:evaluate": "node --experimental-strip-types scripts/evaluate-conversation.ts",
     "conversation:evaluate:baseline": "node --experimental-strip-types scripts/evaluate-conversation.ts --baseline",
     "conversation:evaluate:validate": "node --experimental-strip-types scripts/evaluate-conversation.ts --validate-only",
+    "conversation:reviewer:qualify": "node --experimental-strip-types scripts/qualify-conversation-reviewer.ts",
     "knowledge:validate": "node --experimental-strip-types scripts/knowledge-cli.ts validate",
     "knowledge:backup": "node --experimental-strip-types scripts/knowledge-cli.ts backup",
     "knowledge:rollback": "node --experimental-strip-types scripts/knowledge-cli.ts rollback",

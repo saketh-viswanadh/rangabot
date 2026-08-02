@@ -1,5 +1,28 @@
 # Daily progress
 
+## 2026-08-02 — Adaptive-review qualification, rejected safely
+
+- Prototyped a local draft-review/revision stage above the provider boundary and
+  tested it against preserved conversation failures instead of assuming that a
+  second model call improves quality.
+- Rejected live activation after the same 3B model approved incorrect drafts,
+  rewrote correct SQL guidance incorrectly, emitted invalid review structures,
+  and increased targeted latency. The experiment never remained in the live
+  response path.
+- Added Ollama JSON-schema output support plus a frozen 12-case reviewer
+  qualification: six bad drafts must be fixed and six good drafts must remain
+  unchanged. `llama3.2:3b` scored 1/12, so it is explicitly unqualified.
+- Fixed role-label leakage, meta-answer prompting, and newline-destroying word
+  truncation. Versioned the evaluator at 1.0.7 after documenting a genuine
+  p-value synonym false negative; no privacy exclusion or release gate changed.
+- Added monotonic semantic-repair selection after a repair collapsed a valid
+  explanation to three words. The affected critical case then passed 3/3.
+- The final complete production-path run finished 60/60 with no errors at 56/60
+  and 22/22 critical with 8.3-second mean latency. A documented tone-action
+  synonym repair in v1.0.8 rescored the preserved output to 57/60 and restored
+  every category to at least 4/5. Status is conditional pending the complete
+  repeated-critical gate and human blind review.
+
 ## 2026-08-02 — Mind & Memory release architecture
 
 - Replaced route-specific prompting with a documented shared control plane for

@@ -9,6 +9,20 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- A frozen reviewer-qualification gate now prevents an unproven local critic
+  from rewriting production answers. It uses schema-constrained Ollama output,
+  six bad-draft corrections, six good-draft preservation cases, and requires
+  12/12 before activation. `llama3.2:3b` scored 1/12, so adaptive review remains
+  deliberately locked instead of making Rangabot slower and less reliable.
+- Answer normalization now removes leaked role labels, preserves line breaks
+  while enforcing word limits, and keeps inline numbered lists structurally
+  valid after truncation.
+- Semantic repair is now monotonic: a candidate must remove a detected contract
+  issue without collapsing substantive content, or Rangabot keeps the original.
+  The complete preserved candidate rescored under v1.0.8 is 57/60 overall,
+  22/22 critical, with every category at 4/5 or better; release remains
+  conditional pending repeated critical and human gates.
+
 - Mind & Memory now has a documented model-independent control plane: typed
   answer contracts, one shared precedence assembler across ordinary and Scholar
   chat, conflict-aware memory selection, deterministic unavailable-action

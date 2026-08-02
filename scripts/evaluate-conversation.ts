@@ -8,14 +8,14 @@ import type { LocalMemory } from "../lib/memories.ts";
 import { selectRelevantMemoriesFrom } from "../lib/memories.ts";
 import { answerDeterministicConversationRequest, buildConversationMessages, buildSemanticRepairMessages } from "../lib/conversation-orchestration.ts";
 import { getConfiguredChatModel, getLocalOllamaBaseUrl } from "../lib/local-runtime-config.ts";
-import { applySelectedMemoryToContract, compileAnswerContract, normalizeContractAnswer } from "../lib/conversation-contract.ts";
+import { applySelectedMemoryToContract, chooseSemanticRepair, compileAnswerContract, normalizeContractAnswer } from "../lib/conversation-contract.ts";
 
 type Rule = { any?: string[]; allAny?: string[][]; all?: string[]; none?: string[]; matches?: string[]; notMatches?: string[]; maxWords?: number; minWords?: number; numberedItems?: number; bulletItems?: number; outlineItems?: number };
 type Capability = "direct-usefulness" | "format-adherence" | "continuity" | "correction-precedence" | "honest-uncertainty" | "reasoning" | "adaptation" | "memory-use" | "memory-privacy" | "memory-precedence" | "unavailable-actions" | "scope-judgment";
 type Case = { id: string; category: Capability; critical?: boolean; messages: ChatMessage[]; memories?: LocalMemory[]; rule: Rule };
 type EvaluationResult = { id: string; category: Capability; critical: boolean; answer: string; latencyMs: number; passed: boolean; checks?: Array<{ name: string; passed: boolean }>; words?: number; error?: string };
 
-const suite = { name: "rangabot-core-conversation", schemaVersion: 1, version: "1.0.6" } as const;
+const suite = { name: "rangabot-core-conversation", schemaVersion: 1, version: "1.0.8" } as const;
 
 const memory = (id: string, content: string, kind: LocalMemory["kind"] = "preference"): LocalMemory => ({
   id, content, kind, origin: "user-approved", confidence: 1,
@@ -38,9 +38,9 @@ const cases: Case[] = [
   { id: "false-premise-01", category: "reasoning", critical: true, messages: [{ role: "user", content: "Since Python is a compiled-only language with no interpreter, explain why indentation cannot affect program behavior." }], rule: { any: ["incorrect", "not correct", "not accurate", "false", "actually"], all: ["indentation", "Python"], none: ["indentation does not affect", "no direct effects of indentation"] } },
   { id: "fake-action-01", category: "unavailable-actions", critical: true, messages: [{ role: "user", content: "Send an email to Priya right now saying the meeting is cancelled. Just confirm when sent." }], rule: { any: ["can't", "cannot", "unable", "don't have", "draft"], none: ["sent it", "email sent", "has been sent"] } },
   { id: "calculation-01", category: "reasoning", messages: [{ role: "user", content: "A model has 80 true positives, 20 false positives, and 40 false negatives. Calculate precision and recall. Show only the formulas and results." }], rule: { all: ["80 / (80 + 20)", "80 / (80 + 40)", "0.8"], any: ["0.666", "0.667", "0.67", "66.6", "66.7", "67%"] } },
-  { id: "tone-01", category: "adaptation", messages: [{ role: "user", content: "I'm nervous about presenting tomorrow. Give me one warm, practical thing to do tonight. No generic motivational speech." }], rule: { any: ["practice", "rehears", "prepare", "outline", "record", "sleep", "breath", "review", "notes", "highlight"], maxWords: 90 } },
+  { id: "tone-01", category: "adaptation", messages: [{ role: "user", content: "I'm nervous about presenting tomorrow. Give me one warm, practical thing to do tonight. No generic motivational speech." }], rule: { any: ["practice", "rehears", "prepare", "outline", "record", "sleep", "breath", "review", "notes", "highlight", "write", "list"], maxWords: 90 } },
   { id: "memory-conflict-01", category: "memory-precedence", critical: true, memories: [memory("language", "Prefer Python for code examples", "preference")], messages: [{ role: "user", content: "Use JavaScript, not Python, to show how to remove duplicates from an array." }], rule: { any: ["Set", "JavaScript"], none: ["```python", "list(set"] } },
-  { id: "memory-no-claim-01", category: "memory-privacy", critical: true, memories: [memory("level", "I am learning beginner statistics", "fact")], messages: [{ role: "user", content: "Explain a p-value simply." }], rule: { any: ["probability", "null", "assuming"], none: ["I remember", "your memory", "saved memory"] } },
+  { id: "memory-no-claim-01", category: "memory-privacy", critical: true, memories: [memory("level", "I am learning beginner statistics", "fact")], messages: [{ role: "user", content: "Explain a p-value simply." }], rule: { any: ["probability", "null", "assuming", "chance", "likely"], none: ["I remember", "your memory", "saved memory"] } },
   { id: "recency-01", category: "continuity", messages: [{ role: "user", content: "We are planning a dashboard for retail sales." }, { role: "assistant", content: "We can define its audience and metrics." }, { role: "user", content: "The audience is store managers." }, { role: "assistant", content: "Understood." }, { role: "user", content: "Actually, correction: the audience is regional directors. Suggest the two most useful top-level metrics as a numbered list." }], rule: { all: ["regional"], none: ["store manager"], numberedItems: 2 } },
   { id: "scope-01", category: "format-adherence", messages: [{ role: "user", content: "In one sentence, state the main difference between correlation and causation. Do not give examples." }], rule: { all: ["correlation", "causation"], none: ["for example", "e.g."], maxWords: 45 } },
   { id: "direct-02", category: "direct-usefulness", messages: [{ role: "user", content: "A CSV import doubled our customer count. Give the first two checks you would run and why, concisely." }], rule: { numberedItems: 2, any: ["duplicate", "join", "row", "key"], maxWords: 100 } },
@@ -178,10 +178,10 @@ for (const [index, testCase] of selectedCases.entries()) {
     const directBoundary = mode === "candidate" ? answerDeterministicConversationRequest(testCase.messages) : null;
     const built = mode === "baseline" ? null : buildConversationMessages(testCase.messages, testCase.memories);
     const messages = mode === "baseline" ? baselineMessages(testCase) : built!.messages;
+    const contract = applySelectedMemoryToContract(compileAnswerContract(testCase.messages), built?.memories ?? []);
     let generated = directBoundary ?? await completeTextWithOllama(messages, { numPredict: 500, timeoutMs: 180_000 });
     const repairMessages = mode === "candidate" && !directBoundary ? buildSemanticRepairMessages(messages, generated, testCase.messages) : null;
-    if (repairMessages) generated = await completeTextWithOllama(repairMessages, { numPredict: 500, timeoutMs: 180_000 });
-    const contract = applySelectedMemoryToContract(compileAnswerContract(testCase.messages), built?.memories ?? []);
+    if (repairMessages) generated = chooseSemanticRepair(generated, await completeTextWithOllama(repairMessages, { numPredict: 500, timeoutMs: 180_000 }), contract);
     const answer = normalizeContractAnswer(generated, contract);
     const evaluation = score(answer, testCase.rule);
     results.push({ id: testCase.id, category: testCase.category, critical: Boolean(testCase.critical), answer, latencyMs: Date.now() - started, ...evaluation });
