@@ -7,6 +7,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+- Rangabot now treats approved datasets as conversational evidence. Analytical
+  requests automatically run validated, bounded read-only SQL locally; answers
+  are numerically audited against the actual result and include an expandable
+  calculation trace. Ordinary conversation does not read the dataset.
+
 - Approved datasets can now be explicitly attached to chat. Rangabot sends only
   their schema to local Ollama, validates the returned read-only `SELECT`, and
   opens the draft in the SQL review workspace. Query review and **Run once**

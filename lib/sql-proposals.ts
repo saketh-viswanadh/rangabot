@@ -10,7 +10,7 @@ export const sqlProposalSchema = {
   additionalProperties: false,
   required: ["query", "explanation"],
   properties: {
-    query: { type: "string", minLength: 1, maxLength: 8_000 },
+    query: { type: "string", minLength: 1, maxLength: 2_000 },
     explanation: { type: "string", minLength: 1, maxLength: 500 },
   },
 };
@@ -19,7 +19,7 @@ export function parseSqlProposal(raw: string): SqlProposal {
   const value: unknown = JSON.parse(raw);
   if (!value || typeof value !== "object") throw new Error("The local model returned an invalid SQL proposal.");
   const candidate = value as Record<string, unknown>;
-  if (typeof candidate.query !== "string" || candidate.query.length > 8_000 || typeof candidate.explanation !== "string" || !candidate.explanation.trim() || candidate.explanation.length > 500) {
+  if (typeof candidate.query !== "string" || candidate.query.length > 2_000 || typeof candidate.explanation !== "string" || !candidate.explanation.trim() || candidate.explanation.length > 500) {
     throw new Error("The local model returned an incomplete SQL proposal.");
   }
   return { query: validateSqlPreviewQuery(candidate.query), explanation: candidate.explanation.trim() };

@@ -15,8 +15,9 @@ import { answerDirectMemoryQuestion, directMemoryTitles, listMemories } from "@/
 import { answerDeterministicConversationRequest, buildConversationMessagesWithSelected, buildSemanticRepairMessages, selectConversationMemories } from "@/lib/conversation-orchestration";
 import { applySelectedMemoryToContract, chooseSemanticRepair, compileAnswerContract, enforceReasoningInvariants, needsBufferedConformance } from "@/lib/conversation-contract";
 import { getApprovedDataset } from "@/lib/datasets";
-import { inspectDatasetSchema } from "@/lib/sql-runtime";
+import { executeReadOnlySql, inspectDatasetSchema } from "@/lib/sql-runtime";
 import { buildSqlProposalMessages, parseSqlProposal, sqlProposalSchema } from "@/lib/sql-proposals";
+import { analysisNarrationIsGrounded, buildAnalysisNarrationMessages, formatVerifiedAnalysisFallback, shouldRunSqlAnalysis } from "@/lib/conversational-analysis";
 
 export const runtime = "nodejs";
 
@@ -89,19 +90,37 @@ export async function POST(request: Request) {
       localCodeContext = formatCodeContext(repository, preview);
     }
 
-    if (typeof body.datasetId === "string") {
+    if (typeof body.datasetId === "string" && shouldRunSqlAnalysis(body.messages)) {
       const dataset = getApprovedDataset(body.datasetId);
       if (!dataset) return NextResponse.json({ error: "That dataset is no longer approved." }, { status: 400 });
       const columns = await inspectDatasetSchema(dataset.path);
       const raw = await completeJsonWithOllama(buildSqlProposalMessages(body.messages, dataset, columns), { signal: request.signal, jsonSchema: sqlProposalSchema, numPredict: 700 });
       const proposal = parseSqlProposal(raw);
-      const reference = { datasetId: dataset.id, query: proposal.query };
-      return new Response(`I drafted a read-only SQL query for **${dataset.name}**. ${proposal.explanation}\n\nReview the exact query and limits before deciding whether to run it.`, {
+      const result = await executeReadOnlySql({ approvedDatasetPath: dataset.path, query: proposal.query });
+      let answer: string;
+      try {
+        const narrated = await completeTextWithOllama(buildAnalysisNarrationMessages(latestQuestion, proposal, result), { signal: request.signal, numPredict: 700 });
+        answer = analysisNarrationIsGrounded(narrated, result) ? narrated : formatVerifiedAnalysisFallback(result);
+      } catch {
+        if (request.signal.aborted) throw new DOMException("The request was stopped.", "AbortError");
+        answer = formatVerifiedAnalysisFallback(result);
+      }
+      const trace: NonNullable<ChatMessage["analysisTrace"]> = {
+        engine: "duckdb",
+        dataset: dataset.name,
+        query: proposal.query,
+        returnedRows: result.receipt.returnedRows,
+        truncated: result.receipt.truncated,
+        durationMs: result.receipt.durationMs,
+        inputSha256: result.receipt.input.sha256,
+        querySha256: result.receipt.querySha256,
+      };
+      return new Response(answer, {
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
           "Cache-Control": "no-cache, no-transform",
           "X-Content-Type-Options": "nosniff",
-          "X-Rangabot-SQL-Proposal": encodeURIComponent(JSON.stringify(reference)),
+          "X-Rangabot-Analysis": encodeURIComponent(JSON.stringify(trace)),
         },
       });
     }

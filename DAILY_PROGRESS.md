@@ -1,5 +1,18 @@
 # Daily progress
 
+## 2026-08-02 — Conversational verified analysis
+
+- Replaced the query-workbench-first flow with a conversation-first analysis
+  loop for explicitly attached approved datasets.
+- Added analytical-intent and follow-up detection so unrelated conversation does
+  not touch the dataset.
+- Added local plan → validate → execute → narrate orchestration using bounded
+  DuckDB and schema-only planning context.
+- Added a strict numeric grounding audit. Unsupported numerical narration is
+  discarded in favour of the verified result table.
+- Added persistent calculation traces containing no local path or raw dataset,
+  only the dataset name, exact query, row/timing limits, and SHA-256 receipts.
+
 ## 2026-08-02 — Schema-bound conversational SQL drafting
 
 - Added an explicit **Use selected data in chat** action for approved datasets.

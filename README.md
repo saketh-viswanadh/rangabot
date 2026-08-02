@@ -100,23 +100,22 @@ An attached preview is visibly listed above the composer before sending. Saved
 chats retain only the repository, file and line-range reference; the raw source
 preview is read again at send time and supplied only to the local Ollama model.
 
-### Local SQL execution foundation
+### Conversational local analysis
 
-Rangabot includes a private SQL workspace backed by a read-only DuckDB execution
-kernel for explicitly approved CSV and Parquet files. Open **Analyze**, allow a
-local dataset, enter one `SELECT`, review its exact query, fingerprint and limits,
-then choose **Run once** or **Reject**. Each approval expires after five minutes
-and is consumed on its first execution attempt. The kernel disables external
-access before untrusted SQL, applies resource and row limits, and returns an
-inspectable execution receipt. Ordinary chat messages and model output cannot
-trigger execution. See
+Rangabot treats SQL as a reasoning tool, not the primary interface. Open
+**Analyze**, approve a CSV or Parquet file, and choose **Use selected data in
+chat**. That grants the current conversation persistent, revocable, read-only
+analytical access. Ask a normal question: Rangabot detects when calculation is
+needed, sends only column names and types to local Ollama for planning, validates
+one `SELECT`, executes it inside bounded local DuckDB, and explains the verified
+result. Non-analytical messages do not touch the dataset.
+
+Every answer exposes an optional **How this was calculated** trace with the
+query, dataset name, row count, timing, and input/query fingerprints. A strict
+numeric audit rejects narration containing values absent from the execution
+result and falls back to the verified table. The advanced SQL workspace remains
+available for manual inspection and exact one-time execution. See
 [`docs/LOCAL_EXECUTION_ARCHITECTURE.md`](docs/LOCAL_EXECUTION_ARCHITECTURE.md).
-
-To ask Rangabot for a query, open **Analyze**, select an approved dataset, and
-choose **Use selected data in chat**. The local model receives the dataset schema
-but no result rows, drafts one validated read-only query, and opens it in the SQL
-workspace. You must still choose **Review query** and then **Run once**; sending a
-chat message never counts as execution approval.
 
 ## Artifact skills
 
