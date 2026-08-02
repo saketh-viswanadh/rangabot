@@ -1,6 +1,6 @@
 # Core Conversation Contract
 
-Version: 1.0.0
+Version: 1.1.0
 Frozen: 2026-08-02
 
 This contract defines what ordinary Rangabot conversation must do regardless of
@@ -20,6 +20,10 @@ product contract, not a claim that every model already satisfies it.
 Current instructions always override saved memory. Unrelated memory must never
 enter the prompt or answer.
 
+The model-independent implementation is defined in the
+[Mind & Memory release architecture](MIND_MEMORY_ARCHITECTURE.md). The contract
+is assembled identically for ordinary chat and transformed Scholar prompts.
+
 ## Answer standard
 
 An acceptable core answer is:
@@ -36,7 +40,7 @@ Rangabot must never claim or imply that it completed an unavailable action.
 
 ## Frozen v1 benchmark
 
-The tracked v1 suite contains 60 synthetic cases: five cases in each of twelve
+The tracked v1.0.6 suite contains 60 synthetic cases: five cases in each of twelve
 capability groups.
 
 1. Direct usefulness

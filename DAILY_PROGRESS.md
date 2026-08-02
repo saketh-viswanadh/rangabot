@@ -1,5 +1,27 @@
 # Daily progress
 
+## 2026-08-02 — Mind & Memory release architecture
+
+- Replaced route-specific prompting with a documented shared control plane for
+  current-turn constraints, bounded history, relevant approved memory, mode
+  context, typed local generation, conformance, and response receipts.
+- Added deterministic handling for unavailable actions, exact literals, and a
+  missing-source question; hard formats are buffered and narrowly normalized.
+  Semantic omissions such as an unnamed requested subject or missing causal
+  confounder receive one local repair pass without benchmark-specific answers.
+- Fixed memory supersession and preferred-name recognition, excluded current-
+  turn conflicts before prompt construction, and removed orphan assistant turns
+  from trimmed history.
+- Propagated Stop into Ollama, introduced stable provider failure categories,
+  and restricted automatic retry to one safe timeout.
+- Deterministic validation is 121/121. The complete v1.0.6 candidate on
+  `llama3.2:3b` completed 60/60 with no runtime errors but scored 52/60 overall,
+  21/22 critical, and 6.6-second mean latency. It therefore fails the 54/60,
+  22/22-critical, and per-category release gates. Targeted reruns are recorded
+  only as diagnostics, never substituted for this complete result.
+- Remaining failures expose both conformance variance and genuine 3B knowledge
+  limits. No benchmark answer was hardcoded and no gate was weakened.
+
 ## 2026-08-02 — Public product showcase
 
 - Captured the current Rangabot UI at 1280×720 using an empty conversation and

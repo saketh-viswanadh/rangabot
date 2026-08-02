@@ -9,6 +9,18 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Mind & Memory now has a documented model-independent control plane: typed
+  answer contracts, one shared precedence assembler across ordinary and Scholar
+  chat, conflict-aware memory selection, deterministic unavailable-action
+  boundaries, narrow format conformance, and selective semantic self-repair.
+- The Ollama boundary now propagates user cancellation, classifies timeout,
+  unavailable runtime, missing model, HTTP, empty-output, and malformed-stream
+  failures, and retries only a safe timeout—never a cancelled request.
+- Core evaluation v1.0.6 preserves a balanced 60-case suite, records transparent
+  rubric repairs, supports critical-only variance runs, and keeps full answers
+  private. The current 3B-model candidate remains release-blocked at 52/60 and
+  21/22 critical cases; architecture work is not presented as mastery.
+
 - Path to Mastery now leads with strict capability readiness: 8/45 fully
   unlocked, or 18%. Criterion verification (37%) and weighted development
   progress (46%, including half-credit for partial work) are separately labelled

@@ -33,3 +33,28 @@ export interface ProviderStatus {
   models: string[];
   error?: string;
 }
+
+export type ProviderFailureCode = "unavailable" | "model-missing" | "timeout" | "cancelled" | "http" | "empty-output" | "invalid-stream";
+
+export class ProviderError extends Error {
+  readonly code: ProviderFailureCode;
+  constructor(code: ProviderFailureCode, message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.code = code;
+    this.name = "ProviderError";
+  }
+}
+
+export interface GenerationOptions {
+  numPredict?: number;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
+export interface LocalChatProvider {
+  readonly id: "ollama";
+  status(): Promise<ProviderStatus>;
+  completeJson(messages: ChatMessage[], options?: GenerationOptions): Promise<string>;
+  completeText(messages: ChatMessage[], options?: GenerationOptions): Promise<string>;
+  stream(messages: ChatMessage[], options?: GenerationOptions): Promise<ReadableStream<Uint8Array>>;
+}

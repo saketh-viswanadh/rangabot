@@ -282,6 +282,11 @@ pre-orchestration behavior for diagnostic comparison. The earlier 20-case
 exploratory result is not comparable with the frozen v1 suite and must not be
 presented as a product-quality score.
 
+Use `npm run conversation:evaluate -- --critical-only` for a repeated critical
+trust diagnostic. It is deliberately marked as a partial selection and cannot
+replace the complete-suite result. The current request path and invariants are
+documented in the [Mind & Memory release architecture](docs/MIND_MEMORY_ARCHITECTURE.md).
+
 Ordinary chat now uses a provider-independent Rangabot contract and a bounded
 recent-history window. Relevant approved memories may shape an answer, but the
 latest explicit user correction always wins and unrelated memories remain
