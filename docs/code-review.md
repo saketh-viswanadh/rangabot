@@ -24,6 +24,25 @@ published. Findings are kept here so cleanup is measurable rather than implied.
 
 ## Fixed in this review
 
+### 2026-08-02 public truth and evaluation audit
+
+- Replaced the stale README hero screenshot, which showed an obsolete sidebar
+  and Ollama offline, with the maintained Rangabot social banner.
+- Added a visible pre-release reliability qualification so the public feature
+  list is not mistaken for a mastery or quality guarantee.
+- Rejected the earlier 18/20 conversation result as an exhaustive score: the
+  suite was small and unbalanced, reasoning failed 0/2, rules were primarily
+  substring checks, and result provenance omitted the suite, commit, model,
+  Ollama, context, hardware, completion state, and capability denominators.
+- Froze a versioned 60-case contract with five cases in each of twelve core
+  capabilities, explicit critical trust cases, provenance, and non-negotiable
+  release gates. Semantic quality still requires blinded human review.
+- Two complete 60/60 diagnostics exposed stochastic case variance and a strict
+  1.0.2 score of 51/60 overall, 21/22 critical trust cases, and 7.2-second mean
+  latency on the installed 3B model after equivalent-answer rubric repairs.
+  Format, reasoning, adaptation/concision, and memory precedence are not at the
+  release threshold; this is a conditional development baseline, not mastery.
+
 ### 2026-08-02 maintenance pass
 
 - Removed the tracked generated `next-env.d.ts` file and made type checking run
@@ -119,7 +138,7 @@ published. Findings are kept here so cleanup is measurable rather than implied.
 
 ### Repository maintenance
 
-- Public `main` is current through merged PR #62 and its Linux and Windows CI passed.
+- Public `main` is current through merged PR #63 and its Linux and Windows CI passed.
 - Release `v0.1.0` remains behind `main`; publish a new release only after the
   reliability week finishes and the release candidate passes.
 - Automatic merged-branch deletion is enabled. Ten remote branches proven merged

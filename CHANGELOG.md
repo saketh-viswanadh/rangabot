@@ -9,6 +9,12 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Frozen Core Conversation Contract v1 and a balanced 60-case synthetic suite
+  replace the earlier 20-case exploratory check. Results now record suite,
+  commit, model, Ollama, context, hardware, run-state, completion, critical-trust,
+  per-capability, latency, and error provenance. A public evaluator changelog
+  records every rubric repair and its effect on comparability.
+
 - Centralized runtime product identity, registry-derived default models, stricter
   unused-code checks, runtime-only filesystem tracing, and generated Next type
   handling reduce duplicated configuration and build noise.
