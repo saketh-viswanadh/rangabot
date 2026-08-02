@@ -44,6 +44,12 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [ ] Add deterministic provider simulations for missing models, partial and
   malformed streams, empty output, cancellation, timeout, and persistence
   integrity before declaring runtime mastery
+- [x] Establish a bounded read-only DuckDB execution kernel with approved-file
+  validation, external-access shutdown, resource caps, and receipts
+- [ ] Add persistent local dataset approvals plus exact SQL preview and explicit
+  execution confirmation before exposing DuckDB through conversation
+- [ ] Add a sandboxed Python runtime only after it can reuse the same approval,
+  cancellation, limits, receipt, and result-validation contract
 - [x] Add a frozen adaptive-reviewer qualification gate that requires correction
   of every bad draft and preservation of every good draft before activation
 - [ ] Qualify a separate approved local reviewer model at 12/12; the installed

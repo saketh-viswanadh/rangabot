@@ -28,6 +28,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- A backend-only safe DuckDB foundation can execute one bounded read-only query
+  over an explicitly approved CSV or Parquet file in a fresh in-memory database.
+  It disables external access before query execution and returns a local receipt;
+  chat-triggered execution remains locked pending an approval-preview flow.
+
 - A frozen reviewer-qualification gate now prevents an unproven local critic
   from rewriting production answers. It uses schema-constrained Ollama output,
   six bad-draft corrections, six good-draft preservation cases, and requires
