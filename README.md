@@ -41,6 +41,11 @@ memory, repository content, or private Knowledge Vault document is shown.
 4. Run `npm run doctor` to verify the installation.
 5. Start with `npm run dev` and open `http://127.0.0.1:3000`.
 
+On macOS, the development launcher uses a one-second polling watcher to avoid
+the desktop session's low file-watcher limit. Linux and Windows retain native
+watching. Override with `WATCHPACK_POLLING=false npm run dev` only if your macOS
+file limit has been raised and verified.
+
 Experienced users can copy `.env.example` to `.env.local` and use the manual
 model guidance in [docs/models.md](docs/models.md).
 
