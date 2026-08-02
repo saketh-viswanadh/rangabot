@@ -18,6 +18,7 @@ export type AnswerContract = {
   commaSeparatedOnly: boolean;
   lowercaseWords: boolean;
   outlineOnly: boolean;
+  premiseVerification: boolean;
   falseCausalPremise: boolean;
   missingSourceMaterial: boolean;
   requiredSubject?: string;
@@ -56,6 +57,7 @@ export function compileAnswerContract(messages: ChatMessage[]): AnswerContract {
   const currentTone = lower.match(/\b(sober|formal|friendly|playful|professional|technical|warm|concise|brief)\b/)?.[1];
   const choiceMatch = latestRequest.match(/(?:answer|reply)(?:\s+with)?\s+only\s+([\p{L}\p{N}_-]+)\s+or\s+([\p{L}\p{N}_-]+)\s*:/iu);
   const requiredSubject = lower.match(/\bexplain\s+(?:the\s+)?(.+?)(?:\s+to\b|\s+for\b|\s+in\b|[,.?:]|$)/)?.[1]?.trim();
+  const premiseVerification = /^(?:since|because|given that|assuming that|as)\b[\s\S]{0,220}\b(?:explain|tell me|show|prove|why)\b/.test(lower);
   const falseCausalPremise = /\b(?:correlation|association)\b[\s\S]{0,40}\b(?:proves?|means?|causes?|implies?)\b[\s\S]{0,20}\bcaus/.test(lower);
   return {
     latestRequest,
@@ -74,6 +76,7 @@ export function compileAnswerContract(messages: ChatMessage[]): AnswerContract {
     commaSeparatedOnly: /separated only by commas/.test(lower),
     lowercaseWords: /lowercase words?/.test(lower),
     outlineOnly: /\b(?:only|for now)\b[\s\S]{0,30}\boutline\b/.test(lower),
+    premiseVerification,
     falseCausalPremise,
     missingSourceMaterial: /\b(?:have not|haven't|not)\s+(?:shared|provided|attached|uploaded)\b[\s\S]{0,40}\b(?:data|file|document|values|logs?)\b/.test(lower),
     ...(requiredSubject && !falseCausalPremise && !/^(?:it|this|that|this relationship|that relationship)$/.test(requiredSubject) && requiredSubject.split(/\s+/).length <= 4 ? { requiredSubject } : {}),
@@ -84,8 +87,13 @@ export function semanticContractRepairs(answer: string, contract: AnswerContract
   const lower = answer.toLowerCase();
   const repairs: string[] = [];
   if (contract.requiredSubject && !lower.includes(contract.requiredSubject)) repairs.push(`Name the requested subject explicitly: ${contract.requiredSubject}`);
-  if (contract.falseCausalPremise && !/\b(?:confound\w*|common cause|shared (?:cause|factor)|third (?:factor|variable)|temperature|weather|season|summer|heat)\b/i.test(answer)) {
-    repairs.push("Name a plausible confounder or common cause instead of stopping after rejecting the premise");
+  if (contract.falseCausalPremise) {
+    if (!/\bcorrelation\b[\s\S]{0,30}\b(?:does not|doesn't|cannot|can't|never)\b[\s\S]{0,20}\b(?:prove|establish|show|imply|mean)\b[\s\S]{0,15}\bcaus/i.test(answer)) {
+      repairs.push("State explicitly that correlation does not prove causation");
+    }
+    if (!/\b(?:confound\w*|common cause|shared (?:cause|factor)|third (?:factor|variable)|temperature|weather|season|summer|heat)\b/i.test(answer)) {
+      repairs.push("Name a plausible confounder or common cause instead of stopping after rejecting the premise");
+    }
   }
   return repairs;
 }
@@ -117,6 +125,7 @@ export function formatAnswerContract(contract: AnswerContract): string | null {
   if (contract.allowedLiterals) rules.push(`Return only one of these exact tokens with no punctuation: ${contract.allowedLiterals.join(" or ")}`);
   if (contract.commaSeparatedOnly) rules.push("Separate items only with commas; use no spaces or final punctuation");
   if (contract.lowercaseWords) rules.push("Use lowercase words only");
+  if (contract.premiseVerification) rules.push("The request supplies a premise: verify it independently before answering; if any part is false, correct it explicitly and do not continue as though it were true");
   if (contract.falseCausalPremise) rules.push("Correct the premise explicitly: correlation does not prove causation; name a plausible confounder or common cause");
   if (contract.missingSourceMaterial) rules.push("Ask for the missing source material first; do not ask optional presentation preferences before it is available");
   if (!rules.length) return null;
@@ -142,7 +151,7 @@ export function deterministicContractAnswer(contract: AnswerContract): string | 
 }
 
 export function needsBufferedConformance(contract: AnswerContract) {
-  return Boolean(contract.maxWords || contract.sentenceCount || contract.outlineOnly || contract.allowedLiterals || contract.falseCausalPremise || contract.missingSourceMaterial || (contract.exactWords && contract.commaSeparatedOnly));
+  return Boolean(contract.maxWords || contract.sentenceCount || contract.outlineOnly || contract.allowedLiterals || contract.premiseVerification || contract.falseCausalPremise || contract.missingSourceMaterial || (contract.exactWords && contract.commaSeparatedOnly));
 }
 
 export function normalizeContractAnswer(answer: string, contract: AnswerContract): string {
@@ -189,6 +198,16 @@ export function normalizeContractAnswer(answer: string, contract: AnswerContract
     }
   }
   return trimmed;
+}
+
+export function enforceReasoningInvariants(answer: string, contract: AnswerContract): string {
+  const normalized = normalizeContractAnswer(answer, contract);
+  if (!contract.falseCausalPremise) return normalized;
+  const repairs = semanticContractRepairs(normalized, contract);
+  const safeguards: string[] = [];
+  if (repairs.includes("State explicitly that correlation does not prove causation")) safeguards.push("Correlation does not prove causation.");
+  if (repairs.includes("Name a plausible confounder or common cause instead of stopping after rejecting the premise")) safeguards.push("A shared third variable can drive both outcomes.");
+  return safeguards.length ? `${safeguards.join(" ")}\n\n${normalized}` : normalized;
 }
 
 export function applySelectedMemoryToContract(contract: AnswerContract, memories: Array<{ content: string }>): AnswerContract {

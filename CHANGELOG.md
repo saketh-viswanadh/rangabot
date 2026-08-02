@@ -9,6 +9,12 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Evaluation
 
+- Leading-premise verification and a deterministic minimum causal invariant now
+  prevent local models from silently accepting false premises or omitting the
+  shared-variable explanation after a failed repair. The complete candidate is
+  56/60, 22/22 critical, and 6.7 seconds mean latency after a documented v1.0.11
+  rescore; reasoning remains release-blocked at 3/5.
+
 - Core evaluator v1.0.9 repairs three semantic false negatives without changing
   production behavior or gates. Three complete critical repetitions rescore to
   20/22, 22/22, and 22/22; the first run retains two genuine reasoning failures,
