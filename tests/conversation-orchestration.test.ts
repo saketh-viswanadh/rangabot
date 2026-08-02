@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { answerUnavailableExternalAction, buildConversationMemoryQuery, buildConversationMessages, trimConversationHistory } from "../lib/conversation-orchestration.ts";
+import { answerDeterministicConversationRequest, answerUnavailableExternalAction, buildConversationMemoryQuery, buildConversationMessages, buildConversationMessagesWithSelected, trimConversationHistory } from "../lib/conversation-orchestration.ts";
 import type { LocalMemory } from "../lib/memories.ts";
 
 const memory = (id: string, content: string, kind: LocalMemory["kind"] = "preference"): LocalMemory => ({
@@ -34,16 +34,17 @@ test("current-turn precedence is explicit in the model contract", () => {
     [memory("1", "Always answer with bullet points", "instruction")],
   );
   assert.match(result.messages[0].content, /latest user message.*override/i);
-  assert.match(result.messages[1].content, /current explicit instruction wins/i);
+  assert.equal(result.memories.length, 0);
+  assert.match(result.messages[1].content, /no bullet/i);
 });
 
-test("history trimming retains the newest complete messages", () => {
+test("history trimming retains the newest complete turn without an orphan assistant", () => {
   const result = trimConversationHistory([
     { role: "user", content: "old".repeat(20) },
     { role: "assistant", content: "middle" },
     { role: "user", content: "latest" },
   ], 20);
-  assert.deepEqual(result.map((item) => item.content), ["middle", "latest"]);
+  assert.deepEqual(result.map((item) => item.content), ["latest"]);
 });
 
 test("unavailable email execution is answered deterministically", () => {
@@ -51,4 +52,28 @@ test("unavailable email execution is answered deterministically", () => {
   assert.match(answer ?? "", /can't send/i);
   assert.match(answer ?? "", /draft/i);
   assert.equal(answerUnavailableExternalAction("Explain how email delivery works"), null);
+});
+
+test("exact literal constraints bypass probabilistic generation", () => {
+  assert.equal(answerDeterministicConversationRequest([{ role: "user", content: "Reply with exactly one word: ready." }]), "ready");
+});
+
+test("applies the same core precedence contract to transformed scholar prompts", () => {
+  const source = [{ role: "user" as const, content: "Explain joins in at most 40 words." }];
+  const transformed = [{ role: "system" as const, content: "Teacher instructions" }, { role: "user" as const, content: "QUESTION and retrieved passages" }];
+  const result = buildConversationMessagesWithSelected(transformed, [], source);
+  assert.match(result.messages[0].content, /local-first personal assistant/i);
+  assert.match(result.messages[1].content, /at most 40 words/i);
+  assert.equal(result.messages.at(-1)?.content, "QUESTION and retrieved passages");
+});
+
+test("makes contextual follow-up focus explicit for smaller models", () => {
+  const result = buildConversationMessages([
+    { role: "user", content: "We chose PostgreSQL for the application database." },
+    { role: "assistant", content: "Understood." },
+    { role: "user", content: "Give one backup recommendation for it." },
+  ]);
+  assert.match(result.messages[1].content, /PostgreSQL/);
+  assert.match(result.messages[1].content, /backup recommendation/);
+  assert.equal(result.messages.at(-1)?.content, "Give one backup recommendation for PostgreSQL.");
 });

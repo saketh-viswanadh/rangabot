@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import test, { after } from "node:test";
+import { compileAnswerContract } from "../lib/conversation-contract.ts";
 
 const testDatabase = resolve("data/memories-test.db");
 const memories = await import("../lib/memories.ts");
@@ -35,9 +36,9 @@ test("rejects silent or unbounded memory input", () => {
 });
 
 test("answers direct identity recall from approved memory without model improvisation", () => {
-  const name = memories.createMemory("My name is Saketh", "fact");
+  const name = memories.createMemory("My preferred name is Saketh", "fact");
   assert.equal(memories.answerDirectMemoryQuestion("What is my name?"), "Your name is Saketh. You explicitly saved that in Local memory.");
-  assert.match(memories.answerDirectMemoryQuestion("What do you remember about me?") ?? "", /My name is Saketh/);
+  assert.match(memories.answerDirectMemoryQuestion("What do you remember about me?") ?? "", /My preferred name is Saketh/);
   memories.deleteMemory(name.id);
   assert.match(memories.answerDirectMemoryQuestion("What's my name?") ?? "", /won't guess/);
 });
@@ -94,6 +95,26 @@ test("selects only memories relevant to the current request", () => {
   memories.deleteMemory(concise.id);
   memories.deleteMemory(python.id);
   memories.deleteMemory(city.id);
+});
+
+test("current-turn constraints exclude conflicting approved memories", () => {
+  const detailed = memories.createMemory("Always answer with detailed paragraphs", "instruction");
+  const result = memories.selectRelevantMemoriesFrom(
+    [detailed],
+    "Reply with exactly one word: ready.",
+    6,
+    compileAnswerContract([{ role: "user", content: "Reply with exactly one word: ready." }]),
+  );
+  assert.deepEqual(result, []);
+  memories.deleteMemory(detailed.id);
+});
+
+test("reviews same-purpose style memories as conflicts instead of silently stacking them", () => {
+  const concise = memories.createMemory("Prefer concise answers", "preference");
+  const payload = { version: 1, exportedAt: "2026-08-02T00:00:00.000Z", memories: [{ id: "long", content: "Prefer long answers", kind: "preference", origin: "user-approved", confidence: 1 }] };
+  const preview = memories.previewMemoryImport(payload);
+  assert.equal(preview.conflicts[0]?.reason, "same-subject");
+  memories.deleteMemory(concise.id);
 });
 
 test("uses a title-only identity disclosure without leaking the saved value", () => {

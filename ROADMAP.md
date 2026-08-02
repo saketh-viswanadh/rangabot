@@ -34,6 +34,15 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Establish a versioned, balanced 60-case synthetic Mind & Memory benchmark and a shared
   model-independent conversation contract for directness, truthfulness,
   correction precedence, bounded history, and selective local memory
+- [x] Establish the Mind & Memory control-plane architecture with shared mode
+  precedence, compiled answer contracts, conflict-aware memory, typed provider
+  failures, Stop propagation, and narrow conformance repair
+- [ ] Clear the frozen v1.0.6 release gates: at least 54/60 overall, 22/22
+  critical on repeated runs, every category at 4/5 or better, and human blind
+  usefulness at 4/5 or better
+- [ ] Add deterministic provider simulations for missing models, partial and
+  malformed streams, empty output, cancellation, timeout, and persistence
+  integrity before declaring runtime mastery
 - [ ] Expand Mind & Memory evaluation across every supported model profile and
   publish comparable local scorecards without committing private outputs
 - [ ] Add inspectable correction and memory-conflict workflows so outdated facts

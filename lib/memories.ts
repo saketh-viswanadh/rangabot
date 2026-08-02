@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import type { DatabaseSync as Database } from "node:sqlite";
+import { memoryConflictsWithContract, type AnswerContract } from "./conversation-contract.ts";
 
 const serverRequire = createRequire(resolve(process.cwd(), "package.json"));
 const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sqlite");
@@ -104,7 +105,7 @@ function memoryTokens(value: string) {
 
 export function memoryTitle(memory: Pick<LocalMemory, "content" | "kind">): string {
   const content = memory.content.trim();
-  if (/^(?:my name is|call me)\s+/i.test(content)) return "Preferred name";
+  if (/^(?:my (?:preferred )?name is|call me)\s+/i.test(content)) return "Preferred name";
   if (/\b(?:concise|brief|short|detailed|step[- ]by[- ]step|examples?|bullet|tone|format|language)\b/i.test(content)) return "Answer style";
   if (/\b(?:python|sql|pyspark|databricks|snowflake|typescript|javascript|coding|code)\b/i.test(content)) return "Technical preference";
   if (memory.kind === "instruction") return "Standing instruction";
@@ -123,24 +124,24 @@ function relevanceScore(memory: LocalMemory, question: string) {
   for (const token of contentTokens) if (questionTokens.has(token)) overlap += 1;
   let score = overlap * 3;
   if (isGenerallyRelevantPreference(memory)) score += 2;
-  if (/^(?:my name is|call me)\s+/i.test(memory.content)
+  if (/^(?:my (?:preferred )?name is|call me)\s+/i.test(memory.content)
     && /\b(?:my name|who am i|about me|bio|biography|introduce me|introduction)\b/i.test(question)) score += 6;
   if (memory.kind === "instruction" && overlap > 0) score += 1;
   return score;
 }
 
-export function selectRelevantMemoriesFrom(memories: LocalMemory[], question: string, limit = 6): LocalMemory[] {
+export function selectRelevantMemoriesFrom(memories: LocalMemory[], question: string, limit = 6, contract?: AnswerContract): LocalMemory[] {
   if (!question.trim()) return [];
   return memories
     .map((memory) => ({ memory, score: relevanceScore(memory, question) }))
-    .filter(({ score }) => score >= 2)
+    .filter(({ memory, score }) => score >= 2 && (!contract || !memoryConflictsWithContract(memory.content, contract)))
     .sort((a, b) => b.score - a.score || b.memory.updatedAt.localeCompare(a.memory.updatedAt))
     .slice(0, Math.max(0, Math.min(limit, 8)))
     .map(({ memory }) => memory);
 }
 
-export function selectRelevantMemories(question: string, limit = 6): LocalMemory[] {
-  return selectRelevantMemoriesFrom(listMemories(), question, limit);
+export function selectRelevantMemories(question: string, limit = 6, contract?: AnswerContract): LocalMemory[] {
+  return selectRelevantMemoriesFrom(listMemories(), question, limit, contract);
 }
 
 export function buildRelevantMemoryContext(question: string, limit = 6): RelevantMemoryContext | null {
@@ -159,7 +160,7 @@ export function formatMemoryContext(question: string, limit = 6): string | null 
 
 function savedName(memories: LocalMemory[]) {
   for (const memory of memories) {
-    const match = memory.content.match(/^(?:my name is|call me)\s+(.+?)[.!]?$/i);
+    const match = memory.content.match(/^(?:my (?:preferred )?name is|call me)\s+(.+?)[.!]?$/i);
     if (match?.[1]) return match[1].trim();
   }
   return null;
@@ -199,7 +200,13 @@ function normalizedMemoryContent(content: string) {
 }
 
 function memorySubject(content: string) {
-  return /^(?:my name is|call me)\s+/i.test(content.trim()) ? "identity:name" : null;
+  const value = content.trim();
+  if (/^(?:my (?:preferred )?name is|call me)\s+/i.test(value)) return "identity:name";
+  if (/\b(?:concise|brief|short|detailed|long)\b/i.test(value)) return "answer:length";
+  if (/\b(?:bullets?|numbered|paragraphs?|format)\b/i.test(value)) return "answer:format";
+  if (/\b(?:python|sql|javascript|typescript|pyspark|java)\b/i.test(value)) return "answer:code-language";
+  if (/\b(?:playful|sober|formal|friendly|professional|warm)\s+tone\b|\btone\b.*\b(?:playful|sober|formal|friendly|professional|warm)\b/i.test(value)) return "answer:tone";
+  return null;
 }
 
 export function parseMemoryExport(payload: unknown): MemoryImportItem[] {

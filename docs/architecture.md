@@ -1,5 +1,9 @@
 # Architecture
 
+The shared conversation control plane is specified in
+[Mind & Memory release architecture](MIND_MEMORY_ARCHITECTURE.md). Every product
+mode must reuse its precedence, memory, capability, and provider boundaries.
+
 Rangabot is a local Next.js application. The browser UI calls server-side API
 routes bound to loopback. Those routes use typed provider interfaces to reach a
 local Ollama process, SQLite for conversations, and a private hybrid retrieval

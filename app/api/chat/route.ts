@@ -12,7 +12,8 @@ import { findStoryPack } from "@/lib/story-packs";
 import { isValidChatMessages } from "@/lib/chat-validation";
 import { buildKnowledgeSearchQuery } from "@/lib/knowledge-query-planning";
 import { answerDirectMemoryQuestion, directMemoryTitles, listMemories } from "@/lib/memories";
-import { answerUnavailableExternalAction, buildConversationMessagesWithSelected, formatSelectedMemoryContext, selectConversationMemories } from "@/lib/conversation-orchestration";
+import { answerDeterministicConversationRequest, buildConversationMessagesWithSelected, buildSemanticRepairMessages, selectConversationMemories } from "@/lib/conversation-orchestration";
+import { applySelectedMemoryToContract, compileAnswerContract, needsBufferedConformance, normalizeContractAnswer } from "@/lib/conversation-contract";
 
 export const runtime = "nodejs";
 
@@ -56,10 +57,10 @@ export async function POST(request: Request) {
     }
 
     const latestQuestion = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
-    const unavailableActionAnswer = answerUnavailableExternalAction(latestQuestion);
-    if (unavailableActionAnswer) {
-      return new Response(unavailableActionAnswer, {
-        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Rangabot-Capability": "unavailable" },
+    const deterministicAnswer = answerDeterministicConversationRequest(body.messages);
+    if (deterministicAnswer) {
+      return new Response(deterministicAnswer, {
+        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Rangabot-Response": "deterministic" },
       });
     }
     const directMemoryAnswer = answerDirectMemoryQuestion(latestQuestion);
@@ -176,12 +177,7 @@ export async function POST(request: Request) {
     const memoryTitles = relevantMemory ? buildConversationMessagesWithSelected([], selectedMemories).memoryTitles : [];
     const memoryTitleHeader = relevantMemory ? encodeURIComponent(JSON.stringify(memoryTitles)) : undefined;
 
-    if (body.mode === "teach" && usesVault) {
-      const memoryContext = formatSelectedMemoryContext(selectedMemories);
-      if (memoryContext) messages = [{ role: "system", content: memoryContext }, ...messages];
-    } else {
-      messages = buildConversationMessagesWithSelected(messages, selectedMemories).messages;
-    }
+    messages = buildConversationMessagesWithSelected(messages, selectedMemories, body.messages).messages;
 
     if (body.mode === "teach" && usesVault) {
       const grounded = await generateGroundedTeacherAnswer(messages, knowledgeSources, completeTextWithOllama);
@@ -200,18 +196,27 @@ export async function POST(request: Request) {
       });
     }
 
-    const stream = await streamChatWithOllama(messages);
+    const answerContract = applySelectedMemoryToContract(compileAnswerContract(body.messages), selectedMemories);
+    const responseHeaders = {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Content-Type-Options": "nosniff",
+      "X-Rangabot-Knowledge": usesVault ? "used" : "not-used",
+      ...(knowledgeSearchMode ? { "X-Rangabot-Retrieval": knowledgeSearchMode } : {}),
+      "X-Rangabot-Code-Context": localCodeContext ? "used" : "not-used",
+      "X-Rangabot-Memory": relevantMemory ? "used" : "not-used",
+      ...(memoryTitleHeader ? { "X-Rangabot-Memory-Titles": memoryTitleHeader } : {}),
+    };
+    if (needsBufferedConformance(answerContract)) {
+      let generated = await completeTextWithOllama(messages, { signal: request.signal });
+      const repairMessages = buildSemanticRepairMessages(messages, generated, body.messages);
+      if (repairMessages) generated = await completeTextWithOllama(repairMessages, { signal: request.signal });
+      const answer = normalizeContractAnswer(generated, answerContract);
+      return new Response(answer, { headers: { ...responseHeaders, "X-Rangabot-Response": "contract-checked" } });
+    }
+    const stream = await streamChatWithOllama(messages, { signal: request.signal });
     return new Response(stream, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
-        "X-Content-Type-Options": "nosniff",
-        "X-Rangabot-Knowledge": usesVault ? "used" : "not-used",
-        ...(knowledgeSearchMode ? { "X-Rangabot-Retrieval": knowledgeSearchMode } : {}),
-        "X-Rangabot-Code-Context": localCodeContext ? "used" : "not-used",
-        "X-Rangabot-Memory": relevantMemory ? "used" : "not-used",
-        ...(memoryTitleHeader ? { "X-Rangabot-Memory-Titles": memoryTitleHeader } : {}),
-      },
+      headers: responseHeaders,
     });
   } catch (error) {
     return NextResponse.json(
