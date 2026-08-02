@@ -414,3 +414,5 @@ quality evaluation, and it can be validated without changing model weights.
   and Path to Mastery are regressed instead of overstated.
 - Remapped Saketh Viswanadha to 29 contributor claims backed by attributable
   merged PR evidence. Credit records work performed; it does not certify quality.
+- CI now fetches complete Git history so both platforms verify cited historical
+  merge commits instead of bypassing or weakening the evidence check.
