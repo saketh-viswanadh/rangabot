@@ -1,5 +1,19 @@
 # Daily progress
 
+## 2026-08-02 — Safe DuckDB execution foundation
+
+- Selected DuckDB's supported Node Neo client instead of the deprecated Node
+  package and pinned the reviewed binding release.
+- Added an ephemeral SQL kernel for explicitly approved CSV/Parquet files with
+  canonical-file validation, a 100 MB input ceiling, 256 MB DuckDB memory cap,
+  two threads, bounded timeout, 200-row result cap, and SHA-256 receipts.
+- External file access is enabled only for the approved import and disabled
+  before user or model SQL is prepared. Mutation, multiple statements, file
+  reopening, attachment, export, and extension loading are rejected by allowing
+  exactly one prepared `SELECT` statement.
+- This is intentionally backend-only. Chat execution remains locked until the
+  dataset approval and exact-query preview flow is implemented.
+
 ## 2026-08-02 — Verified local reasoning ledger
 
 - Added a conservative model-independent reasoning ledger that recognizes only
