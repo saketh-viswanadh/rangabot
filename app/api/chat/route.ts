@@ -14,6 +14,9 @@ import { buildKnowledgeSearchQuery } from "@/lib/knowledge-query-planning";
 import { answerDirectMemoryQuestion, directMemoryTitles, listMemories } from "@/lib/memories";
 import { answerDeterministicConversationRequest, buildConversationMessagesWithSelected, buildSemanticRepairMessages, selectConversationMemories } from "@/lib/conversation-orchestration";
 import { applySelectedMemoryToContract, chooseSemanticRepair, compileAnswerContract, enforceReasoningInvariants, needsBufferedConformance } from "@/lib/conversation-contract";
+import { getApprovedDataset } from "@/lib/datasets";
+import { inspectDatasetSchema } from "@/lib/sql-runtime";
+import { buildSqlProposalMessages, parseSqlProposal, sqlProposalSchema } from "@/lib/sql-proposals";
 
 export const runtime = "nodejs";
 
@@ -42,7 +45,7 @@ async function generateConversationSummary(brief: WordDocumentBrief, messages: C
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { messages?: unknown; mode?: unknown; codeContext?: unknown };
+    const body = (await request.json()) as { messages?: unknown; mode?: unknown; codeContext?: unknown; datasetId?: unknown };
     if (!isValidChatMessages(body.messages)) {
       return NextResponse.json({ error: "A valid message is required." }, { status: 400 });
     }
@@ -55,6 +58,7 @@ export async function POST(request: Request) {
     if (body.codeContext !== undefined && !isCodeContextRequest(body.codeContext)) {
       return NextResponse.json({ error: "The attached code reference is invalid." }, { status: 400 });
     }
+    if (body.datasetId !== undefined && typeof body.datasetId !== "string") return NextResponse.json({ error: "The attached dataset reference is invalid." }, { status: 400 });
 
     const latestQuestion = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
     const deterministicAnswer = answerDeterministicConversationRequest(body.messages);
@@ -83,6 +87,23 @@ export async function POST(request: Request) {
       if (!repository) return NextResponse.json({ error: "That folder is no longer approved." }, { status: 400 });
       const preview = previewRepositoryFile(repository, body.codeContext.path, body.codeContext.line);
       localCodeContext = formatCodeContext(repository, preview);
+    }
+
+    if (typeof body.datasetId === "string") {
+      const dataset = getApprovedDataset(body.datasetId);
+      if (!dataset) return NextResponse.json({ error: "That dataset is no longer approved." }, { status: 400 });
+      const columns = await inspectDatasetSchema(dataset.path);
+      const raw = await completeJsonWithOllama(buildSqlProposalMessages(body.messages, dataset, columns), { signal: request.signal, jsonSchema: sqlProposalSchema, numPredict: 700 });
+      const proposal = parseSqlProposal(raw);
+      const reference = { datasetId: dataset.id, query: proposal.query };
+      return new Response(`I drafted a read-only SQL query for **${dataset.name}**. ${proposal.explanation}\n\nReview the exact query and limits before deciding whether to run it.`, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "X-Content-Type-Options": "nosniff",
+          "X-Rangabot-SQL-Proposal": encodeURIComponent(JSON.stringify(reference)),
+        },
+      });
     }
 
     if (shouldPlanWordDocument(body.messages)) {

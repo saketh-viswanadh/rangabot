@@ -50,6 +50,8 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   single-use SQL preview and execution confirmation protocol
 - [x] Add an app-visible SQL proposal card with dataset, query, limits,
   approve/reject controls, results, and execution receipt; never auto-execute
+- [x] Let an explicitly attached approved dataset contribute schema-only context
+  to local chat so the model can draft validated SQL into the review workspace
 - [ ] Add a sandboxed Python runtime only after it can reuse the same approval,
   cancellation, limits, receipt, and result-validation contract
 - [x] Add a frozen adaptive-reviewer qualification gate that requires correction

@@ -9,6 +9,7 @@ import { parseKnowledgeBrief } from "@/lib/knowledge-brief";
 import { CraftIcon } from "@/app/components/craft-icon";
 import { formatAnswerReceipt } from "@/lib/answer-receipt";
 import { SqlAnalysisPanel } from "@/app/components/sql-analysis-panel";
+import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
 
 const MemoryPanel = dynamic(
   () => import("@/app/components/memory-panel").then((module) => module.MemoryPanel),
@@ -84,6 +85,8 @@ export default function Home() {
   const [readKnowledgeVersion, setReadKnowledgeVersion] = useState<string | null>(null);
   const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
   const [sqlPanelOpen, setSqlPanelOpen] = useState(false);
+  const [attachedDataset, setAttachedDataset] = useState<AttachedDataset | null>(null);
+  const [sqlDraft, setSqlDraft] = useState<SqlDraft | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -449,6 +452,7 @@ export default function Home() {
         body: JSON.stringify({
           mode,
           ...(codeContextForRequest ? { codeContext: { repositoryId: codeContextForRequest.repositoryId, path: codeContextForRequest.path, line: codeContextForRequest.line } } : {}),
+          ...(attachedDataset ? { datasetId: attachedDataset.id } : {}),
           messages: nextMessages.map(({ role, content: text, replyTo: reply, artifactIntent, wordArtifact }) => ({
             role,
             content: reply ? `[Replying to ${reply.role}: “${reply.excerpt}”]\n\n${text}` : text,
@@ -471,6 +475,15 @@ export default function Home() {
         } catch {
           responseWordArtifact = undefined;
         }
+      }
+      const encodedSqlProposal = response.headers.get("X-Rangabot-SQL-Proposal");
+      if (encodedSqlProposal) {
+        try {
+          const proposal = JSON.parse(decodeURIComponent(encodedSqlProposal)) as SqlDraft;
+          if (typeof proposal.datasetId === "string" && typeof proposal.query === "string") {
+            setSqlDraft(proposal); setSqlPanelOpen(true); setAttachedDataset(null);
+          }
+        } catch { /* Invalid proposal headers are ignored; no execution is possible. */ }
       }
       if (responseArtifactIntent || responseWordArtifact) {
         setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, artifactIntent: responseArtifactIntent, wordArtifact: responseWordArtifact } : message));
@@ -579,6 +592,7 @@ export default function Home() {
     setInput("");
     setReplyTo(null);
     setAttachedCodeContext(null);
+    setAttachedDataset(null);
     setWelcomeIndex((current) => nextWelcomeIndex(current));
   }
 
@@ -788,6 +802,7 @@ export default function Home() {
           <form className="composer" onSubmit={sendMessage}>
             {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
             {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
+            {attachedDataset && <div className="composer-code-context"><span><strong>Local dataset attached</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>Only its schema is sent to local Ollama. Results require a separate Run once approval.</small></span><button type="button" onClick={() => setAttachedDataset(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -906,7 +921,7 @@ export default function Home() {
         </div>
       )}
       <MemoryPanel open={memoryPanelOpen} onClose={closeMemoryPanel} />
-      <SqlAnalysisPanel open={sqlPanelOpen} onClose={closeSqlPanel} />
+      <SqlAnalysisPanel key={sqlDraft ? `${sqlDraft.datasetId}:${sqlDraft.query}` : "manual"} open={sqlPanelOpen} onClose={closeSqlPanel} onAttach={(dataset) => { setAttachedDataset(dataset); setSqlDraft(null); }} initialDraft={sqlDraft} />
     </main>
   );
 }

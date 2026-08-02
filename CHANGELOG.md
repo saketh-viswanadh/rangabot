@@ -7,6 +7,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+- Approved datasets can now be explicitly attached to chat. Rangabot sends only
+  their schema to local Ollama, validates the returned read-only `SELECT`, and
+  opens the draft in the SQL review workspace. Query review and **Run once**
+  remain separate required actions; the model cannot approve execution.
+
 - Added a private SQL workspace where users approve CSV or Parquet files, inspect
   the exact read-only query and limits, explicitly choose **Run once** or
   **Reject**, and review bounded results with a verifiable execution receipt.
