@@ -9,6 +9,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Path to Mastery now leads with strict capability readiness: 8/45 fully
+  unlocked, or 18%. Criterion verification (37%) and weighted development
+  progress (46%, including half-credit for partial work) are separately labelled
+  secondary measures so unfinished work cannot be mistaken for readiness.
+
 - Path to Mastery v2 now audits 9 program epics, 45 capabilities, and 146
   criterion assessments with calculated scores/states and a canonical registry
   of 41 merged PRs used as evidence. It adds the omitted Platform & Release epic

@@ -150,5 +150,14 @@ export function masteryProgress(tree: MasteryTree) {
   const unlocked = nodes.filter((node) => node.status === "unlocked" || node.status === "mastered").length;
   const active = nodes.filter((node) => node.status === "training" || node.status === "in-progress" || node.status === "regressed").length;
   const verified = criteria.filter((criterion) => criterion.state === "verified").length;
-  return { total: nodes.length, unlocked, active, criteriaTotal: criteria.length, criteriaVerified: verified, percent: Math.round(criteria.reduce((sum, criterion) => sum + criterionWeight[criterion.state], 0) / criteria.length * 100) };
+  return {
+    total: nodes.length,
+    unlocked,
+    active,
+    readinessPercent: Math.round(unlocked / nodes.length * 100),
+    criteriaTotal: criteria.length,
+    criteriaVerified: verified,
+    verificationPercent: Math.round(verified / criteria.length * 100),
+    developmentPercent: Math.round(criteria.reduce((sum, criterion) => sum + criterionWeight[criterion.state], 0) / criteria.length * 100),
+  };
 }

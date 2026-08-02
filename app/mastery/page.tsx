@@ -30,7 +30,7 @@ export default function MasteryPage() {
       <header className="mastery-header">
         <Link href="/" className="mastery-back"><CraftIcon name="chevron" size={15} /> Rangabot</Link>
         <div className="mastery-title"><span className="mastery-kicker">Public capability roadmap</span><h1>{tree.title}</h1><p>{tree.vision}</p></div>
-        <div className="mastery-summary" aria-label="Mastery summary"><strong>{progress.percent}%</strong><span>{progress.criteriaVerified}/{progress.criteriaTotal} criteria verified · {progress.unlocked}/{progress.total} capabilities unlocked</span><small>Evidence checked {tree.evidenceVerifiedAt}</small></div>
+        <div className="mastery-summary" aria-label="Mastery readiness summary"><strong>{progress.readinessPercent}%</strong><span>capability readiness · {progress.unlocked}/{progress.total} fully unlocked</span><small>{progress.verificationPercent}% criteria verified · {progress.developmentPercent}% development progress · evidence checked {tree.evidenceVerifiedAt}</small></div>
       </header>
       <section className="mastery-banner" aria-label="Rangabot local AI"><Image src={masteryBanner} alt="Rangabot, private local AI that learns from your documents" priority /></section>
       <section className="mastery-legend" aria-label="Skill status legend">

@@ -416,3 +416,6 @@ quality evaluation, and it can be validated without changing model weights.
   merged PR evidence. Credit records work performed; it does not certify quality.
 - CI now fetches complete Git history so both platforms verify cited historical
   merge commits instead of bypassing or weakening the evidence check.
+- Corrected the public headline after strict review: Rangabot is 18% capability
+  ready (8/45 unlocked), 37% criterion-verified (54/146), and 46% through
+  weighted development. Only the first measure represents product readiness.
