@@ -1,0 +1,499 @@
+{
+  "version": 1,
+  "repository": "saketh-viswanadh/rangabot",
+  "verifiedAt": "2026-08-02",
+  "entries": [
+    {
+      "id": "pr-1",
+      "kind": "pull_request",
+      "reference": "#1",
+      "title": "Scaffold local-first chatbot",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/1",
+      "mergeCommit": "90af75ebc227a457f31b26c49ba0975f84e94183",
+      "mergedAt": "2026-07-27T17:15:47Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-3",
+      "kind": "pull_request",
+      "reference": "#3",
+      "title": "Add Rangabot streaming responses",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/3",
+      "mergeCommit": "c794d933d1ee4d066737ec0baf4a67408502b6b3",
+      "mergedAt": "2026-07-27T18:57:58Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-4",
+      "kind": "pull_request",
+      "reference": "#4",
+      "title": "Add Ranga mascot and Apple-inspired chat UI",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/4",
+      "mergeCommit": "e7f06a193090f1c3670db1f017b125175a6669d2",
+      "mergedAt": "2026-07-27T19:54:34Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-5",
+      "kind": "pull_request",
+      "reference": "#5",
+      "title": "Add local SQLite conversation history",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/5",
+      "mergeCommit": "aa6287677067079f5529b781b6b8667a1be082a5",
+      "mergedAt": "2026-07-28T03:51:20Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-7",
+      "kind": "pull_request",
+      "reference": "#7",
+      "title": "Redesign Ranga thinking experience",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/7",
+      "mergeCommit": "3001d7362d1518beae62ecbc55ddc2de7a872e0a",
+      "mergedAt": "2026-07-28T06:54:11Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-9",
+      "kind": "pull_request",
+      "reference": "#9",
+      "title": "Add pastel themes and message replies",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/9",
+      "mergeCommit": "2a8a651fff04f555d6be5c57dbaac2fd97f92b60",
+      "mergedAt": "2026-07-28T06:36:14Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-10",
+      "kind": "pull_request",
+      "reference": "#10",
+      "title": "Add local projects and curious Ranga",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/10",
+      "mergeCommit": "7d8540c392dd0808d3508d7ccf23920bc7ec90cd",
+      "mergedAt": "2026-07-28T06:50:55Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-11",
+      "kind": "pull_request",
+      "reference": "#11",
+      "title": "Add local Knowledge Vault and automatic Smart retrieval",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/11",
+      "mergeCommit": "5744b599f1e2f547de241d3c48016cdf838c0950",
+      "mergedAt": "2026-07-28T07:51:51Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-14",
+      "kind": "pull_request",
+      "reference": "#14",
+      "title": "Finalize Ranga licensing and CI maintenance",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/14",
+      "mergeCommit": "5e2546f5c6380e5fcbc9e3a8a09bd5176235607d",
+      "mergedAt": "2026-07-28T08:44:58Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-15",
+      "kind": "pull_request",
+      "reference": "#15",
+      "title": "Complete Rangabot public launch gates",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/15",
+      "mergeCommit": "3b524d421d313dc10dba16fed3764623a5899185",
+      "mergedAt": "2026-07-28T09:10:38Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-17",
+      "kind": "pull_request",
+      "reference": "#17",
+      "title": "Prepare Rangabot v0.1.0 release",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/17",
+      "mergeCommit": "2cb6de969a1a48328c34431267595522b26f9ff5",
+      "mergedAt": "2026-07-28T09:41:09Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-30",
+      "kind": "pull_request",
+      "reference": "#30",
+      "title": "Add Rangabot community launch pack",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/30",
+      "mergeCommit": "7075c48fe7fe59814a3d54a632a63120688ef0e0",
+      "mergedAt": "2026-07-28T10:31:39Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-31",
+      "kind": "pull_request",
+      "reference": "#31",
+      "title": "Respect manual scrolling during generation",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/31",
+      "mergeCommit": "301b279719fde8c8fe2e4abb2998a46607e689cb",
+      "mergedAt": "2026-07-28T10:44:33Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-32",
+      "kind": "pull_request",
+      "reference": "#32",
+      "title": "Add a dedicated Knowledge Brief experience",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/32",
+      "mergeCommit": "32118836b42343aec68be037d3bd0bff7e082313",
+      "mergedAt": "2026-07-28T11:43:29Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-34",
+      "kind": "pull_request",
+      "reference": "#34",
+      "title": "Add local conversation search and pinning",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/34",
+      "mergeCommit": "7c2cac0f4261416f4b23cdbb2818f25a2ba97207",
+      "mergedAt": "2026-07-28T12:53:41Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-36",
+      "kind": "pull_request",
+      "reference": "#36",
+      "title": "Add an explicit local repository allowlist",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/36",
+      "mergeCommit": "412fee57a53c3838e26e388b992305d819ee3c2e",
+      "mergedAt": "2026-07-28T13:26:38Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-37",
+      "kind": "pull_request",
+      "reference": "#37",
+      "title": "Add scoped local code search and previews",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/37",
+      "mergeCommit": "6f4d6d09205e188b5844d4161571c72ce8fb112d",
+      "mergedAt": "2026-07-28T13:38:30Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-38",
+      "kind": "pull_request",
+      "reference": "#38",
+      "title": "Attach explicit local code context to chats",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/38",
+      "mergeCommit": "cb6af9785cd51cd56743cdc7c615e9fa20411934",
+      "mergedAt": "2026-07-28T13:55:25Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-39",
+      "kind": "pull_request",
+      "reference": "#39",
+      "title": "Prepare Rangabot artifact skills foundation",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/39",
+      "mergeCommit": "a72dad3b13ba25d0381ad280311269a95d8c58e9",
+      "mergedAt": "2026-07-28T14:01:08Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-40",
+      "kind": "pull_request",
+      "reference": "#40",
+      "title": "Create local Word documents conversationally",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/40",
+      "mergeCommit": "216ddedf0c4bf1232879cea3c9269c9026650525",
+      "mergedAt": "2026-07-28T15:05:25Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-41",
+      "kind": "pull_request",
+      "reference": "#41",
+      "title": "Harden local knowledge and conversational Word creation",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/41",
+      "mergeCommit": "97f14ebebaacacaf41ac672f4611c9c3972121e9",
+      "mergedAt": "2026-07-29T05:19:58Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-42",
+      "kind": "pull_request",
+      "reference": "#42",
+      "title": "Preserve textbook hierarchy during local ingestion",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/42",
+      "mergeCommit": "4039112fe14da7aecf53f93f366b4d03ab6f8e73",
+      "mergedAt": "2026-07-29T05:30:39Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-43",
+      "kind": "pull_request",
+      "reference": "#43",
+      "title": "Report incompatible vault sources accurately",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/43",
+      "mergeCommit": "cb2ea3d6859b9e7d5937c763eac5111d8c9b8140",
+      "mergedAt": "2026-07-29T07:23:24Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-44",
+      "kind": "pull_request",
+      "reference": "#44",
+      "title": "Guard local retrieval against cross-subject evidence",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/44",
+      "mergeCommit": "55a4e03b4db9ee1fdff4b28a3d9d8b05e3ed8b3f",
+      "mergedAt": "2026-07-29T07:43:57Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-45",
+      "kind": "pull_request",
+      "reference": "#45",
+      "title": "perf: add native local vector search",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/45",
+      "mergeCommit": "c820ba855c71eb5d0bbadefe42cd21cc20311565",
+      "mergedAt": "2026-07-29T08:14:20Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-46",
+      "kind": "pull_request",
+      "reference": "#46",
+      "title": "test: measure local RAG retrieval quality",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/46",
+      "mergeCommit": "4dc855114187bfe4c74bb650327b3391a752f266",
+      "mergedAt": "2026-07-29T08:28:09Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-47",
+      "kind": "pull_request",
+      "reference": "#47",
+      "title": "feat: review Teacher Mode grounding",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/47",
+      "mergeCommit": "e3e3c508d182e72516a22c56f67b223da22c48d4",
+      "mergedAt": "2026-07-29T08:42:46Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-48",
+      "kind": "pull_request",
+      "reference": "#48",
+      "title": "test: expand and harden RAG quality evaluation",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/48",
+      "mergeCommit": "f9ac1f392c38dc0e1cb4bf7c3bb6a9d44efb67d7",
+      "mergedAt": "2026-07-29T09:25:26Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-49",
+      "kind": "pull_request",
+      "reference": "#49",
+      "title": "feat: plan and separate grounded evidence",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/49",
+      "mergeCommit": "4d6fca334e000a73f2334bd39ffa827895c280bb",
+      "mergedAt": "2026-07-29T12:09:07Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-50",
+      "kind": "pull_request",
+      "reference": "#50",
+      "title": "Harden grounded synthesis and local runtime",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/50",
+      "mergeCommit": "087f6238bd0a4039a58d7e25f4f53ed236399441",
+      "mergedAt": "2026-07-29T15:44:01Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-51",
+      "kind": "pull_request",
+      "reference": "#51",
+      "title": "Add conversation-aware retrieval planning",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/51",
+      "mergeCommit": "8d8226c8513b8f144ead441c1f89ee0efe00c0c7",
+      "mergedAt": "2026-07-30T04:52:13Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-52",
+      "kind": "pull_request",
+      "reference": "#52",
+      "title": "Add Rangabot Path to Mastery",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/52",
+      "mergeCommit": "ab6b0fca069a79bb1f90485c365651602a12fb65",
+      "mergedAt": "2026-07-30T08:25:26Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-53",
+      "kind": "pull_request",
+      "reference": "#53",
+      "title": "Govern mastery contribution claims",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/53",
+      "mergeCommit": "0a99842178dd29ae7277af1fe7687511162aacc4",
+      "mergedAt": "2026-07-30T08:54:16Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-54",
+      "kind": "pull_request",
+      "reference": "#54",
+      "title": "Add inspectable local memory",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/54",
+      "mergeCommit": "55f314f23a8313c0dbe6679ffc23b9c5d90f5351",
+      "mergedAt": "2026-07-30T10:40:05Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-57",
+      "kind": "pull_request",
+      "reference": "#57",
+      "title": "Bound Knowledge Doctor deep scans",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/57",
+      "mergeCommit": "313c35e17b72eee1745ef2131b54cbe0cc999b9d",
+      "mergedAt": "2026-08-01T15:33:36Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-58",
+      "kind": "pull_request",
+      "reference": "#58",
+      "title": "Add reviewed local memory import",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/58",
+      "mergeCommit": "861fa613d3998d938c5b093897ffaa0695ff1277",
+      "mergedAt": "2026-08-01T15:56:14Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-60",
+      "kind": "pull_request",
+      "reference": "#60",
+      "title": "Simplify chat navigation",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/60",
+      "mergeCommit": "e1b0e64328473f557b49e94e6056dbd55dc588ce",
+      "mergedAt": "2026-08-01T16:26:59Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-62",
+      "kind": "pull_request",
+      "reference": "#62",
+      "title": "Improve Mind and Memory conversation quality",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/62",
+      "mergeCommit": "da86769210519190418f1a76c8d27590f95f88cd",
+      "mergedAt": "2026-08-01T21:11:34Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-63",
+      "kind": "pull_request",
+      "reference": "#63",
+      "title": "Reduce configuration drift and app weight",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/63",
+      "mergeCommit": "69a95614d8815e1fdc4243ad999a0fe34cd9a9fa",
+      "mergedAt": "2026-08-02T05:28:00Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-64",
+      "kind": "pull_request",
+      "reference": "#64",
+      "title": "Freeze core conversation reliability baseline",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/64",
+      "mergeCommit": "a1a7eecb0e39fbcb79417dc7fcb0646c0703c312",
+      "mergedAt": "2026-08-02T06:15:51Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    },
+    {
+      "id": "pr-65",
+      "kind": "pull_request",
+      "reference": "#65",
+      "title": "Showcase the current Rangabot product",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/65",
+      "mergeCommit": "7b8f3e738b941a8464356c3261e6dc934788c6d4",
+      "mergedAt": "2026-08-02T06:36:53Z",
+      "contributors": [
+        "saketh-viswanadh"
+      ]
+    }
+  ]
+}

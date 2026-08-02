@@ -302,9 +302,10 @@ a separately approved disclosure and consent design.
 
 ## Contributing
 
-[Path to Mastery](docs/PATH_TO_MASTERY.md) is the evidence-backed public skill
-tree and backlog: contributors can see dependencies, unlock requirements,
-current scores and the next bounded task for every capability. Official
+[Path to Mastery](docs/PATH_TO_MASTERY.md) is the criterion-audited public
+program map and backlog: 9 epics, 45 capabilities, and 146 independently
+assessed criteria. Scores and states are calculated from the governed merged-PR
+[evidence registry](content/mastery-evidence.json), never typed by hand. Official
 contribution claims must use the Mastery contribution issue template, cite
 merged evidence and pass the [official approval process](docs/mastery-claims.md);
 direct self-awards are rejected.

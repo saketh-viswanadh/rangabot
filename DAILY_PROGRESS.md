@@ -403,3 +403,16 @@ quality evaluation, and it can be validated without changing model weights.
 - Kept safe loopback defaults, bounded limits, protocol header names, benchmark
   fixtures and product-policy thresholds explicit: these are reviewed constants,
   not accidental hardcoding.
+# 2026-08-02 — Evidence-backed program mastery remap
+
+- Replaced manually assigned mastery scores and states with calculations over
+  146 acceptance criteria: verified = 1, partial = 0.5, planned/failed = 0.
+- Audited 9 program epics and 45 capabilities, adding Platform & Release to cover
+  governance, CI, setup, releases, and maintainability.
+- Strict result: 46% weighted progress, 54/146 verified criteria, 8/45 unlocked
+  capabilities, and 21 below gate. Natural conversation, Quality evaluation,
+  and Path to Mastery are regressed instead of overstated.
+- Remapped Saketh Viswanadha to 29 contributor claims backed by attributable
+  merged PR evidence. Credit records work performed; it does not certify quality.
+- CI now fetches complete Git history so both platforms verify cited historical
+  merge commits instead of bypassing or weakening the evidence check.

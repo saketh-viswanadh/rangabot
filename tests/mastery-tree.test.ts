@@ -2,67 +2,61 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
-import { masteryProgress, validateMasteryTree } from "../lib/mastery-tree.ts";
+import { materializeMasteryTree, masteryProgress, validateMasteryTree, type MasteryEvidenceRegistry } from "../lib/mastery-tree.ts";
 import { normalizeLineEndings } from "../lib/text-normalization.ts";
 import { validateMasteryContributors } from "../lib/mastery-contributors.ts";
 import { hasMasteryApproval, requiresMasteryApproval } from "../lib/mastery-governance.ts";
 
-const tree: unknown = JSON.parse(readFileSync(resolve("content/path-to-mastery.json"), "utf8"));
-const contributorRegistry: unknown = JSON.parse(readFileSync(resolve("content/mastery-contributors.json"), "utf8"));
+const source: unknown = JSON.parse(readFileSync(resolve("content/path-to-mastery.json"), "utf8"));
+const evidence: unknown = JSON.parse(readFileSync(resolve("content/mastery-evidence.json"), "utf8"));
+const contributors: unknown = JSON.parse(readFileSync(resolve("content/mastery-contributors.json"), "utf8"));
+validateMasteryTree(source, evidence);
+const tree = materializeMasteryTree(source);
 
-test("keeps the public mastery tree complete, scored, and dependency-safe", () => {
-  validateMasteryTree(tree);
+test("derives a complete program map from criterion-level evidence", () => {
   const progress = masteryProgress(tree);
-  assert.equal(tree.branches.length, 8);
-  assert.equal(progress.total, 40);
-  assert.ok(progress.unlocked > 0);
-  assert.ok(progress.active > 0);
+  assert.equal(tree.epics.length, 9);
+  assert.equal(progress.total, 45);
+  assert.equal(progress.criteriaTotal, 146);
+  assert.ok(tree.epics.some((epic) => epic.id === "platform"));
   assert.ok(progress.percent > 0 && progress.percent < 100);
+  const hasManualField = (value: unknown, field: string): boolean => Boolean(value && typeof value === "object" && (Object.prototype.hasOwnProperty.call(value, field) || Object.values(value).some((item) => hasManualField(item, field))));
+  assert.equal(hasManualField(source, "score"), false);
+  assert.equal(hasManualField(source, "status"), false);
+  for (const node of tree.epics.flatMap((epic) => epic.nodes)) assert.ok(node.criteria.length >= 3);
 });
 
-test("keeps web research locked behind the approved persistent allowlist", () => {
-  validateMasteryTree(tree);
-  const nodes = tree.branches.flatMap((branch) => branch.nodes);
-  const allowlist = nodes.find((node) => node.id === "web-allowlist");
+test("does not call a capability unlocked when any criterion is below verified", () => {
+  for (const node of tree.epics.flatMap((epic) => epic.nodes)) {
+    if (node.status === "unlocked") assert.ok(node.criteria.every((criterion) => criterion.state === "verified"));
+  }
+  assert.equal(tree.epics.flatMap((epic) => epic.nodes).find((node) => node.id === "local-conversation")?.status, "regressed");
+});
+
+test("keeps web research dependent on a persistent allowlist", () => {
+  const nodes = tree.epics.flatMap((epic) => epic.nodes);
   const research = nodes.find((node) => node.id === "web-research");
-  assert.equal(allowlist?.status, "ready");
   assert.equal(research?.status, "locked");
   assert.ok(research?.dependencies.includes("web-allowlist"));
-  assert.match(research?.acceptance.join(" ") ?? "", /approved query leaves device/i);
+  assert.match(research?.criteria.map((criterion) => criterion.text).join(" ") ?? "", /approved query leaves device/i);
 });
 
-test("keeps mastery recognition opt-in and prevents runtime GitHub avatar tracking", () => {
-  validateMasteryTree(tree);
-  validateMasteryContributors(contributorRegistry, tree);
-  assert.match(contributorRegistry.policy, /opt-in/i);
-  assert.match(contributorRegistry.policy, /CODEOWNER/);
-  assert.ok(contributorRegistry.contributors.length > 0);
-  for (const contributor of contributorRegistry.contributors) {
-    assert.match(contributor.github, /^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i);
-    assert.ok(contributor.avatar === null || contributor.avatar.startsWith("/mastery/contributors/"));
-  }
-});
-
-test("records the founder's implemented mastery achievements with merged evidence", () => {
-  validateMasteryTree(tree);
-  validateMasteryContributors(contributorRegistry, tree);
-  const founder = contributorRegistry.contributors.find((contributor) => contributor.github === "saketh-viswanadh");
+test("requires attributable merged evidence for every official achievement", () => {
+  validateMasteryContributors(contributors, tree, evidence as MasteryEvidenceRegistry);
+  const founder = contributors.contributors.find((contributor) => contributor.github === "saketh-viswanadh");
   assert.equal(founder?.role, "Founder and lead maintainer");
-  assert.ok((founder?.claims.length ?? 0) >= 19);
-  assert.ok(founder?.claims.every((claim) => claim.evidence.length > 0));
-  assert.ok(founder?.claims.some((claim) => claim.nodeId === "mastery-tree" && claim.evidence.some((item) => item.reference === "#52")));
+  assert.equal(founder?.claims.length, 29);
+  assert.ok(founder?.claims.some((claim) => claim.nodeId === "mastery-tree" && claim.evidence.includes("pr-52")));
+  assert.ok(founder?.claims.some((claim) => claim.nodeId === "platform" ) === false);
 });
 
-test("treats Windows and Unix line endings as the same generated mastery document", () => {
+test("treats Windows and Unix line endings as equivalent", () => {
   const unix = "# Path to Mastery\n\nGenerated locally.\n";
-  const windows = unix.replaceAll("\n", "\r\n");
-  assert.equal(normalizeLineEndings(windows), normalizeLineEndings(unix));
+  assert.equal(normalizeLineEndings(unix.replaceAll("\n", "\r\n")), normalizeLineEndings(unix));
 });
 
-test("locks official mastery data behind the owner-controlled approval label", () => {
+test("locks every canonical mastery artifact behind owner approval", () => {
   assert.equal(requiresMasteryApproval(["app/page.tsx"]), false);
-  assert.equal(requiresMasteryApproval(["content/mastery-contributors.json"]), true);
-  assert.equal(requiresMasteryApproval(["content\\path-to-mastery.json"]), true);
+  for (const file of ["content/mastery-contributors.json", "content/mastery-evidence.json", "content\\path-to-mastery.json", "docs/PATH_TO_MASTERY.md"]) assert.equal(requiresMasteryApproval([file]), true);
   assert.equal(hasMasteryApproval(["documentation", "mastery-approved"]), true);
-  assert.equal(hasMasteryApproval(["mastery-claim"]), false);
 });

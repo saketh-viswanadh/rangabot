@@ -5,8 +5,11 @@ Path to Mastery records two different truths:
 - a node's state describes Rangabot's currently verified product capability;
 - a contribution claim remembers who materially helped build that capability.
 
-Contribution credit remains even if a node later regresses. It does not let a
-contributor change the node's score or state.
+Product readiness is calculated from criterion assessments, so contributors
+cannot directly edit scores or states. Contribution credit remains even if a
+node later regresses. Each non-planned criterion cites the governed merged-PR
+registry; a merged PR proves work landed, while the criterion assessment records
+whether its exact acceptance gate passed.
 
 ## Claim process
 
@@ -29,6 +32,6 @@ to those files unless the PR carries the owner-controlled approval label.
 Contributor handles and optional portraits are stored in the repository; the
 local app never requests profile images from GitHub.
 
-Direct edits, duplicate claims, unknown nodes, weak summaries, missing evidence,
-remote avatar URLs and malformed pull-request or commit references all fail
-validation.
+Direct scores, direct states, duplicate claims, unknown nodes, wholly planned
+capability claims, weak summaries, missing evidence, non-attributable PRs, and
+remote avatar URLs all fail validation.

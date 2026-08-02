@@ -9,6 +9,14 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Path to Mastery v2 now audits 9 program epics, 45 capabilities, and 146
+  criterion assessments with calculated scores/states and a canonical registry
+  of 41 merged PRs used as evidence. It adds the omitted Platform & Release epic
+  and displays criterion notes and evidence links in the app and public chart.
+- Founder recognition was re-audited into 29 attributable node claims.
+  Contribution credit is explicitly independent from product readiness and
+  cannot be attached to a wholly planned capability.
+
 - A privacy-safe public product showcase now presents the current conversation
   workspace, local Knowledge Brief, and Path to Mastery beneath the repository
   banner instead of using brand art as the only visual evidence of Rangabot.

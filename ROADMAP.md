@@ -41,8 +41,10 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Govern official mastery attribution through evidence-backed claims,
   CODEOWNER approval and node-level contributor recognition.
 
-- [x] Path to Mastery: canonical evidence-backed skill tree, interactive app
-  view, generated public backlog and regression-safe unlock states
+- [x] Path to Mastery v2: 9 program epics, criterion-level merged evidence,
+  calculated readiness, interactive audit details, and governed attribution
+- [ ] Close the failed and partial criteria exposed by the v2 audit; readiness
+  changes only when the exact listed criterion gains new evidence
 - [ ] Persistent local web-domain allowlist with editable capability scopes,
   query previews and immediate revocation
 - [ ] Permissioned web research that runs only after local knowledge is
