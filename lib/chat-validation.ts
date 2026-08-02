@@ -3,7 +3,7 @@ import type { ChatMessage } from "./providers/types";
 export const MAX_CHAT_MESSAGES = 200;
 export const MAX_CHAT_MESSAGE_CHARS = 50_000;
 export const MAX_CHAT_TOTAL_CHARS = 1_000_000;
-const messageKeys = new Set(["role", "content", "artifactIntent", "wordArtifact", "codeContext", "replyTo", "retrievalMode", "memoryUse", "memoryTitles"]);
+const messageKeys = new Set(["role", "content", "artifactIntent", "wordArtifact", "analysisTrace", "codeContext", "replyTo", "retrievalMode", "memoryUse", "memoryTitles"]);
 
 function validOptionalMetadata(message: Record<string, unknown>) {
   if (!Object.keys(message).every((key) => messageKeys.has(key))) return false;
@@ -38,6 +38,19 @@ function validOptionalMetadata(message: Record<string, unknown>) {
       || typeof artifact.filename !== "string" || artifact.filename.length > 240
       || typeof artifact.previewPages !== "number" || !Number.isInteger(artifact.previewPages)
       || artifact.previewPages < 0 || artifact.previewPages > 1000) return false;
+  }
+  if (message.analysisTrace !== undefined) {
+    if (!message.analysisTrace || typeof message.analysisTrace !== "object") return false;
+    const trace = message.analysisTrace as Record<string, unknown>;
+    if (!Object.keys(trace).every((key) => ["engine", "dataset", "query", "returnedRows", "truncated", "durationMs", "inputSha256", "querySha256"].includes(key))
+      || trace.engine !== "duckdb"
+      || typeof trace.dataset !== "string" || trace.dataset.length < 1 || trace.dataset.length > 240
+      || typeof trace.query !== "string" || trace.query.length < 1 || trace.query.length > 8_000
+      || typeof trace.returnedRows !== "number" || !Number.isInteger(trace.returnedRows) || trace.returnedRows < 0 || trace.returnedRows > 200
+      || typeof trace.truncated !== "boolean"
+      || typeof trace.durationMs !== "number" || !Number.isInteger(trace.durationMs) || trace.durationMs < 0 || trace.durationMs > 30_000
+      || typeof trace.inputSha256 !== "string" || !/^[a-f0-9]{64}$/.test(trace.inputSha256)
+      || typeof trace.querySha256 !== "string" || !/^[a-f0-9]{64}$/.test(trace.querySha256)) return false;
   }
   return true;
 }

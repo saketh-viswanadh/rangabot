@@ -13,6 +13,16 @@ export interface ChatMessage {
     filename: string;
     previewPages: number;
   };
+  analysisTrace?: {
+    engine: "duckdb";
+    dataset: string;
+    query: string;
+    returnedRows: number;
+    truncated: boolean;
+    durationMs: number;
+    inputSha256: string;
+    querySha256: string;
+  };
   codeContext?: {
     repository: string;
     path: string;

@@ -262,6 +262,8 @@ export default function Home() {
     })));
     setActiveConversationId(id);
     setAttachedCodeContext(null);
+    setAttachedDataset(null);
+    setSqlDraft(null);
   }
 
   async function removeConversation(id: string) {
@@ -409,7 +411,7 @@ export default function Home() {
     const userMessage: DisplayMessage = { id: crypto.randomUUID(), role: "user", content, replyTo: reference, codeContext };
     const assistantId = crypto.randomUUID();
     const nextMessages = [...messages, userMessage];
-    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply, codeContext: code, artifactIntent, wordArtifact, retrievalMode, memoryUse, memoryTitles }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}), ...(code ? { codeContext: code } : {}), ...(artifactIntent ? { artifactIntent } : {}), ...(wordArtifact ? { wordArtifact } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(memoryUse ? { memoryUse } : {}), ...(memoryTitles?.length ? { memoryTitles } : {}) }));
+    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply, codeContext: code, artifactIntent, wordArtifact, analysisTrace, retrievalMode, memoryUse, memoryTitles }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}), ...(code ? { codeContext: code } : {}), ...(artifactIntent ? { artifactIntent } : {}), ...(wordArtifact ? { wordArtifact } : {}), ...(analysisTrace ? { analysisTrace } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(memoryUse ? { memoryUse } : {}), ...(memoryTitles?.length ? { memoryTitles } : {}) }));
     let conversationId = activeConversationId;
     if (!conversationId) {
       const createResponse = await fetch("/api/conversations", {
@@ -443,6 +445,7 @@ export default function Home() {
     let responseWordArtifact: ChatMessage["wordArtifact"];
     let responseMemoryUse: ChatMessage["memoryUse"];
     let responseMemoryTitles: ChatMessage["memoryTitles"];
+    let responseAnalysisTrace: ChatMessage["analysisTrace"];
 
     try {
       const response = await fetch("/api/chat", {
@@ -453,11 +456,12 @@ export default function Home() {
           mode,
           ...(codeContextForRequest ? { codeContext: { repositoryId: codeContextForRequest.repositoryId, path: codeContextForRequest.path, line: codeContextForRequest.line } } : {}),
           ...(attachedDataset ? { datasetId: attachedDataset.id } : {}),
-          messages: nextMessages.map(({ role, content: text, replyTo: reply, artifactIntent, wordArtifact }) => ({
+          messages: nextMessages.map(({ role, content: text, replyTo: reply, artifactIntent, wordArtifact, analysisTrace }) => ({
             role,
             content: reply ? `[Replying to ${reply.role}: “${reply.excerpt}”]\n\n${text}` : text,
             ...(artifactIntent ? { artifactIntent } : {}),
             ...(wordArtifact ? { wordArtifact } : {}),
+            ...(analysisTrace ? { analysisTrace } : {}),
           })),
         }),
       });
@@ -476,14 +480,12 @@ export default function Home() {
           responseWordArtifact = undefined;
         }
       }
-      const encodedSqlProposal = response.headers.get("X-Rangabot-SQL-Proposal");
-      if (encodedSqlProposal) {
+      const encodedAnalysis = response.headers.get("X-Rangabot-Analysis");
+      if (encodedAnalysis) {
         try {
-          const proposal = JSON.parse(decodeURIComponent(encodedSqlProposal)) as SqlDraft;
-          if (typeof proposal.datasetId === "string" && typeof proposal.query === "string") {
-            setSqlDraft(proposal); setSqlPanelOpen(true); setAttachedDataset(null);
-          }
-        } catch { /* Invalid proposal headers are ignored; no execution is possible. */ }
+          responseAnalysisTrace = JSON.parse(decodeURIComponent(encodedAnalysis)) as ChatMessage["analysisTrace"];
+          setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, analysisTrace: responseAnalysisTrace } : message));
+        } catch { responseAnalysisTrace = undefined; }
       }
       if (responseArtifactIntent || responseWordArtifact) {
         setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, artifactIntent: responseArtifactIntent, wordArtifact: responseWordArtifact } : message));
@@ -532,7 +534,7 @@ export default function Home() {
         )));
       }
       if (!receivedContent) throw new Error("The local model returned an empty response.");
-      finalAssistant = { role: "assistant", content: generatedContent, ...(responseArtifactIntent ? { artifactIntent: responseArtifactIntent } : {}), ...(responseWordArtifact ? { wordArtifact: responseWordArtifact } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(responseMemoryUse ? { memoryUse: responseMemoryUse } : {}), ...(responseMemoryTitles?.length ? { memoryTitles: responseMemoryTitles } : {}) };
+      finalAssistant = { role: "assistant", content: generatedContent, ...(responseArtifactIntent ? { artifactIntent: responseArtifactIntent } : {}), ...(responseWordArtifact ? { wordArtifact: responseWordArtifact } : {}), ...(responseAnalysisTrace ? { analysisTrace: responseAnalysisTrace } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(responseMemoryUse ? { memoryUse: responseMemoryUse } : {}), ...(responseMemoryTitles?.length ? { memoryTitles: responseMemoryTitles } : {}) };
     } catch (error) {
       const stopped = abortController.signal.aborted;
       finalAssistant = {
@@ -778,6 +780,7 @@ export default function Home() {
                 {message.content && (message.role === "assistant"
                   ? <MarkdownMessage content={message.content} />
                   : <p>{message.content}</p>)}
+                {message.analysisTrace && <details className="analysis-trace"><summary><CraftIcon name="analysis" size={14} />How this was calculated</summary><div><span><strong>{message.analysisTrace.dataset}</strong>{message.analysisTrace.returnedRows} verified row{message.analysisTrace.returnedRows === 1 ? "" : "s"} · {message.analysisTrace.durationMs} ms{message.analysisTrace.truncated ? " · bounded result" : ""}</span><pre><code>{message.analysisTrace.query}</code></pre><small>Input {message.analysisTrace.inputSha256.slice(0, 12)}… · Query {message.analysisTrace.querySha256.slice(0, 12)}… · local DuckDB</small></div></details>}
                 {message.active && (
                   <div className="message-activity" role="status" aria-label="Rangabot is thinking">
                     <span className="thinking-runner" aria-hidden="true"><i /></span>
@@ -802,7 +805,7 @@ export default function Home() {
           <form className="composer" onSubmit={sendMessage}>
             {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
             {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
-            {attachedDataset && <div className="composer-code-context"><span><strong>Local dataset attached</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>Only its schema is sent to local Ollama. Results require a separate Run once approval.</small></span><button type="button" onClick={() => setAttachedDataset(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
+            {attachedDataset && <div className="composer-code-context"><span><strong>Local data available to this chat</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>Analytical requests may run bounded read-only SQL locally. Expand the calculation trace to inspect it.</small></span><button type="button" onClick={() => setAttachedDataset(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}

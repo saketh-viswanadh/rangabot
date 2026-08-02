@@ -52,8 +52,12 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   approve/reject controls, results, and execution receipt; never auto-execute
 - [x] Let an explicitly attached approved dataset contribute schema-only context
   to local chat so the model can draft validated SQL into the review workspace
-- [ ] Add a sandboxed Python runtime only after it can reuse the same approval,
-  cancellation, limits, receipt, and result-validation contract
+- [x] Make approved local data conversational: detect analytical intent, execute
+  bounded read-only SQL, audit numeric narration, and retain an inspectable trace
+- [ ] Add the same policy contract for sandboxed Python statistics, modelling,
+  and visualisation; do not permit network, package installation, or file writes
+- [ ] Offer verified analytical findings as provenance-bound memory candidates;
+  persist only after explicit user approval and invalidate when input data changes
 - [x] Add a frozen adaptive-reviewer qualification gate that requires correction
   of every bad draft and preservation of every good draft before activation
 - [ ] Qualify a separate approved local reviewer model at 12/12; the installed

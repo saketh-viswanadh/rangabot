@@ -1,23 +1,32 @@
 # Local execution architecture
 
-Status: approval protocol implemented — not yet exposed in chat
+Status: bounded SQL is available through conversation and an advanced manual workspace
 
 Rangabot treats generated code as untrusted input. Mind & Memory remains the
 control plane; SQL and future Python runtimes are subordinate tools that may
 return evidence, never independent agents.
 
-## Approved sequence
+## Primary conversational sequence
 
 1. A user explicitly selects a local CSV or Parquet file.
-2. Rangabot shows the proposed query, dataset name, limits, and expected output.
-3. The user approves that exact execution.
-4. A fresh in-memory DuckDB instance imports only the canonical approved file.
-5. External access is disabled before untrusted SQL is prepared or executed.
+2. The user explicitly attaches that approved dataset to the current chat. This
+   is persistent, revocable permission for bounded read-only analysis in that
+   conversation; selecting a different or new chat clears the attachment.
+3. A high-precision intent gate distinguishes analytical requests from ordinary
+   conversation. Unrelated messages do not open or inspect the dataset.
+4. Ollama receives the conversation and column names/types, not dataset rows,
+   and proposes exactly one read-only query.
+5. Rangabot validates the proposal. A fresh in-memory DuckDB instance imports
+   only the canonical approved file, then disables external access before the
+   untrusted SQL is prepared or run.
 6. Exactly one `SELECT` statement runs with memory, thread, time, row, query,
    input-size, and output limits.
-7. Rangabot returns structured rows plus an execution receipt. The LLM may
-   interpret this result but must not alter or invent it.
-8. The connection and in-memory database are destroyed.
+7. Ollama receives a bounded result and writes the conversational explanation.
+   A deterministic numeric audit rejects unsupported numerical claims and falls
+   back to the verified result table when necessary.
+8. Rangabot stores the answer plus an inspectable calculation trace in the
+   conversation. The trace has no local path or copied dataset.
+9. The connection and in-memory database are destroyed.
 
 ## Implemented boundary
 
@@ -34,20 +43,22 @@ return evidence, never independent agents.
 - SHA-256 input and query identity in the receipt;
 - no network, extension loading, mutation, attachment, export, or persistence.
 
-## Approval and confirmation protocol
+## Approval protocols
 
 Dataset approval is persistent, local, and revocable through `/api/datasets`.
 It records the canonical path and public file metadata, never file content.
 
-SQL confirmation is separate and ephemeral. `/api/analysis/sql/preview` returns
+The advanced manual SQL workspace has a separate ephemeral confirmation.
+`/api/analysis/sql/preview` returns
 the exact query, dataset fingerprint, limits, expiry, and a random token. The
 local store keeps only the token hash. `/api/analysis/sql/execute` consumes that
 confirmation once and rejects replay, expiry, token mismatch, query changes,
 dataset changes, or revoked approval. Confirmations expire after five minutes.
 
-It is deliberately not connected to the chat route yet. The next increment must
-show this preview in the conversation UI and require a visible user click. A
-model must never turn ordinary conversation into silent execution.
+Conversational analysis uses the explicit chat attachment as continuing,
+revocable permission instead of asking for a second click on every calculation.
+The intent gate, validator and runtime limits remain mandatory. The model cannot
+broaden access, mutate data or bypass these controls.
 
 ## Python follows SQL
 
