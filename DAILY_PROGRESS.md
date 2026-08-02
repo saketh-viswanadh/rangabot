@@ -1,5 +1,19 @@
 # Daily progress
 
+## 2026-08-02 — Premise and causal-reasoning hardening
+
+- Compiled leading premises into the model-independent current-turn contract so
+  models must verify them before answering instead of obediently extending a
+  false claim.
+- Tightened causal conformance: answers must explicitly state that correlation
+  does not prove causation and identify a confounder; a deterministic generic
+  third-variable safeguard is used only if the local repair still omits one.
+- The two prior failures passed three targeted repeats after transparent scorer
+  repair. A complete critical run passed 22/22 at 4.7 seconds mean latency.
+- The subsequent complete suite rescored under v1.0.11 to 56/60 overall and
+  22/22 critical at 6.7 seconds, but reasoning remained 3/5. Release verdict:
+  **fail**. Next evidence-backed cluster is arithmetic and statistical reasoning.
+
 ## 2026-08-02 — Strict repeated-critical release gate
 
 - Ran all 22 critical cases three complete times; no targeted run was promoted

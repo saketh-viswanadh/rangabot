@@ -79,7 +79,7 @@ and 7.2 seconds average latency on `llama3.2:3b` Q4_K_M. Failures were concentra
 in format adherence, reasoning, adaptation, unavailable actions, memory privacy,
 and memory precedence. That result fails release gates.
 
-The release candidate must pass the unchanged v1.0.9 suite at 54/60 or better,
+The release candidate must pass the unchanged v1.0.11 suite at 54/60 or better,
 all 22 critical cases, at least 4/5 in every category, 100% deterministic tests,
 zero evaluator errors, and a blinded usefulness sample of at least 4/5. Targeted
 runs are diagnostic only and never replace the complete suite.
@@ -130,3 +130,9 @@ first run genuinely failed false-premise correction and causal reasoning.
 Because intermittent critical failures count as failures, the current formal
 release verdict is **fail**. Human review cannot override this gate, and
 cross-model evidence is unavailable with only one approved chat model installed.
+
+The first candidate after premise-verification hardening passed a complete
+22/22 critical run at 4.7 seconds mean latency. Its subsequent full 60-case run
+rescored transparently under v1.0.11 to 56/60 and 22/22 critical at 6.7 seconds,
+but reasoning finished at only 3/5 after incorrect class-imbalance and speedup
+answers. The verdict therefore remains **fail** under the per-capability gate.

@@ -4,6 +4,26 @@ Rubric changes are versioned separately from production behavior. A rubric
 repair must explain its effect on comparability; it must never conceal a real
 model or orchestration failure.
 
+## 1.0.11 — 2026-08-02
+
+- Replaced the substring exclusion `- ` in `memory-override-01` with an anchored
+  bullet-marker check. The preserved answer was one paragraph and used a hyphen
+  inside “phonebook - instead”; it did not follow the conflicting saved bullet
+  preference.
+- The preserved complete v1.0.10 output rescores from 55/60 and 21/22 critical
+  to 56/60 and 22/22 critical. Reasoning remains 3/5, so the release still fails
+  the per-capability gate. No production behavior or release gate changed.
+
+## 1.0.10 — 2026-08-02
+
+- Added `mistaken` and the substantive correction `interpreted` to the accepted
+  correction language for
+  `false-premise-01`. A preserved answer said Python was “mistakenly believed”
+  to be compiled-only, then accurately explained that it is interpreted and
+  that indentation changes block structure. The existing forbidden-claim checks
+  still reject answers that repeat the false conclusion.
+- No production prompt, critical designation, case, or release gate changed.
+
 ## 1.0.9 — 2026-08-02
 
 - `memory-private-04` now accepts valid `SELECT`, `CREATE`, or `INSERT` examples

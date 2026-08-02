@@ -13,7 +13,7 @@ import { isValidChatMessages } from "@/lib/chat-validation";
 import { buildKnowledgeSearchQuery } from "@/lib/knowledge-query-planning";
 import { answerDirectMemoryQuestion, directMemoryTitles, listMemories } from "@/lib/memories";
 import { answerDeterministicConversationRequest, buildConversationMessagesWithSelected, buildSemanticRepairMessages, selectConversationMemories } from "@/lib/conversation-orchestration";
-import { applySelectedMemoryToContract, chooseSemanticRepair, compileAnswerContract, needsBufferedConformance, normalizeContractAnswer } from "@/lib/conversation-contract";
+import { applySelectedMemoryToContract, chooseSemanticRepair, compileAnswerContract, enforceReasoningInvariants, needsBufferedConformance } from "@/lib/conversation-contract";
 
 export const runtime = "nodejs";
 
@@ -211,7 +211,7 @@ export async function POST(request: Request) {
       let generated = await completeTextWithOllama(messages, { signal: request.signal });
       const repairMessages = buildSemanticRepairMessages(messages, generated, body.messages);
       if (repairMessages) generated = chooseSemanticRepair(generated, await completeTextWithOllama(repairMessages, { signal: request.signal }), answerContract);
-      const answer = normalizeContractAnswer(generated, answerContract);
+      const answer = enforceReasoningInvariants(generated, answerContract);
       return new Response(answer, { headers: { ...responseHeaders, "X-Rangabot-Response": "contract-checked" } });
     }
     const stream = await streamChatWithOllama(messages, { signal: request.signal });
