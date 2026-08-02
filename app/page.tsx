@@ -8,6 +8,7 @@ import { isNearMessageBottom } from "@/lib/message-scroll";
 import { parseKnowledgeBrief } from "@/lib/knowledge-brief";
 import { CraftIcon } from "@/app/components/craft-icon";
 import { formatAnswerReceipt } from "@/lib/answer-receipt";
+import { SqlAnalysisPanel } from "@/app/components/sql-analysis-panel";
 
 const MemoryPanel = dynamic(
   () => import("@/app/components/memory-panel").then((module) => module.MemoryPanel),
@@ -82,6 +83,7 @@ export default function Home() {
   const [knowledgePeriod, setKnowledgePeriod] = useState<"week" | "month">("week");
   const [readKnowledgeVersion, setReadKnowledgeVersion] = useState<string | null>(null);
   const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
+  const [sqlPanelOpen, setSqlPanelOpen] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -90,6 +92,7 @@ export default function Home() {
   const conversationImportRef = useRef<HTMLInputElement>(null);
   const repositoryCloseRef = useRef<HTMLButtonElement>(null);
   const closeMemoryPanel = useCallback(() => setMemoryPanelOpen(false), []);
+  const closeSqlPanel = useCallback(() => setSqlPanelOpen(false), []);
 
   async function refreshStatus() {
     try {
@@ -676,6 +679,7 @@ export default function Home() {
                 <CraftIcon name="knowledge" size={15} /><span>Brief</span>{unreadKnowledge > 0 && <b>{unreadKnowledge}</b>}
               </button>
               <button type="button" className="utility-button" onClick={() => setMemoryPanelOpen(true)} aria-label="Open Local memory"><CraftIcon name="memory" size={15} /><span>Memory</span></button>
+              <button type="button" className="utility-button" onClick={() => setSqlPanelOpen(true)} aria-label="Open private SQL analysis"><CraftIcon name="analysis" size={15} /><span>Analyze</span></button>
               <a className="utility-button" href="/mastery" aria-label="Open Path to Mastery"><CraftIcon name="mastery" size={15} /><span>Mastery</span></a>
               <details className="repository-menu">
                 <summary className="utility-button"><CraftIcon name="folder" size={15} /><span>Folders</span>{allowedRepositories.length > 0 && <b>{allowedRepositories.length}</b>}</summary>
@@ -902,6 +906,7 @@ export default function Home() {
         </div>
       )}
       <MemoryPanel open={memoryPanelOpen} onClose={closeMemoryPanel} />
+      <SqlAnalysisPanel open={sqlPanelOpen} onClose={closeSqlPanel} />
     </main>
   );
 }

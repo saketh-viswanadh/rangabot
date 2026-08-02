@@ -1,7 +1,7 @@
 import type { ReactNode, SVGProps } from "react";
 
 export type CraftIconName =
-  | "add" | "arrow" | "attach" | "chat" | "chevron" | "close" | "code"
+  | "add" | "analysis" | "arrow" | "attach" | "chat" | "chevron" | "close" | "code"
   | "document" | "edit" | "external" | "folder" | "knowledge" | "mail"
   | "mastery" | "memory" | "moon" | "pin" | "reply" | "search" | "send" | "shield"
   | "spark" | "stop" | "sun" | "trash";
@@ -11,6 +11,7 @@ type CraftIconProps = Omit<SVGProps<SVGSVGElement>, "name"> & { name: CraftIconN
 export function CraftIcon({ name, size = 18, className = "", ...props }: CraftIconProps) {
   const paths: Record<CraftIconName, ReactNode> = {
     add: <><path d="M5 10h10" /><path d="M10 5v10" /></>,
+    analysis: <><path d="M4 15.5V11h3v4.5M8.5 15.5V7.5h3v8M13 15.5V4h3v11.5" /><path d="M3 16h14" /></>,
     arrow: <><path d="M4 10h11" /><path d="m11 6 4 4-4 4" /></>,
     attach: <path d="M7.2 10.8 12 6a2.1 2.1 0 0 1 3 3l-6 6a3.5 3.5 0 0 1-5-5l6.2-6.2" />,
     chat: <><path d="M5.2 4.5h10v7.2H9.5l-4.3 3.5Z" /><path d="M3.2 7v8.5h6.3" /></>,

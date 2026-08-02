@@ -48,7 +48,7 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   validation, external-access shutdown, resource caps, and receipts
 - [x] Add persistent local dataset approvals plus an exact-query, expiring,
   single-use SQL preview and execution confirmation protocol
-- [ ] Add a conversation-visible SQL proposal card with dataset, query, limits,
+- [x] Add an app-visible SQL proposal card with dataset, query, limits,
   approve/reject controls, results, and execution receipt; never auto-execute
 - [ ] Add a sandboxed Python runtime only after it can reuse the same approval,
   cancellation, limits, receipt, and result-validation contract

@@ -7,6 +7,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+- Added a private SQL workspace where users approve CSV or Parquet files, inspect
+  the exact read-only query and limits, explicitly choose **Run once** or
+  **Reject**, and review bounded results with a verifiable execution receipt.
+  Ordinary chat messages and model output still cannot trigger execution.
+
 ### Evaluation
 
 - A conservative verified-reasoning ledger now computes recognized speedup and

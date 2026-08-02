@@ -1,5 +1,13 @@
 # Daily progress
 
+## 2026-08-02 — Visible SQL approval workspace
+
+- Added a local dataset allowlist UI and an inspectable SQL proposal card.
+- Execution remains impossible until the user presses **Run once** on the exact
+  previewed dataset fingerprint and query; rejection performs no execution.
+- Added bounded result rendering and SHA-256 execution receipt visibility.
+- Deliberately did not connect model intent or ordinary chat Send to execution.
+
 ## 2026-08-02 — Exact SQL approval protocol
 
 - Added a private persistent allowlist for canonical CSV and Parquet files with
