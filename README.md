@@ -112,10 +112,11 @@ result. Non-analytical messages do not touch the dataset.
 
 Multi-table DuckDB planning is experimental. `npm run conversation:evaluate:sql`
 creates a private deterministic eight-table commerce database and runs 50 cases
-(10 easy, 15 medium, 20 hard, 5 extreme). The current `llama3.2:3b` baseline is
-3/50: the read-only runtime is sound, but free-form SQL planning is not reliable
-enough for unattended use. Keep the calculation trace visible and verify the
-query; this score is a release blocker, not a claimed capability win.
+(10 easy, 15 medium, 20 hard, 5 extreme). The original free-form
+`llama3.2:3b` baseline was 3/50. The first constrained analytical-plan compiler
+candidate reaches 12/50 overall and 9/10 easy, while medium, hard and extreme
+requests remain below release gates. Keep the calculation trace visible and
+verify the query; this is measured progress, not an unattended-use claim.
 
 Every answer exposes an optional **How this was calculated** trace with the
 query, dataset name, row count, timing, and input/query fingerprints. A strict

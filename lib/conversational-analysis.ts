@@ -6,6 +6,7 @@ const strongAnalysisIntent = /\b(?:calculate|compute|count|total|sum|average|mea
 const conditionalAnalysisIntent = /\b(?:analy[sz]e|analysis|compare|comparison|filter|query|summari[sz]e|show|list|inspect)\b/i;
 const datasetReference = /\b(?:attached|dataset|data set|database|table|file|csv|parquet|duckdb|rows?|records?|columns?|fields?|customers?|products?|orders?|payments?|tickets?|campaigns?|revenue|sales)\b/i;
 const implicitMetricQuestion = /\bhow many\b|\bwhat (?:is|was|were|are)\b.{0,80}\b(?:revenue|sales|orders?|customers?|tickets?|payments?|total|average|rate|margin|value)\b/i;
+const ambiguousMetricQuestion = /\b(?:which|what)\b.{0,60}\b(?:best|most valuable|highest-performing|lowest-performing)\b/i;
 const contextualAnalysisFollowUp = /^(?:and|also|but|so|then|what about|how about|why|which|show|compare|break it|drill|filter|only|now)\b/i;
 
 export function shouldRunSqlAnalysis(messages: ChatMessage[]) {
@@ -13,6 +14,7 @@ export function shouldRunSqlAnalysis(messages: ChatMessage[]) {
   if (!latest) return false;
   if (strongAnalysisIntent.test(latest)) return true;
   if (implicitMetricQuestion.test(latest)) return true;
+  if (ambiguousMetricQuestion.test(latest)) return true;
   if (conditionalAnalysisIntent.test(latest) && datasetReference.test(latest)) return true;
   const hadAnalysis = messages.slice(0, -1).some((message) => message.role === "assistant" && message.analysisTrace?.engine === "duckdb");
   return hadAnalysis && contextualAnalysisFollowUp.test(latest);

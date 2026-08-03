@@ -7,6 +7,14 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+- Replaced live free-form conversational SQL generation with a typed analytical
+  plan and deterministic compiler for simple aggregates. The model can select
+  only grammar-approved tables, fields, operators and actions; trusted code
+  validates scope, removes unrequested filters, resolves safe join paths,
+  compiles quoted SQL, and handles common date/status semantics. On the unchanged
+  50-case suite, `llama3.2:3b` improved from 3/50 to 12/50, including 9/10 easy.
+  Medium, hard and extreme planning remain experimental and below gate.
+
 - Added read-only multi-table DuckDB approval, schema inspection, relevant-table
   focusing with inferred join bridges, typed query/clarify/unavailable planning,
   and a frozen 50-case conversational SQL benchmark. The first strict

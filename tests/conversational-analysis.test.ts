@@ -13,6 +13,8 @@ test("runs analysis for analytical requests and contextual analytical follow-ups
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "What is the average revenue by region?" }]), true);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "How many customers are active?" }]), true);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "What was January revenue?" }]), true);
+  assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "Which region is best?" }]), true);
+  assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "What is our most valuable product?" }]), true);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "Compare Python and SQL for data engineering." }]), false);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "Compare the rows in the attached dataset." }]), true);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "Hello there" }]), false);
