@@ -1,5 +1,26 @@
 # Daily progress
 
+## 2026-08-03 — Measured memory selection reliability
+
+- Added a frozen 24-scenario synthetic selector audit that reads neither real
+  chats nor the live memory database and measures precision and recall directly.
+- Preserved the pre-change result: 73.3% precision (11/15) and 73.3% recall
+  (11/15). Domain-scoped style rules leaked into unrelated requests, while
+  related vocabulary such as PySpark/Spark and chart/plot was missed.
+- Separated universal style preferences from subject-scoped instructions, added
+  local topic families and lightweight token normalization, excluded saved
+  technical choices contradicted by the current request, and made the newest
+  same-purpose memory authoritative before ranking.
+- The unchanged audit now passes all 24 scenarios at 100% precision (15/15) and
+  100% recall (15/15), and is enforced by `npm run check`.
+- The unchanged v1.0.11 end-to-end suite at clean commit `594d57e` completed
+  60/60 without errors at 57/60 overall, 22/22 critical, and 6.6-second mean
+  latency. Memory use, privacy, and precedence each passed 5/5. Two unrelated
+  model-output failures were preserved; one honest-uncertainty failure is a
+  documented evaluator false negative because a correct negated sentence still
+  contains the raw forbidden substring `is unbiased`. No rubric was changed or
+  result rescored in this increment.
+
 ## 2026-08-02 — Conversational verified analysis
 
 - Replaced the query-workbench-first flow with a conversation-first analysis

@@ -109,6 +109,26 @@ test("current-turn constraints exclude conflicting approved memories", () => {
   memories.deleteMemory(detailed.id);
 });
 
+test("scopes technical preferences and recognizes related topic vocabulary", () => {
+  const base = { origin: "user-approved" as const, confidence: 1 as const, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
+  const python = { ...base, id: "python", content: "When teaching Python, use step-by-step examples", kind: "instruction" as const };
+  const spark = { ...base, id: "spark", content: "Prefer PySpark for distributed data processing", kind: "preference" as const };
+  assert.deepEqual(memories.selectRelevantMemoriesFrom([python], "Explain photosynthesis"), []);
+  assert.deepEqual(memories.selectRelevantMemoriesFrom([spark], "How should I reduce Spark shuffle?").map((item) => item.id), ["spark"]);
+});
+
+test("current technical choices override conflicting saved preferences", () => {
+  const mysql = { id: "mysql", content: "Prefer MySQL for application databases", kind: "preference" as const, origin: "user-approved" as const, confidence: 1 as const, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
+  assert.deepEqual(memories.selectRelevantMemoriesFrom([mysql], "We chose PostgreSQL. Give one PostgreSQL backup command."), []);
+});
+
+test("newest same-purpose memory supersedes older entries before relevance ranking", () => {
+  const base = { kind: "preference" as const, origin: "user-approved" as const, confidence: 1 as const, createdAt: "2026-01-01T00:00:00.000Z" };
+  const old = { ...base, id: "old", content: "Prefer long detailed answers about indexing", updatedAt: "2026-01-01T00:00:00.000Z" };
+  const current = { ...base, id: "current", content: "Prefer concise answers", updatedAt: "2026-02-01T00:00:00.000Z" };
+  assert.deepEqual(memories.selectRelevantMemoriesFrom([old, current], "Explain indexing").map((item) => item.id), ["current"]);
+});
+
 test("reviews same-purpose style memories as conflicts instead of silently stacking them", () => {
   const concise = memories.createMemory("Prefer concise answers", "preference");
   const payload = { version: 1, exportedAt: "2026-08-02T00:00:00.000Z", memories: [{ id: "long", content: "Prefer long answers", kind: "preference", origin: "user-approved", confidence: 1 }] };

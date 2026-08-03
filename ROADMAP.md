@@ -128,7 +128,8 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Learning Core 4b: Reviewed Local memory JSON import with duplicate detection,
   conservative conflicts, and explicit keep-or-replace approval
 - [x] Learning Core 4c: Deterministic relevance selection with bounded prompt
-  context and title-only per-answer disclosure
+  context, title-only disclosure, domain scoping, current-choice conflict
+  exclusion, newest-wins supersession, and a CI-enforced precision/recall audit
 - [ ] Learning Core 4d: Explainable proficiency, corrections, and learning progress
 - [ ] Learning Core 5: Draft, grounding review, and revision with visible separation
   between vault evidence, local-model background, and unresolved uncertainty
