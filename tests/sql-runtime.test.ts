@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { DuckDBInstance } from "@duckdb/node-api";
 import { executeReadOnlySql, inspectDatasetSchema, validateApprovedDataset } from "../lib/sql-runtime.ts";
 
 function fixture(name: string, content: string) {
@@ -39,10 +40,40 @@ test("caps result rows and records truncation", async () => {
 
 test("validates the approved dataset boundary", () => {
   const unsupported = fixture("notes.txt", "secret");
-  assert.throws(() => validateApprovedDataset(unsupported), /Only CSV and Parquet/);
+  assert.throws(() => validateApprovedDataset(unsupported), /Only CSV, Parquet, and DuckDB/);
 });
 
 test("inspects only the approved dataset schema for local query planning", async () => {
   const path = fixture("schema.csv", "region,amount\nNorth,12.5\n");
   assert.deepEqual(await inspectDatasetSchema(path), [{ name: "region", type: "VARCHAR" }, { name: "amount", type: "DOUBLE" }]);
+});
+
+test("inspects and joins an approved multi-table DuckDB database read only", async () => {
+  const root = mkdtempSync(join(tmpdir(), "rangabot-duckdb-"));
+  const path = join(root, "shop.duckdb");
+  const writer = await DuckDBInstance.create(path);
+  const connection = await writer.connect();
+  try {
+    await connection.run("CREATE TABLE customers (customer_id INTEGER, name VARCHAR)");
+    await connection.run("CREATE TABLE orders (order_id INTEGER, customer_id INTEGER, amount DOUBLE)");
+    await connection.run("INSERT INTO customers VALUES (1, 'Asha'), (2, 'Ben')");
+    await connection.run("INSERT INTO orders VALUES (10, 1, 25), (11, 1, 15), (12, 2, 7)");
+  } finally {
+    connection.closeSync(); writer.closeSync();
+  }
+  try {
+    assert.deepEqual(await inspectDatasetSchema(path), [
+      { table: "customers", name: "customer_id", type: "INTEGER" },
+      { table: "customers", name: "name", type: "VARCHAR" },
+      { table: "orders", name: "order_id", type: "INTEGER" },
+      { table: "orders", name: "customer_id", type: "INTEGER" },
+      { table: "orders", name: "amount", type: "DOUBLE" },
+    ]);
+    const result = await executeReadOnlySql({ approvedDatasetPath: path, query: "SELECT c.name, sum(o.amount) AS total FROM customers c JOIN orders o USING (customer_id) GROUP BY c.name ORDER BY c.name" });
+    assert.deepEqual(result.rows, [["Asha", 40], ["Ben", 7]]);
+    await assert.rejects(() => executeReadOnlySql({ approvedDatasetPath: path, query: "CREATE TABLE stolen AS SELECT * FROM customers" }), /read-only SELECT/);
+    await assert.rejects(() => executeReadOnlySql({ approvedDatasetPath: path, query: `SELECT * FROM read_csv_auto('${path}.csv')` }), /external access|disabled/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

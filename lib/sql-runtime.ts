@@ -3,7 +3,7 @@ import { createReadStream, realpathSync, statSync } from "node:fs";
 import { basename, extname } from "node:path";
 import { DuckDBInstance, StatementType } from "@duckdb/node-api";
 
-const supportedExtensions = new Set([".csv", ".parquet"]);
+const supportedExtensions = new Set([".csv", ".parquet", ".duckdb"]);
 const maxInputBytes = 100 * 1024 * 1024;
 const maxRows = 200;
 const defaultTimeoutMs = 10_000;
@@ -26,7 +26,7 @@ export type SqlExecutionResult = {
   receipt: SqlExecutionReceipt;
 };
 
-export type DatasetColumn = { name: string; type: string };
+export type DatasetColumn = { table?: string; name: string; type: string };
 
 function digest(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -48,7 +48,7 @@ export function validateApprovedDataset(path: string) {
   const stat = statSync(canonical);
   if (!stat.isFile()) throw new Error("The approved dataset must be a regular file.");
   const extension = extname(canonical).toLowerCase();
-  if (!supportedExtensions.has(extension)) throw new Error("Only CSV and Parquet datasets are supported.");
+  if (!supportedExtensions.has(extension)) throw new Error("Only CSV, Parquet, and DuckDB datasets are supported.");
   if (stat.size === 0) throw new Error("The approved dataset is empty.");
   if (stat.size > maxInputBytes) throw new Error("The approved dataset exceeds the 100 MB execution limit.");
   return { canonical, extension, sizeBytes: stat.size, filename: basename(canonical) };
@@ -56,14 +56,26 @@ export function validateApprovedDataset(path: string) {
 
 export async function inspectDatasetSchema(path: string): Promise<DatasetColumn[]> {
   const dataset = validateApprovedDataset(path);
-  const instance = await DuckDBInstance.create(":memory:", { max_memory: "256MB", threads: "2", enable_external_access: "true" });
+  const instance = dataset.extension === ".duckdb"
+    ? await DuckDBInstance.create(dataset.canonical, { access_mode: "READ_ONLY", max_memory: "256MB", threads: "2", enable_external_access: "false" })
+    : await DuckDBInstance.create(":memory:", { max_memory: "256MB", threads: "2", enable_external_access: "true" });
   const connection = await instance.connect();
   try {
-    const reader = dataset.extension === ".csv" ? "read_csv_auto($path)" : "read_parquet($path)";
-    await connection.run(`CREATE TABLE dataset AS SELECT * FROM ${reader}`, { path: dataset.canonical });
-    await connection.run("SET enable_external_access = false");
-    const result = await connection.runAndReadAll("DESCRIBE dataset");
-    return (result.getRows() as unknown[][]).map((row) => ({ name: String(row[0]), type: String(row[1]) })).slice(0, 500);
+    if (dataset.extension !== ".duckdb") {
+      const reader = dataset.extension === ".csv" ? "read_csv_auto($path)" : "read_parquet($path)";
+      await connection.run(`CREATE TABLE dataset AS SELECT * FROM ${reader}`, { path: dataset.canonical });
+      await connection.run("SET enable_external_access = false");
+      const result = await connection.runAndReadAll("DESCRIBE dataset");
+      return (result.getRows() as unknown[][]).map((row) => ({ name: String(row[0]), type: String(row[1]) })).slice(0, 500);
+    }
+    const result = await connection.runAndReadAll(`
+      SELECT table_name, column_name, data_type
+      FROM information_schema.columns
+      WHERE table_schema = 'main'
+      ORDER BY table_name, ordinal_position
+      LIMIT 500
+    `);
+    return (result.getRows() as unknown[][]).map((row) => ({ table: String(row[0]), name: String(row[1]), type: String(row[2]) }));
   } finally {
     connection.closeSync();
     instance.closeSync();
@@ -76,14 +88,18 @@ export async function executeReadOnlySql(input: { approvedDatasetPath: string; q
   const query = input.query.trim().replace(/;\s*$/, "");
   if (!query || query.length > 20_000) throw new Error("Provide one SQL query under 20,000 characters.");
   const timeoutMs = Math.min(Math.max(input.timeoutMs ?? defaultTimeoutMs, 100), 30_000);
-  const instance = await DuckDBInstance.create(":memory:", { max_memory: "256MB", threads: "2", enable_external_access: "true" });
+  const instance = dataset.extension === ".duckdb"
+    ? await DuckDBInstance.create(dataset.canonical, { access_mode: "READ_ONLY", max_memory: "256MB", threads: "2", enable_external_access: "false" })
+    : await DuckDBInstance.create(":memory:", { max_memory: "256MB", threads: "2", enable_external_access: "true" });
   const connection = await instance.connect();
   const started = Date.now();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const reader = dataset.extension === ".csv" ? "read_csv_auto($path)" : "read_parquet($path)";
-    await connection.run(`CREATE TABLE dataset AS SELECT * FROM ${reader}`, { path: dataset.canonical });
-    await connection.run("SET enable_external_access = false");
+    if (dataset.extension !== ".duckdb") {
+      const reader = dataset.extension === ".csv" ? "read_csv_auto($path)" : "read_parquet($path)";
+      await connection.run(`CREATE TABLE dataset AS SELECT * FROM ${reader}`, { path: dataset.canonical });
+      await connection.run("SET enable_external_access = false");
+    }
 
     const extracted = await connection.extractStatements(query);
     if (extracted.count !== 1) throw new Error("Only one SQL statement is allowed.");

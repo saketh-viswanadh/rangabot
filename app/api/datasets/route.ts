@@ -10,7 +10,7 @@ export function GET() {
 
 export async function POST(request: Request) {
   const body = (await request.json()) as { path?: unknown };
-  if (typeof body.path !== "string") return NextResponse.json({ error: "An absolute CSV or Parquet path is required." }, { status: 400 });
+  if (typeof body.path !== "string") return NextResponse.json({ error: "An absolute CSV, Parquet, or DuckDB path is required." }, { status: 400 });
   try { return NextResponse.json({ dataset: approveDataset(body.path) }, { status: 201 }); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not approve this dataset." }, { status: 400 }); }
 }

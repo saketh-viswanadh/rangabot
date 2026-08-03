@@ -96,6 +96,9 @@ export async function POST(request: Request) {
       const columns = await inspectDatasetSchema(dataset.path);
       const raw = await completeJsonWithOllama(buildSqlProposalMessages(body.messages, dataset, columns), { signal: request.signal, jsonSchema: sqlProposalSchema, numPredict: 700 });
       const proposal = parseSqlProposal(raw);
+      if (proposal.action !== "query") {
+        return new Response(proposal.explanation, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff" } });
+      }
       const result = await executeReadOnlySql({ approvedDatasetPath: dataset.path, query: proposal.query });
       let answer: string;
       try {

@@ -11,6 +11,8 @@ const result: SqlExecutionResult = {
 
 test("runs analysis for analytical requests and contextual analytical follow-ups", () => {
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "What is the average revenue by region?" }]), true);
+  assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "How many customers are active?" }]), true);
+  assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "What was January revenue?" }]), true);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "Compare Python and SQL for data engineering." }]), false);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "Compare the rows in the attached dataset." }]), true);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "Hello there" }]), false);
@@ -23,7 +25,8 @@ test("runs analysis for analytical requests and contextual analytical follow-ups
 test("grounds narration numbers in verified result values", () => {
   assert.equal(analysisNarrationIsGrounded("North is 25 and South is 7.", result), true);
   assert.equal(analysisNarrationIsGrounded("North is 30 and South is 7.", result), false);
-  assert.match(buildAnalysisNarrationMessages("Compare regions", { query: "SELECT * FROM dataset", explanation: "Regional totals" }, result)[1].content, /North/);
+  assert.equal(analysisNarrationIsGrounded("North is 25, but the result was truncated.", result), false);
+  assert.match(buildAnalysisNarrationMessages("Compare regions", { action: "query", query: "SELECT * FROM dataset", explanation: "Regional totals" }, result)[1].content, /North/);
 });
 
 test("falls back to a verified result table", () => {

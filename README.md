@@ -103,12 +103,19 @@ preview is read again at send time and supplied only to the local Ollama model.
 ### Conversational local analysis
 
 Rangabot treats SQL as a reasoning tool, not the primary interface. Open
-**Analyze**, approve a CSV or Parquet file, and choose **Use selected data in
+**Analyze**, approve a CSV, Parquet, or DuckDB file, and choose **Use selected data in
 chat**. That grants the current conversation persistent, revocable, read-only
 analytical access. Ask a normal question: Rangabot detects when calculation is
 needed, sends only column names and types to local Ollama for planning, validates
 one `SELECT`, executes it inside bounded local DuckDB, and explains the verified
 result. Non-analytical messages do not touch the dataset.
+
+Multi-table DuckDB planning is experimental. `npm run conversation:evaluate:sql`
+creates a private deterministic eight-table commerce database and runs 50 cases
+(10 easy, 15 medium, 20 hard, 5 extreme). The current `llama3.2:3b` baseline is
+3/50: the read-only runtime is sound, but free-form SQL planning is not reliable
+enough for unattended use. Keep the calculation trace visible and verify the
+query; this score is a release blocker, not a claimed capability win.
 
 Every answer exposes an optional **How this was calculated** trace with the
 query, dataset name, row count, timing, and input/query fingerprints. A strict

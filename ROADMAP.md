@@ -54,6 +54,12 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   to local chat so the model can draft validated SQL into the review workspace
 - [x] Make approved local data conversational: detect analytical intent, execute
   bounded read-only SQL, audit numeric narration, and retain an inspectable trace
+- [x] Add native read-only multi-table DuckDB inspection plus a frozen 50-case
+  benchmark covering four difficulty and four context levels
+- [ ] Replace free-form multi-table SQL generation with a constrained, validated
+  analytical-plan compiler and repair loop. Current `llama3.2:3b` baseline is
+  3/50; no autonomous multi-table reliability claim is permitted before the
+  unchanged suite clears strict result and boundary gates
 - [ ] Add the same policy contract for sandboxed Python statistics, modelling,
   and visualisation; do not permit network, package installation, or file writes
 - [ ] Offer verified analytical findings as provenance-bound memory candidates;
