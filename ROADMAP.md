@@ -56,10 +56,14 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   bounded read-only SQL, audit numeric narration, and retain an inspectable trace
 - [x] Add native read-only multi-table DuckDB inspection plus a frozen 50-case
   benchmark covering four difficulty and four context levels
-- [ ] Replace free-form multi-table SQL generation with a constrained, validated
-  analytical-plan compiler and repair loop. Current `llama3.2:3b` baseline is
-  3/50; no autonomous multi-table reliability claim is permitted before the
-  unchanged suite clears strict result and boundary gates
+- [x] Replace free-form SQL for simple aggregates with a constrained analytical
+  plan and deterministic compiler; unchanged-suite evidence improved from 3/50
+  to 12/50 and the easy tier reached 9/10
+- [ ] Extend the analytical compiler to derived metrics, multiple measures,
+  intervals, grouped subqueries and medium-tier calculations. Current medium
+  score is 2/15; no broad autonomous multi-table reliability claim is permitted
+- [ ] Enforce provider wall-clock timeout independently of a stalled Ollama
+  request; the compiler candidate recorded one 1,544.1-second timeout outlier
 - [ ] Add the same policy contract for sandboxed Python statistics, modelling,
   and visualisation; do not permit network, package installation, or file writes
 - [ ] Offer verified analytical findings as provenance-bound memory candidates;

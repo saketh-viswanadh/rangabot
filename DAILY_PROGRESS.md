@@ -1,5 +1,24 @@
 # Daily progress
 
+## 2026-08-03 — Constrained analytical-plan compiler, increment one
+
+- Replaced the model-authored SQL path with a small typed plan covering one
+  aggregate, dimensions, filters, ordering and limits. Dynamic JSON grammar
+  restricts actions, tables, fields, operators and sort targets to inspected
+  schema values before parsing.
+- Added deterministic compilation with quoted identifiers, inferred join paths,
+  typed literals, requested-scope normalization, month ranges, status/Boolean
+  semantics, and focused clarification for ambiguous comparisons. Invented
+  fields, unsupported metrics and unsafe values fail closed.
+- The unchanged full suite improved from 3/50 to 12/50: easy 9/10, medium 2/15,
+  hard 1/20, extreme 0/5. Context results were enough 6/20, medium 2/15, less
+  2/8 and none 2/7. The easy exit gate was met; later capability tiers were not.
+- Mean latency was 47.7 seconds only because one local-provider timeout outlier
+  reported 1,544.1 seconds; median was 17.9 seconds and P95 27.6 seconds. This
+  outlier remains a provider/runtime defect and is not hidden from the result.
+- Added targeted benchmark filters for development, but final claims use the
+  complete unchanged partition or full suite—not targeted reruns.
+
 ## 2026-08-03 — Strict multi-table conversational analysis baseline
 
 - Added native read-only `.duckdb` support without `ATTACH`, external access,

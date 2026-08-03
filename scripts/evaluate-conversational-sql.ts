@@ -6,7 +6,7 @@ import type { ApprovedDataset } from "../lib/datasets.ts";
 import type { ChatMessage } from "../lib/providers/types.ts";
 import { completeJsonWithOllama, completeTextWithOllama } from "../lib/providers/ollama.ts";
 import { inspectDatasetSchema, executeReadOnlySql, type SqlExecutionResult } from "../lib/sql-runtime.ts";
-import { buildSqlProposalMessages, parseSqlProposal, sqlProposalSchema } from "../lib/sql-proposals.ts";
+import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan } from "../lib/analytical-plan.ts";
 import { analysisNarrationIsGrounded, buildAnalysisNarrationMessages, formatVerifiedAnalysisFallback, shouldRunSqlAnalysis } from "../lib/conversational-analysis.ts";
 import { buildConversationMessages } from "../lib/conversation-orchestration.ts";
 
@@ -165,8 +165,8 @@ async function runCase(testCase: ConversationalSqlCase, dataset: ApprovedDataset
   try {
     let answer: string;
     if (shouldRunSqlAnalysis(messages)) {
-      const raw = await completeJsonWithOllama(buildSqlProposalMessages(messages, dataset, schema), { jsonSchema: sqlProposalSchema, numPredict: 700, timeoutMs: 180_000 });
-      const proposal = parseSqlProposal(raw);
+      const raw = await completeJsonWithOllama(buildAnalyticalPlanMessages(messages, dataset, schema), { jsonSchema: buildAnalyticalPlanSchema(messages, dataset, schema), numPredict: 700, timeoutMs: 180_000 });
+      const proposal = compileAnalyticalPlan(normalizeAnalyticalPlan(parseAnalyticalPlan(raw), testCase.question, schema), schema);
       if (proposal.action !== "query") {
         answer = proposal.explanation;
         const interpretationCorrect = testCase.expectation !== "execute" && boundaryAnswerCorrect(testCase, answer);
@@ -230,6 +230,10 @@ function markdownReport(results: Evaluation[]) {
 
 const counts = Object.fromEntries(["easy", "medium", "hard", "extreme"].map((difficulty) => [difficulty, conversationalSqlCases.filter((item) => item.difficulty === difficulty).length]));
 if (conversationalSqlCases.length !== 50 || counts.easy !== 10 || counts.medium !== 15 || counts.hard !== 20 || counts.extreme !== 5) throw new Error(`Invalid benchmark distribution: ${JSON.stringify(counts)}`);
+const caseArg = process.argv.find((argument) => argument.startsWith("--case="))?.slice(7);
+const difficultyArg = process.argv.find((argument) => argument.startsWith("--difficulty="))?.slice(13);
+const selectedCases = conversationalSqlCases.filter((item) => (!caseArg || item.id === caseArg) && (!difficultyArg || item.difficulty === difficultyArg));
+if (!selectedCases.length) throw new Error("No conversational SQL cases matched the requested filter.");
 
 await createDatabase();
 const dataset: ApprovedDataset = { id: "synthetic-multitable", name: "rangabot-multitable-benchmark.duckdb", path: databasePath, format: "duckdb", sizeBytes: 0, addedAt: new Date().toISOString() };
@@ -241,8 +245,8 @@ if (process.argv.includes("--validate-only")) {
 }
 const prior: Evaluation[] = process.argv.includes("--resume") && existsSync(checkpointPath) ? JSON.parse(readFileSync(checkpointPath, "utf8")) as Evaluation[] : [];
 const results = [...prior];
-console.log(`Running ${conversationalSqlCases.length} conversational SQL cases against ${new Set(schema.map((column) => column.table)).size} tables.`);
-for (const testCase of conversationalSqlCases) {
+console.log(`Running ${selectedCases.length} conversational SQL cases against ${new Set(schema.map((column) => column.table)).size} tables.`);
+for (const testCase of selectedCases) {
   if (results.some((result) => result.id === testCase.id)) { console.log(`SKIP ${testCase.id} (checkpointed)`); continue; }
   const result = await runCase(testCase, dataset, schema);
   results.push(result);
