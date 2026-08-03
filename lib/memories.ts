@@ -99,8 +99,60 @@ const memoryStopWords = new Set([
   "a", "about", "an", "and", "are", "as", "at", "be", "can", "do", "for", "from", "how", "i", "in", "is", "it", "me", "my", "of", "on", "or", "please", "should", "that", "the", "this", "to", "use", "what", "when", "with", "you",
 ]);
 
+function normalizedMemoryToken(token: string) {
+  if (token.length > 4 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
+  if (token.length > 4 && token.endsWith("s") && !token.endsWith("ss")) return token.slice(0, -1);
+  return token;
+}
+
 function memoryTokens(value: string) {
-  return new Set(value.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]+/gu)?.filter((token) => token.length > 2 && !memoryStopWords.has(token)) ?? []);
+  return new Set(value.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]+/gu)
+    ?.map(normalizedMemoryToken)
+    .filter((token) => token.length > 2 && !memoryStopWords.has(token)) ?? []);
+}
+
+const memoryTopicPatterns = {
+  python: /\b(?:python|pandas|numpy|dataframes?|machine[- ]learning|scikit[- ]learn)\b/i,
+  sql: /\b(?:sql|databases?|queries?|tables?|joins?|filters?|records?|rows?|postgres(?:ql)?|mysql|duckdb|snowflake)\b/i,
+  spark: /\b(?:pyspark|spark|distributed data|shuffles?)\b/i,
+  visualization: /\b(?:visuali[sz](?:e|ation)|charts?|plots?|graphs?|dashboards?)\b/i,
+  statistics: /\b(?:statistics?|statistical|p[- ]?values?|hypothesis|probability|regression|variance|standard deviation)\b/i,
+  writing: /\b(?:emails?|e-mails?|documents?|writing|drafts?|messages?|letters?)\b/i,
+} as const;
+
+function memoryTopics(value: string) {
+  return new Set(Object.entries(memoryTopicPatterns).filter(([, pattern]) => pattern.test(value)).map(([topic]) => topic));
+}
+
+function setsIntersect(left: Set<string>, right: Set<string>) {
+  return [...left].some((value) => right.has(value));
+}
+
+const technicalChoicePattern = /\b(?:postgresql|postgres|mysql|duckdb|snowflake|pyspark|spark|python|javascript|typescript|java|sql)\b/gi;
+
+function technicalChoices(value: string) {
+  return new Set(value.match(technicalChoicePattern)?.map((choice) => choice.toLowerCase().replace("postgresql", "postgres")) ?? []);
+}
+
+function memoryConflictsWithCurrentRequest(memory: LocalMemory, question: string) {
+  const memoryChoices = technicalChoices(memory.content);
+  if (!memoryChoices.size) return false;
+  const negatedChoices = new Set([...question.matchAll(/\b(?:not|instead of|rather than)\s+(postgresql|postgres|mysql|duckdb|snowflake|pyspark|spark|python|javascript|typescript|java|sql)\b/gi)]
+    .map((match) => match[1].toLowerCase().replace("postgresql", "postgres")));
+  if (setsIntersect(memoryChoices, negatedChoices)) return true;
+  const explicitChoices = new Set([...question.matchAll(/\b(?:use|using|chose|chosen|selected|adopted)\s+(?:the\s+)?(postgresql|postgres|mysql|duckdb|snowflake|pyspark|spark|python|javascript|typescript|java|sql)\b/gi)]
+    .map((match) => match[1].toLowerCase().replace("postgresql", "postgres")));
+  return explicitChoices.size > 0 && !setsIntersect(memoryChoices, explicitChoices);
+}
+
+function memorySubject(content: string) {
+  const value = content.trim();
+  if (/^(?:my (?:preferred )?name is|call me)\s+/i.test(value)) return "identity:name";
+  if (/\b(?:concise|brief|short|detailed|long)\b/i.test(value)) return "answer:length";
+  if (/\b(?:bullets?|numbered|paragraphs?|format)\b/i.test(value)) return "answer:format";
+  if (/\b(?:python|sql|javascript|typescript|pyspark|java)\b/i.test(value)) return "answer:code-language";
+  if (/\b(?:playful|sober|formal|friendly|professional|warm)\s+tone\b|\btone\b.*\b(?:playful|sober|formal|friendly|professional|warm)\b/i.test(value)) return "answer:tone";
+  return null;
 }
 
 export function memoryTitle(memory: Pick<LocalMemory, "content" | "kind">): string {
@@ -114,15 +166,22 @@ export function memoryTitle(memory: Pick<LocalMemory, "content" | "kind">): stri
 }
 
 function isGenerallyRelevantPreference(memory: LocalMemory) {
-  return memory.kind !== "fact" && /\b(?:concise|brief|short|detailed|step[- ]by[- ]step|examples?|bullet|tone|format|language)\b/i.test(memory.content);
+  return memory.kind !== "fact"
+    && memoryTopics(memory.content).size === 0
+    && /\b(?:concise|brief|short|detailed|step[- ]by[- ]step|examples?|bullets?|tone|format|language)\b/i.test(memory.content);
 }
 
 function relevanceScore(memory: LocalMemory, question: string) {
   const questionTokens = memoryTokens(question);
   const contentTokens = memoryTokens(memory.content);
+  const scopedTopics = memoryTopics(memory.content);
+  const questionTopics = memoryTopics(question);
+  const sharedTopic = setsIntersect(scopedTopics, questionTopics);
+  if (memory.kind !== "fact" && scopedTopics.size > 0 && !sharedTopic) return 0;
   let overlap = 0;
   for (const token of contentTokens) if (questionTokens.has(token)) overlap += 1;
   let score = overlap * 3;
+  if (sharedTopic) score += 3;
   if (isGenerallyRelevantPreference(memory)) score += 2;
   if (/^(?:my (?:preferred )?name is|call me)\s+/i.test(memory.content)
     && /\b(?:my name|who am i|about me|bio|biography|introduce me|introduction)\b/i.test(question)) score += 6;
@@ -132,9 +191,21 @@ function relevanceScore(memory: LocalMemory, question: string) {
 
 export function selectRelevantMemoriesFrom(memories: LocalMemory[], question: string, limit = 6, contract?: AnswerContract): LocalMemory[] {
   if (!question.trim()) return [];
-  return memories
+  const seenSubjects = new Set<string>();
+  const newestPerSubject = [...memories]
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .filter((memory) => {
+      const subject = memorySubject(memory.content);
+      if (!subject) return true;
+      if (seenSubjects.has(subject)) return false;
+      seenSubjects.add(subject);
+      return true;
+    });
+  return newestPerSubject
     .map((memory) => ({ memory, score: relevanceScore(memory, question) }))
-    .filter(({ memory, score }) => score >= 2 && (!contract || !memoryConflictsWithContract(memory.content, contract)))
+    .filter(({ memory, score }) => score >= 2
+      && !memoryConflictsWithCurrentRequest(memory, question)
+      && (!contract || !memoryConflictsWithContract(memory.content, contract)))
     .sort((a, b) => b.score - a.score || b.memory.updatedAt.localeCompare(a.memory.updatedAt))
     .slice(0, Math.max(0, Math.min(limit, 8)))
     .map(({ memory }) => memory);
@@ -197,16 +268,6 @@ export function exportMemoriesJson(exportedAt = new Date().toISOString()): strin
 
 function normalizedMemoryContent(content: string) {
   return content.normalize("NFKC").trim().replace(/\s+/g, " ").replace(/[.!?]+$/, "").toLowerCase();
-}
-
-function memorySubject(content: string) {
-  const value = content.trim();
-  if (/^(?:my (?:preferred )?name is|call me)\s+/i.test(value)) return "identity:name";
-  if (/\b(?:concise|brief|short|detailed|long)\b/i.test(value)) return "answer:length";
-  if (/\b(?:bullets?|numbered|paragraphs?|format)\b/i.test(value)) return "answer:format";
-  if (/\b(?:python|sql|javascript|typescript|pyspark|java)\b/i.test(value)) return "answer:code-language";
-  if (/\b(?:playful|sober|formal|friendly|professional|warm)\s+tone\b|\btone\b.*\b(?:playful|sober|formal|friendly|professional|warm)\b/i.test(value)) return "answer:tone";
-  return null;
 }
 
 export function parseMemoryExport(payload: unknown): MemoryImportItem[] {

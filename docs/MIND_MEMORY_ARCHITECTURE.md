@@ -53,6 +53,13 @@ and pre-prompt conflict exclusion. Memory is user-provided context, not verified
 truth. A memory that conflicts with the current contract is excluded rather than
 asking a small model to resolve the conflict correctly.
 
+Universal style preferences and domain-scoped instructions are distinct.
+Subject-scoped memory requires lexical or local topic-family agreement; explicit
+current technical choices exclude conflicting saved preferences. Same-purpose
+memories are resolved newest-first before ranking. The model-independent
+`rangabot-memory-selection` suite measures this boundary directly and is run in
+CI without reading the live memory database.
+
 ### Context assembly
 
 `lib/conversation-orchestration.ts` is the only shared precedence assembler.

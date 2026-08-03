@@ -271,8 +271,11 @@ each item requires an explicit **Approve and remember** action and records its
 origin, confidence, and timestamps in the private local SQLite database
 `data/rangabot-memory.db`. Rangabot deterministically selects at most six
 memories relevant to the current request; unrelated saved facts are not placed
-in the model prompt. Broad answer-style preferences remain available when they
-apply across subjects. The panel supports review, editing, JSON export,
+in the model prompt. Broad answer-style preferences remain available across
+subjects, while domain-scoped preferences require matching subject context.
+Related vocabulary such as PySpark/Spark and chart/plot is matched locally;
+explicit current technology choices exclude conflicting preferences, and the
+newest same-purpose memory supersedes older entries. The panel supports review, editing, JSON export,
 and deletion; no memory is sent to a remote service. Answers visibly show
 **MEMORY** only when selected context was supplied and add safe titles such as
 **Answer style** or **Preferred name**—never the saved value itself. **DIRECT
@@ -303,6 +306,12 @@ private model output. `npm run conversation:evaluate:baseline` preserves the
 pre-orchestration behavior for diagnostic comparison. The earlier 20-case
 exploratory result is not comparable with the frozen v1 suite and must not be
 presented as a product-quality score.
+
+Run `npm run conversation:evaluate:memory` for the separate deterministic
+selector audit. Its 24 synthetic scenarios measure relevance precision and
+recall directly without calling a model or opening the live memory database.
+This audit is part of `npm run check`; every scenario must pass in addition to
+the contract gates of at least 95% precision and 90% recall.
 
 Use `npm run conversation:evaluate -- --critical-only` for a repeated critical
 trust diagnostic. It is deliberately marked as a partial selection and cannot
