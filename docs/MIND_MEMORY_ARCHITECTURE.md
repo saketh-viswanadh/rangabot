@@ -150,3 +150,11 @@ repeats passed 2/2. The unchanged complete v1.0.11 suite finished at 59/60,
 22/22 critical, 5/5 reasoning, and 5.9 seconds mean latency, with every category
 at least 4/5. This restores a **conditional pass**: repeated critical evidence
 for this exact candidate and blinded human usefulness review remain required.
+
+The 2026-08-03 memory-selection candidate adds a separate deterministic v1.0.0
+audit. Its 24 synthetic scenarios improved from 73.3% precision (11/15) and
+73.3% recall (11/15) to 100% (15/15) on both measures. At clean commit `594d57e`,
+the unchanged v1.0.11 model suite completed 60/60 at 57/60 overall, 22/22
+critical, and 6.6 seconds mean latency; memory use, privacy, and precedence were
+each 5/5. This satisfies the memory gates for this run but does not complete the
+release: repeated critical and blinded usefulness gates remain outstanding.

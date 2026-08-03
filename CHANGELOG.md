@@ -10,7 +10,8 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - Added a model-independent Local memory selection audit and corrected domain
   scoping, related-topic matching, current-choice conflicts, and newest-wins
   supersession. The frozen 24-scenario audit improved from 73.3% precision and
-  73.3% recall to 100% (15/15) for both measures.
+  73.3% recall to 100% (15/15) for both measures. The unchanged 60-case model
+  suite retained 15/15 across memory use, privacy, and precedence.
 
 - Rangabot now treats approved datasets as conversational evidence. Analytical
   requests automatically run validated, bounded read-only SQL locally; answers
