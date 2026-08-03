@@ -7,6 +7,16 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+- Added read-only multi-table DuckDB approval, schema inspection, relevant-table
+  focusing with inferred join bridges, typed query/clarify/unavailable planning,
+  and a frozen 50-case conversational SQL benchmark. The first strict
+  `llama3.2:3b` baseline passed only 3/50, so multi-table autonomous planning is
+  explicitly experimental and remains blocked from a reliability claim.
+- Fixed Ollama 0.32.4 structured-output compatibility by keeping unsupported
+  string-length keywords out of the provider JSON grammar while enforcing the
+  same limits in the trusted parser. Complete results can no longer be described
+  as truncated by an accepted generated narration.
+
 - Added a model-independent Local memory selection audit and corrected domain
   scoping, related-topic matching, current-choice conflicts, and newest-wins
   supersession. The frozen 24-scenario audit improved from 73.3% precision and

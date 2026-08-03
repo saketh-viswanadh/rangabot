@@ -4,13 +4,15 @@ import type { SqlProposal } from "./sql-proposals.ts";
 
 const strongAnalysisIntent = /\b(?:calculate|compute|count|total|sum|average|mean|median|minimum|maximum|percent|percentage|rate|ratio|trend|growth|decline|increase|decrease|correlation|distribution|variance|standard deviation|outlier|anomal(?:y|ies)|rank|top|bottom|highest|lowest|group(?:ed|ing)?|segment(?:ed|ation)?|breakdown|forecast|predict|statistic(?:al|ally|s)?|significant|visuali[sz]e|chart|plot)\b/i;
 const conditionalAnalysisIntent = /\b(?:analy[sz]e|analysis|compare|comparison|filter|query|summari[sz]e|show|list|inspect)\b/i;
-const datasetReference = /\b(?:attached|dataset|data set|table|file|csv|parquet|rows?|records?|columns?|fields?)\b/i;
+const datasetReference = /\b(?:attached|dataset|data set|database|table|file|csv|parquet|duckdb|rows?|records?|columns?|fields?|customers?|products?|orders?|payments?|tickets?|campaigns?|revenue|sales)\b/i;
+const implicitMetricQuestion = /\bhow many\b|\bwhat (?:is|was|were|are)\b.{0,80}\b(?:revenue|sales|orders?|customers?|tickets?|payments?|total|average|rate|margin|value)\b/i;
 const contextualAnalysisFollowUp = /^(?:and|also|but|so|then|what about|how about|why|which|show|compare|break it|drill|filter|only|now)\b/i;
 
 export function shouldRunSqlAnalysis(messages: ChatMessage[]) {
   const latest = [...messages].reverse().find((message) => message.role === "user")?.content.trim() ?? "";
   if (!latest) return false;
   if (strongAnalysisIntent.test(latest)) return true;
+  if (implicitMetricQuestion.test(latest)) return true;
   if (conditionalAnalysisIntent.test(latest) && datasetReference.test(latest)) return true;
   const hadAnalysis = messages.slice(0, -1).some((message) => message.role === "assistant" && message.analysisTrace?.engine === "duckdb");
   return hadAnalysis && contextualAnalysisFollowUp.test(latest);
@@ -43,6 +45,8 @@ function numericClaims(value: string) {
 
 export function analysisNarrationIsGrounded(answer: string, result: SqlExecutionResult) {
   if (!answer.trim()) return false;
+  if (!result.receipt.truncated && result.rows.length <= 50
+    && /\b(?:truncat(?:ed|ion)|partial result|incomplete result|runtime (?:stopped|limited)|row limit)\b/i.test(answer)) return false;
   const allowed = new Set(numericClaims(JSON.stringify({ columns: result.columns, rows: result.rows, returnedRows: result.receipt.returnedRows })));
   return numericClaims(answer).every((claim) => allowed.has(claim));
 }

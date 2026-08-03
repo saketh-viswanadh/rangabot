@@ -4,5 +4,5 @@ export function formatSqlCell(value: unknown) {
   return String(value);
 }
 
-export type AttachedDataset = { id: string; name: string; format: "csv" | "parquet"; sizeBytes: number };
+export type AttachedDataset = { id: string; name: string; format: "csv" | "parquet" | "duckdb"; sizeBytes: number };
 export type SqlDraft = { datasetId: string; query: string };

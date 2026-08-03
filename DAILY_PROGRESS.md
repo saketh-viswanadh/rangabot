@@ -1,5 +1,25 @@
 # Daily progress
 
+## 2026-08-03 — Strict multi-table conversational analysis baseline
+
+- Added native read-only `.duckdb` support without `ATTACH`, external access,
+  mutation, or file writes; CSV and Parquet behavior remains unchanged.
+- Added deterministic schema focusing that exposes relevant tables and required
+  join bridges instead of overwhelming a small model with the full database.
+- Built a private deterministic commerce fixture with eight related tables and
+  a frozen 50-question suite: 10 easy, 15 medium, 20 hard, and 5 extreme cases;
+  it includes enough, medium, less, and no-context requests.
+- A pass requires the generated SQL result to equal an independent gold-query
+  result and the narration to remain grounded. Clarification and unavailable
+  cases must identify the correct boundary. The first complete
+  `llama3.2:3b` run passed 3/50: easy 2/10, medium 0/15, hard 1/20, extreme 0/5.
+  By context it passed enough 2/20, medium 1/15, less 0/8, and none 0/7.
+- Failure audit: 14 invalid column/join queries, 4 syntax failures, 3 malformed
+  decisions, and 26 wrong-result or wrong-boundary responses. The runtime and
+  all 151 deterministic tests pass; the planner quality is the release blocker.
+- Full answers, model SQL, correct answers, and interpretation judgments remain
+  private under `data/evaluations/results/` and are excluded from Git.
+
 ## 2026-08-03 — Measured memory selection reliability
 
 - Added a frozen 24-scenario synthetic selector audit that reads neither real
