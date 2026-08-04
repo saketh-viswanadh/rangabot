@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { auditAdvancedAnalyticalPlan, buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, compileAdvancedAnalyticalPlan, normalizeAdvancedAnalyticalPlan, parseAdvancedAnalyticalPlan, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
+import { auditAdvancedAnalyticalPlan, buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, compileAdvancedAnalyticalPlan, normalizeAdvancedAnalyticalPlan, parseAdvancedAnalyticalPlan, recoverAdvancedAnalyticalPlan, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
 
 const schema = [
   { table: "staff", name: "staff_id", type: "INTEGER" },
@@ -61,6 +61,79 @@ test("repairs an explicit grouped-count average without domain rules", () => {
   assert.deepEqual(normalized.filters, []);
 });
 
+test("uses high-confidence schema roles for grouped counts and summed measures", () => {
+  const columns = [
+    { table: "patients", name: "patient_id", type: "INTEGER" },
+    { table: "clinicians", name: "clinician_id", type: "INTEGER" },
+    { table: "appointments", name: "appointment_id", type: "INTEGER" },
+    { table: "appointments", name: "patient_id", type: "INTEGER" },
+    { table: "appointments", name: "clinician_id", type: "INTEGER" },
+    { table: "appointments", name: "charge_amount", type: "DOUBLE" },
+  ];
+  const grouped = normalizeAdvancedAnalyticalPlan(plan({ operation: "distinct_count", source: "patients", entity: "patients.patient_id", groupField: "patients.patient_id", metric: "*" }), "What is the average number of appointments per clinician?", columns);
+  assert.deepEqual({ operation: grouped.operation, source: grouped.source, metric: grouped.metric, group: grouped.groupField }, {
+    operation: "aggregate_over_groups", source: "appointments", metric: "appointments.appointment_id", group: "appointments.clinician_id",
+  });
+
+  const summed = normalizeAdvancedAnalyticalPlan(plan({ operation: "distinct_count", source: "patients", entity: "patients.patient_id", metric: "*" }), "What is the average total charge amount per patient?", columns);
+  assert.deepEqual({ operation: summed.operation, source: summed.source, metric: summed.metric, entity: summed.entity }, {
+    operation: "per_entity_average", source: "appointments", metric: "appointments.charge_amount", entity: "appointments.patient_id",
+  });
+});
+
+test("uses explicit temporal endpoints but does not invent absent roles", () => {
+  const columns = [
+    { table: "sessions", name: "session_id", type: "INTEGER" },
+    { table: "sessions", name: "opened_at", type: "TIMESTAMP" },
+    { table: "sessions", name: "closed_at", type: "TIMESTAMP" },
+    { table: "sessions", name: "cost", type: "DOUBLE" },
+  ];
+  const duration = normalizeAdvancedAnalyticalPlan(plan({ operation: "per_entity_average", source: "sessions", metric: "sessions.cost", entity: "sessions.session_id" }), "What is the average duration between opened at and closed at in hours?", columns);
+  assert.deepEqual({ operation: duration.operation, start: duration.startField, end: duration.endField }, {
+    operation: "duration_average", start: "sessions.opened_at", end: "sessions.closed_at",
+  });
+  const absent = normalizeAdvancedAnalyticalPlan(plan({ operation: "per_entity_average", source: "sessions", metric: "sessions.cost", entity: "sessions.session_id" }), "What is the average total rainfall per session?", columns);
+  assert.equal(absent.action, "clarify");
+  assert.match(absent.explanation, /measure and entity/i);
+});
+
+test("recovers a complete high-confidence plan without trusting malformed model JSON", () => {
+  const columns = [
+    { table: "sessions", name: "session_id", type: "INTEGER" },
+    { table: "sessions", name: "opened_at", type: "TIMESTAMP" },
+    { table: "sessions", name: "closed_at", type: "TIMESTAMP" },
+  ];
+  const recovered = recoverAdvancedAnalyticalPlan("What is the average duration between opened at and closed at in hours?", columns);
+  assert.deepEqual({ operation: recovered?.operation, source: recovered?.source, start: recovered?.startField, end: recovered?.endField }, {
+    operation: "duration_average", source: "sessions", start: "sessions.opened_at", end: "sessions.closed_at",
+  });
+  assert.equal(recoverAdvancedAnalyticalPlan("What is the average duration?", columns), null);
+});
+
+test("resolves row-count ratios, thresholds, unmatched relations and period grains", () => {
+  const columns = [
+    { table: "devices", name: "device_id", type: "INTEGER" },
+    { table: "readings", name: "reading_id", type: "INTEGER" },
+    { table: "readings", name: "device_id", type: "INTEGER" },
+    { table: "readings", name: "recorded_on", type: "DATE" },
+    { table: "readings", name: "energy_kwh", type: "DOUBLE" },
+    { table: "maintenance", name: "maintenance_id", type: "INTEGER" },
+    { table: "maintenance", name: "device_id", type: "INTEGER" },
+  ];
+  const ratio = normalizeAdvancedAnalyticalPlan(plan({ operation: "ratio", source: "devices", metric: "readings.energy_kwh", secondaryMetric: "readings.energy_kwh" }), "What is the ratio of total energy kwh divided by total readings?", columns);
+  assert.deepEqual({ source: ratio.source, metric: ratio.metric, secondary: ratio.secondaryMetric }, { source: "readings", metric: "readings.energy_kwh", secondary: "*" });
+  assert.match(compileAdvancedAnalyticalPlan(ratio, columns).query, /SUM\("readings"\."energy_kwh"\) \/ NULLIF\(COUNT\(\*\), 0\)/);
+
+  const threshold = normalizeAdvancedAnalyticalPlan(plan({ operation: "distinct_count", source: "devices", entity: "devices.device_id", threshold: 1 }), "How many devices have at least 3 readings?", columns);
+  assert.deepEqual({ operation: threshold.operation, source: threshold.source, entity: threshold.entity, threshold: threshold.threshold }, { operation: "threshold_count", source: "readings", entity: "readings.device_id", threshold: 3 });
+
+  const unmatched = normalizeAdvancedAnalyticalPlan(plan({ operation: "distinct_count", source: "readings", entity: "readings.reading_id", relatedField: "" }), "Which devices were never linked to maintenance?", columns);
+  assert.deepEqual({ operation: unmatched.operation, source: unmatched.source, entity: unmatched.entity, related: unmatched.relatedField }, { operation: "anti_join", source: "devices", entity: "devices.device_id", related: "maintenance.maintenance_id" });
+
+  const growth = normalizeAdvancedAnalyticalPlan(plan({ operation: "ratio", source: "devices", metric: "readings.energy_kwh", dateField: "" }), "What was the growth in total energy kwh using recorded on from January 2026 to February 2026?", columns);
+  assert.deepEqual({ operation: growth.operation, source: growth.source, metric: growth.metric, date: growth.dateField }, { operation: "period_growth", source: "readings", metric: "readings.energy_kwh", date: "readings.recorded_on" });
+});
+
 test("unused model fields cannot alter the selected operation joins", () => {
   const query = compileAdvancedAnalyticalPlan(plan({
     operation: "distinct_count", source: "staff", entity: "staff.staff_id", metric: "shifts.hours",
@@ -88,7 +161,7 @@ test("builds its grammar only from the supplied unseen schema", () => {
 });
 
 test("production analytical planners contain no benchmark schema names", () => {
-  const source = ["advanced-analytical-plan.ts", "analytical-plan.ts", "sql-proposals.ts"]
+  const source = ["advanced-analytical-plan.ts", "analytical-semantic-roles.ts", "analytical-plan.ts", "sql-proposals.ts"]
     .map((name) => readFileSync(new URL(`../lib/${name}`, import.meta.url), "utf8")).join("\n");
   for (const term of ["campaigns", "payments", "support_tickets", "order_items", "products", "customers", "orders", "staff", "shifts", "incidents", "machines", "runs", "authors", "articles", "members", "loans"]) {
     assert.doesNotMatch(source, new RegExp(`["']${term}["']|\\b${term}\\.`));

@@ -7,6 +7,26 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+- Added a deterministic semantic-role resolver ahead of advanced model plans.
+  It independently identifies high-confidence count populations, grouping
+  grains, numeric measures, row-count denominators, relation thresholds,
+  unmatched relations, period grains and duration endpoints from the current
+  request and approved schema, then overrides model fields only when evidence is unique.
+  Missing or ambiguous average-of-totals roles now clarify instead of executing
+  an unrelated metric.
+- Added a reusable development-only clinical suite with semantic-plan and result
+  checks. After an expanded 7/9 run and two provider-timeout runs exposed the
+  remaining model dependency, fully resolved plans and obvious “best”
+  ambiguities now bypass model planning. The final development run passed 9/9
+  in 196 ms total, but this is tuning evidence—not an unseen transfer score—and
+  does not change the strict 3/13 release evidence.
+- Froze and ran a new 12-case astronomy transfer suite after 196/196 tests and
+  all release checks passed. The first result is 10/12 (83.3%) in 27.7 seconds:
+  ten cases matched both semantic expectations and reference results. One
+  distinct-count query was mathematically correct but failed the frozen exact
+  source-field rubric, and the model-dependent conditional-rate case returned
+  malformed output. The suite is sealed and the 90% transfer target is not met.
+
 - Extended the model-independent analytical grammar with distinct populations
   and nested group aggregation, then centralized local categorical-value
   grounding. Every Ollama model now proposes the same schema-derived semantic

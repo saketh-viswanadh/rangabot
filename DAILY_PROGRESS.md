@@ -1,5 +1,32 @@
 # Daily progress
 
+## 2026-08-04 — Schema-derived semantic-role resolver
+
+- Split semantic-role selection from model operation planning. A deterministic,
+  model-independent pass now ranks count targets, group grains, measures,
+  secondary measures and temporal endpoints with explicit confidence.
+- Integrated only unique high-confidence roles for grouped counts, averages of
+  per-entity totals, distinct populations, durations, row-count ratios,
+  thresholds, anti-joins and period growth. Absent or ambiguous roles fail
+  closed with a clarification.
+- Added unrelated clinical and media development schemas plus adversarial cases
+  for relation-name/measure confusion, ambiguous populations and missing fields.
+- Expanding the development suite first produced 7/9, exposing malformed model
+  output and incomplete growth routing. Two later runs were dominated by local
+  provider timeouts; those are retained as runtime failures, not quality scores.
+- Fully resolved supported requests now bypass probabilistic model planning,
+  while unresolved requests still use the same typed Ollama boundary. The final
+  9-case development run passed 9/9 in 196 ms total without planner calls.
+- The suite is explicitly development evidence and cannot replace a newly sealed
+  transfer domain.
+- Preflighted then ran the unseen astronomy v4 suite once: 10/12 (83.3%) in
+  27.7 seconds. One correct distinct-count query failed the frozen exact-role
+  rubric; conditional rate genuinely failed on malformed model output. Both
+  remain failures and v4 is sealed.
+- The ecology v3 result remains sealed at strict 3/13 and was not used as a
+  question-specific tuning set. Astronomy v4 is the new candidate evidence but
+  remains below the 90% transfer target.
+
 ## 2026-08-04 — Model-independent analytical semantics
 
 - Added distinct-count and nested group-aggregate operations to the dynamic

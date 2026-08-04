@@ -165,7 +165,8 @@ function applySemanticFilters(filters: AnalyticalPlan["filters"], request: strin
 }
 
 export function normalizeAnalyticalPlan(plan: AnalyticalPlan, request: string, columns: DatasetColumn[] = []): AnalyticalPlan {
-  if (/\b(?:best|most valuable|highest-performing|lowest-performing)\b/i.test(request)) return { ...plan, action: "clarify", explanation: "Which measurable field should define that comparison?" };
+  const boundary = resolveAnalyticalBoundary(request);
+  if (boundary) return boundary;
   if (plan.action !== "query") {
     return plan;
   }
@@ -186,6 +187,11 @@ export function normalizeAnalyticalPlan(plan: AnalyticalPlan, request: string, c
   const metric = inferredMetric ?? plan.metric;
   const source = metric !== "*" && metric.includes(".") ? metric.split(".")[0] : plan.source;
   return { ...plan, source, aggregate, metric, dimensions, filters, sort, limit };
+}
+
+export function resolveAnalyticalBoundary(request: string): AnalyticalPlan | null {
+  if (!/\b(?:best|most valuable|highest-performing|lowest-performing)\b/i.test(request)) return null;
+  return { action: "clarify", source: "", aggregate: "count", metric: "*", alias: "result", dimensions: [], filters: [], sort: [], limit: 0, decimals: 0, explanation: "Which measurable field should define that comparison?" };
 }
 
 function quote(name: string) { return `"${name.replaceAll('"', '""')}"`; }

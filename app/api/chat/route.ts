@@ -16,9 +16,9 @@ import { answerDeterministicConversationRequest, buildConversationMessagesWithSe
 import { applySelectedMemoryToContract, chooseSemanticRepair, compileAnswerContract, enforceReasoningInvariants, needsBufferedConformance } from "@/lib/conversation-contract";
 import { getApprovedDataset } from "@/lib/datasets";
 import { executeReadOnlySql, inspectDatasetSchema } from "@/lib/sql-runtime";
-import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan } from "@/lib/analytical-plan";
+import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan, resolveAnalyticalBoundary } from "@/lib/analytical-plan";
 import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "@/lib/advanced-analytical-plan";
-import { compileGroundedAdvancedAnalyticalPlan } from "@/lib/analytical-filter-grounding";
+import { compileGroundedAdvancedAnalyticalPlan, compileResolvedAdvancedAnalyticalPlan } from "@/lib/analytical-filter-grounding";
 import { analysisNarrationIsGrounded, buildAnalysisNarrationMessages, formatVerifiedAnalysisFallback, shouldRunSqlAnalysis } from "@/lib/conversational-analysis";
 
 export const runtime = "nodejs";
@@ -96,12 +96,13 @@ export async function POST(request: Request) {
       const dataset = getApprovedDataset(body.datasetId);
       if (!dataset) return NextResponse.json({ error: "That dataset is no longer approved." }, { status: 400 });
       const columns = await inspectDatasetSchema(dataset.path);
+      const resolved = shouldUseAdvancedAnalyticalPlan(latestQuestion) ? await compileResolvedAdvancedAnalyticalPlan(latestQuestion, columns, dataset.path) : null;
       const proposal = shouldUseAdvancedAnalyticalPlan(latestQuestion)
-        ? (await compileGroundedAdvancedAnalyticalPlan(
+        ? resolved?.proposal ?? (await compileGroundedAdvancedAnalyticalPlan(
           await completeJsonWithOllama(buildAdvancedAnalyticalMessages(body.messages, dataset, columns), { signal: request.signal, jsonSchema: buildAdvancedAnalyticalSchema(body.messages, dataset, columns), numPredict: 900 }),
           latestQuestion, columns, dataset.path,
         )).proposal
-        : compileAnalyticalPlan(normalizeAnalyticalPlan(parseAnalyticalPlan(await completeJsonWithOllama(buildAnalyticalPlanMessages(body.messages, dataset, columns), { signal: request.signal, jsonSchema: buildAnalyticalPlanSchema(body.messages, dataset, columns), numPredict: 700 })), latestQuestion, columns), columns);
+        : compileAnalyticalPlan(resolveAnalyticalBoundary(latestQuestion) ?? normalizeAnalyticalPlan(parseAnalyticalPlan(await completeJsonWithOllama(buildAnalyticalPlanMessages(body.messages, dataset, columns), { signal: request.signal, jsonSchema: buildAnalyticalPlanSchema(body.messages, dataset, columns), numPredict: 700 })), latestQuestion, columns), columns);
       if (proposal.action !== "query") {
         return new Response(proposal.explanation, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff" } });
       }

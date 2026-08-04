@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
-import { compileGroundedAdvancedAnalyticalPlan } from "../lib/analytical-filter-grounding.ts";
-import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan } from "../lib/analytical-plan.ts";
+import { compileGroundedAdvancedAnalyticalPlan, compileResolvedAdvancedAnalyticalPlan } from "../lib/analytical-filter-grounding.ts";
+import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan, resolveAnalyticalBoundary } from "../lib/analytical-plan.ts";
 import type { ApprovedDataset } from "../lib/datasets.ts";
 import { completeJsonWithOllama } from "../lib/providers/ollama.ts";
 import type { ChatMessage } from "../lib/providers/types.ts";
@@ -27,6 +27,8 @@ export type ExpectedAnalyticalPlan = {
   relatedField?: string;
   dimensions?: string[];
   filters?: Array<{ column: string; operator: string; value: string }>;
+  numeratorFilters?: Array<{ column: string; operator: string; value: string }>;
+  denominatorFilters?: Array<{ column: string; operator: string; value: string }>;
   threshold?: number;
   firstStart?: string;
   firstEnd?: string;
@@ -34,7 +36,7 @@ export type ExpectedAnalyticalPlan = {
   secondEnd?: string;
 };
 export type AnalyticalHoldoutCase = { id: string; question: string; goldSql?: string; boundary?: "clarify" | "unavailable"; expectedPlan?: ExpectedAnalyticalPlan };
-export type AnalyticalHoldoutDefinition = { suite: string; frozenAt: string; databaseName: string; setupSql: string; cases: AnalyticalHoldoutCase[]; outputDirectory?: string };
+export type AnalyticalHoldoutDefinition = { suite: string; frozenAt: string; databaseName: string; setupSql: string; cases: AnalyticalHoldoutCase[]; outputDirectory?: string; evidenceKind?: "sealed" | "development" };
 
 function cell(value: unknown) { return value === null ? "null" : typeof value === "object" ? JSON.stringify(value) : String(value); }
 function equivalent(left: unknown, right: unknown) {
@@ -71,6 +73,10 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
     try { goldResults.set(item.id, await executeReadOnlySql({ approvedDatasetPath: databasePath, query: item.goldSql })); }
     catch (error) { throw new Error(`Holdout preflight failed for ${item.id}: ${error instanceof Error ? error.message : String(error)}`); }
   }
+  if (process.env.RANGABOT_HOLDOUT_PREFLIGHT_ONLY === "1") {
+    console.log(`PASS: ${definition.suite} setup and ${goldResults.size} reference queries are valid; no model cases ran.`);
+    return { passed: 0, total: definition.cases.length, outputPath: "" };
+  }
   for (const item of definition.cases) {
     const started = Date.now(); const messages: ChatMessage[] = [{ role: "user", content: item.question }];
     try {
@@ -78,12 +84,14 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
       let plan: unknown;
       let proposal: SqlProposal;
       if (advanced) {
-        const compiled = await compileGroundedAdvancedAnalyticalPlan(await completeJsonWithOllama(buildAdvancedAnalyticalMessages(messages, dataset, schema), { jsonSchema: buildAdvancedAnalyticalSchema(messages, dataset, schema), numPredict: 900, timeoutMs: 180_000 }), item.question, schema, databasePath);
+        const compiled = await compileResolvedAdvancedAnalyticalPlan(item.question, schema, databasePath)
+          ?? await compileGroundedAdvancedAnalyticalPlan(await completeJsonWithOllama(buildAdvancedAnalyticalMessages(messages, dataset, schema), { jsonSchema: buildAdvancedAnalyticalSchema(messages, dataset, schema), numPredict: 900, timeoutMs: 180_000 }), item.question, schema, databasePath);
         plan = compiled.plan;
         proposal = compiled.proposal;
       } else {
-        const raw = await completeJsonWithOllama(buildAnalyticalPlanMessages(messages, dataset, schema), { jsonSchema: buildAnalyticalPlanSchema(messages, dataset, schema), numPredict: 700, timeoutMs: 180_000 });
-        const basicPlan = normalizeAnalyticalPlan(parseAnalyticalPlan(raw), item.question, schema);
+        const boundary = resolveAnalyticalBoundary(item.question);
+        const raw = boundary ? null : await completeJsonWithOllama(buildAnalyticalPlanMessages(messages, dataset, schema), { jsonSchema: buildAnalyticalPlanSchema(messages, dataset, schema), numPredict: 700, timeoutMs: 180_000 });
+        const basicPlan = boundary ?? normalizeAnalyticalPlan(parseAnalyticalPlan(raw!), item.question, schema);
         plan = basicPlan;
         proposal = compileAnalyticalPlan(basicPlan, schema);
       }
@@ -100,6 +108,7 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
   const timestamp = new Date().toISOString().replaceAll(":", "-"); const outputPath = resolve(outputDirectory, `${definition.suite}-${timestamp}.json`);
   writeFileSync(outputPath, JSON.stringify({ suite: definition.suite, frozenAt: definition.frozenAt, cases: results }, null, 2));
   const passed = results.filter((item) => item.passed).length;
-  console.log(`\nFrozen holdout: ${passed}/${results.length} passed.`); console.log(`Private result: ${outputPath}`);
+  const label = definition.evidenceKind === "development" ? "Development suite" : "Frozen holdout";
+  console.log(`\n${label}: ${passed}/${results.length} passed.`); console.log(`Private result: ${outputPath}`);
   return { passed, total: results.length, outputPath };
 }

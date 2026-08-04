@@ -4,6 +4,7 @@ import type { DatasetColumn } from "./sql-runtime.ts";
 import type { SqlProposal } from "./sql-proposals.ts";
 import { focusDatabaseSchema } from "./sql-proposals.ts";
 import { validateSqlPreviewQuery } from "./sql-confirmations.ts";
+import { resolveAnalyticalSemanticRoles } from "./analytical-semantic-roles.ts";
 
 type Aggregate = "count" | "sum" | "avg" | "min" | "max";
 type OuterAggregate = Exclude<Aggregate, "count">;
@@ -78,7 +79,7 @@ export function buildAdvancedAnalyticalSchema(messages: ChatMessage[], dataset: 
   properties.innerAggregate.enum = aggregates;
   properties.outerAggregate.enum = outerAggregates;
   properties.source.enum = ["", ...tables];
-  for (const name of ["metric", "secondaryMetric", "entity", "groupField", "startField", "endField", "dateField", "relatedField"]) properties[name].enum = name === "metric" ? ["", "*", ...fields] : ["", ...fields];
+  for (const name of ["metric", "secondaryMetric", "entity", "groupField", "startField", "endField", "dateField", "relatedField"]) properties[name].enum = name === "metric" || name === "secondaryMetric" ? ["", "*", ...fields] : ["", ...fields];
   (properties.dimensions.items as Record<string, unknown>).enum = fields;
   for (const name of ["filters", "numeratorFilters", "denominatorFilters"]) {
     const filterProperties = ((properties[name].items as Record<string, unknown>).properties as Record<string, Record<string, unknown>>);
@@ -91,13 +92,13 @@ export function buildAdvancedAnalyticalMessages(messages: ChatMessage[], dataset
   const request = requestText(messages); const focused = focusedColumns(messages, dataset, columns);
   const schema = focused.map((column) => `- ${column.table}.${column.name}: ${column.type}`).join("\n");
   return [
-    { role: "system", content: "You are a domain-neutral local analytical planner, not a SQL writer. Map the request to exactly one generic operation using only enum-approved schema fields. ratio divides an aggregate metric by a secondary aggregate metric. conditional_rate divides rows matching numeratorFilters by rows matching denominatorFilters. distinct_count counts unique entity values after explicit filters. duration_average averages elapsed time between startField and endField. threshold_count counts entities whose grouped row count reaches threshold. period_growth compares summed metric over two explicit date ranges. per_entity_average sums metric per entity then averages those sums. aggregate_over_groups first applies innerAggregate to metric for each groupField, then applies outerAggregate across those group values; use distinct only with inner count. anti_join returns source entities with no relatedField match. If the operation, population, grain, measure, or required field is ambiguous or unrepresentable, return clarify or unavailable. Never infer causal effects, forecasts, or unsupported statistics." },
+    { role: "system", content: "You are a domain-neutral local analytical planner, not a SQL writer. Map the request to exactly one generic operation using only enum-approved schema fields. ratio divides an aggregate metric by a secondary aggregate metric; secondaryMetric * means the source row count. conditional_rate divides rows matching numeratorFilters by rows matching denominatorFilters. distinct_count counts unique entity values after explicit filters. duration_average averages elapsed time between startField and endField. threshold_count counts entities whose grouped row count reaches threshold. period_growth compares summed metric over two explicit date ranges. per_entity_average sums metric per entity then averages those sums. aggregate_over_groups first applies innerAggregate to metric for each groupField, then applies outerAggregate across those group values; use distinct only with inner count. anti_join returns source entities with no relatedField match. If the operation, population, grain, measure, or required field is ambiguous or unrepresentable, return clarify or unavailable. Never infer causal effects, forecasts, or unsupported statistics." },
     { role: "user", content: `REQUEST:\n${request}\n\nSCHEMA:\n${schema}\n\nReturn every required JSON field. Copy table.column values exactly. Empty unused field references and arrays are required; use count, avg and false as neutral defaults for unused innerAggregate, outerAggregate and distinct fields. For aggregate_over_groups, groupField defines the grain, metric defines the inner measure (* only for row count), innerAggregate runs within each group, and outerAggregate runs across groups. Filter values must come from the request. Dates use YYYY-MM-DD with half-open ranges. Explain the population, grain and calculation or the exact ambiguity without claiming a result.` },
   ];
 }
 
 export function shouldUseAdvancedAnalyticalPlan(request: string) {
-  return /\b(?:distinct|unique|divided by|ratio|percentage|average (?:duration|elapsed|number|count|.+ time)|time between|how long|at least \d+|growth (?:from|between)|average .+ per |never \w+|without (?:a |any )?match)\b/i.test(request);
+  return /\b(?:distinct|unique|divided by|ratio|percentage|average (?:duration|elapsed|number|count|.+ time)|time between|how long|at least \d+|growth|average .+ per |never \w+|without (?:a |any )?match)\b/i.test(request);
 }
 
 export function parseAdvancedAnalyticalPlan(raw: string): AdvancedAnalyticalPlan {
@@ -166,6 +167,28 @@ function inferObservationSource(plan: AdvancedAnalyticalPlan, request: string, e
     .sort((left, right) => right.requestScore - left.requestScore || left.table.localeCompare(right.table));
   if (observed[0] && observed[0].requestScore >= entityRequestScore && observed[0].requestScore > (observed[1]?.requestScore ?? -1)) return observed[0].table;
   return candidates[0]?.score && candidates[0].score > (candidates[1]?.score ?? -1) ? candidates[0].table : entity.table!;
+}
+
+function sharedRoleSource(fields: string[], columns: DatasetColumn[]) {
+  const names = fields.map((field) => field.split(".").at(-1)).filter((name): name is string => Boolean(name));
+  const tables = [...new Set(columns.flatMap((column) => column.table ? [column.table] : []))];
+  const candidates = tables.filter((table) => names.every((name) => columns.some((column) => column.table === table && column.name === name)));
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function fieldOnSource(field: string, source: string, columns: DatasetColumn[]) {
+  const name = field.split(".").at(-1);
+  return name && columns.some((column) => column.table === source && column.name === name) ? `${source}.${name}` : field;
+}
+
+function primaryIdentifierForTable(table: string, columns: DatasetColumn[]) {
+  const tableWords = words(table);
+  const identifiers = columns.filter((column) => column.table === table && column.name.endsWith("_id"));
+  const exact = identifiers.filter((column) => {
+    const root = words(column.name.slice(0, -3));
+    return root.length === tableWords.length && root.every((word, index) => word === tableWords[index]);
+  });
+  return (exact.length === 1 ? exact[0] : identifiers.length === 1 ? identifiers[0] : undefined);
 }
 
 function requestContainsLiteral(request: string, value: string) {
@@ -241,21 +264,75 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
   };
   if (plan.dimensions.length) decisions.push({ field: "dimensions", action: "removed", reason: "This operation has a fixed output grain and does not accept model-added dimensions." });
 
+  const roles = resolveAnalyticalSemanticRoles(request, columns);
   const groupedCountAverage = /\b(?:average|mean)\b.{0,80}\b(?:number|count)\b.{0,80}\b(?:per|by|for each)\b/i.test(request);
-  if (groupedCountAverage) {
+  if (/\b(?:ratio|divided by)\b/i.test(request) && roles.measure.confidence === "high") {
+    normalized.operation = "ratio";
+    normalized.metric = roles.measure.value!;
+    if (roles.secondaryMeasure.confidence === "high") normalized.secondaryMetric = roles.secondaryMeasure.value!;
+    else if (roles.denominatorRelation.confidence === "high" && normalized.metric.startsWith(`${roles.denominatorRelation.value}.`)) normalized.secondaryMetric = "*";
+    else return clarify("Which approved measure or source row count defines the ratio denominator?");
+    normalized.source = normalized.metric.split(".")[0];
+    decisions.push({ field: "operation", action: "replaced", reason: "The request explicitly identifies a ratio numerator and denominator." });
+  } else if (groupedCountAverage) {
     if (normalized.operation !== "aggregate_over_groups") decisions.push({ field: "operation", action: "replaced", reason: "The request explicitly asks for an average across grouped counts." });
     normalized.operation = "aggregate_over_groups";
-    normalized.groupField ||= plan.dimensions[0] ?? "";
-    const inferredEntity = inferRequestedIdentifier(request, columns, normalized.groupField);
+    normalized.groupField = roles.group.confidence === "high" ? roles.group.value! : normalized.groupField || plan.dimensions[0] || "";
+    const inferredEntity = roles.countTarget.confidence === "high" ? roles.countTarget.value : inferRequestedIdentifier(request, columns, normalized.groupField);
     normalized.entity = inferredEntity ?? normalized.entity;
+    const source = normalized.entity && normalized.groupField ? sharedRoleSource([normalized.entity, normalized.groupField], columns) : null;
+    if (source) {
+      normalized.source = source;
+      normalized.entity = fieldOnSource(normalized.entity, source, columns);
+      normalized.groupField = fieldOnSource(normalized.groupField, source, columns);
+    }
     normalized.metric = normalized.entity || (normalized.metric === "*" ? "" : normalized.metric);
     normalized.innerAggregate = "count";
     normalized.outerAggregate = "avg";
     normalized.distinct = normalized.distinct || Boolean(normalized.entity);
+  } else if (/\b(?:average|mean)\b.{0,40}\btotal\b.{0,80}\b(?:per|by|for each)\b/i.test(request)) {
+    if (roles.measure.confidence !== "high" || roles.group.confidence !== "high") return clarify("Which approved measure and entity define the requested average of totals?");
+    normalized.operation = "per_entity_average";
+    normalized.metric = roles.measure.value!;
+    const metricTable = normalized.metric.split(".")[0];
+    normalized.entity = fieldOnSource(roles.group.value!, metricTable, columns);
+    normalized.source = metricTable;
+    decisions.push({ field: "operation", action: "replaced", reason: "The request explicitly asks to average a summed measure across entities." });
+  } else if (/\b(?:average|mean)\b.{0,50}\b(?:duration|elapsed|time between)\b/i.test(request)
+    && roles.startTime.confidence === "high" && roles.endTime.confidence === "high") {
+    normalized.operation = "duration_average";
+    normalized.startField = roles.startTime.value!;
+    normalized.endField = roles.endTime.value!;
+    normalized.source = normalized.startField.split(".")[0];
+    decisions.push({ field: "operation", action: "replaced", reason: "The request explicitly identifies both duration endpoints." });
   } else if (/\b(?:distinct|unique)\b/i.test(request) && /\b(?:count|how many|number)\b/i.test(request)) {
     if (normalized.operation !== "distinct_count") decisions.push({ field: "operation", action: "replaced", reason: "The request explicitly asks for a distinct population count." });
     normalized.operation = "distinct_count";
-    normalized.entity ||= normalized.metric === "*" ? "" : normalized.metric;
+    normalized.entity = roles.countTarget.confidence === "high" ? roles.countTarget.value! : normalized.entity || (normalized.metric === "*" ? "" : normalized.metric);
+  } else if (/\bhow many\b.{0,60}\bat least\s+\d+\b/i.test(request)
+    && roles.thresholdEntity.confidence === "high" && roles.thresholdRelation.confidence === "high") {
+    const threshold = request.match(/\bat least\s+(\d+)\b/i);
+    normalized.operation = "threshold_count";
+    normalized.source = roles.thresholdRelation.value!;
+    normalized.entity = fieldOnSource(roles.thresholdEntity.value!, normalized.source, columns);
+    normalized.threshold = Number(threshold?.[1] ?? 0);
+    decisions.push({ field: "operation", action: "replaced", reason: "The request explicitly identifies an entity, observation relation and positive threshold." });
+  } else if (/\b(?:never|without)\b/i.test(request)
+    && roles.unmatchedEntity.confidence === "high" && roles.relatedRelation.confidence === "high") {
+    const entity = columnFor(roles.unmatchedEntity.value!, columns);
+    const relatedId = primaryIdentifierForTable(roles.relatedRelation.value!, columns);
+    if (!entity || !relatedId) return clarify("Which approved entity and related relation define the unmatched population?");
+    normalized.operation = "anti_join";
+    normalized.source = entity.table!;
+    normalized.entity = roles.unmatchedEntity.value!;
+    normalized.relatedField = `${relatedId.table}.${relatedId.name}`;
+    decisions.push({ field: "operation", action: "replaced", reason: "The request explicitly identifies an entity population without a related observation." });
+  } else if (/\bgrowth\s+(?:in|of|from|between)\b/i.test(request) && roles.measure.confidence === "high") {
+    normalized.operation = "period_growth";
+    normalized.metric = roles.measure.value!;
+    normalized.source = normalized.metric.split(".")[0];
+    if (roles.dateField.confidence === "high") normalized.dateField = roles.dateField.value!;
+    decisions.push({ field: "operation", action: "replaced", reason: "The request explicitly identifies a growth measure and comparison periods." });
   }
 
   const requireColumn = (field: keyof AdvancedAnalyticalPlan, type: RegExp, label: string) => {
@@ -266,7 +343,8 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
   let anchor: DatasetColumn | undefined;
   if (normalized.operation === "ratio") {
     const first = requireColumn("metric", numeric, "The numerator metric"); if ("plan" in first) return first;
-    const second = requireColumn("secondaryMetric", numeric, "The denominator metric"); if ("plan" in second) return second; anchor = first;
+    if (normalized.secondaryMetric !== "*") { const second = requireColumn("secondaryMetric", numeric, "The denominator metric"); if ("plan" in second) return second; }
+    anchor = first;
   } else if (normalized.operation === "duration_average") {
     const start = requireColumn("startField", temporal, "The duration start field"); if ("plan" in start) return start;
     const end = requireColumn("endField", temporal, "The duration end field"); if ("plan" in end) return end;
@@ -326,6 +404,7 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
       const source = inferObservationSource(plan, request, entity, columns);
       if (normalized.source !== source) decisions.push({ field: "source", action: "replaced", reason: "The source was aligned with the schema relation named by the request and model-selected fields." });
       normalized.source = source;
+      normalized.entity = fieldOnSource(normalized.entity, source, columns);
     }
   }
   return { plan: normalized, decisions };
@@ -333,6 +412,60 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
 
 export function normalizeAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, request: string, columns: DatasetColumn[]) {
   return auditAdvancedAnalyticalPlan(plan, request, columns).plan;
+}
+
+/**
+ * Recovers from malformed model JSON only when the current request and schema
+ * independently resolve every required role. It never uses fixture knowledge,
+ * dataset values, or a model-specific branch.
+ */
+export function recoverAdvancedAnalyticalPlan(request: string, columns: DatasetColumn[]): AdvancedAnalyticalPlan | null {
+  const roles = resolveAnalyticalSemanticRoles(request, columns);
+  const base: AdvancedAnalyticalPlan = {
+    action: "query", operation: "ratio", source: "", metric: "", secondaryMetric: "", entity: "", groupField: "",
+    innerAggregate: "count", outerAggregate: "avg", distinct: false, dimensions: [], startField: "", endField: "",
+    dateField: "", relatedField: "", filters: [], numeratorFilters: [], denominatorFilters: [], threshold: 0, decimals: 2,
+    firstStart: "", firstEnd: "", secondStart: "", secondEnd: "", explanation: "Compile the roles explicitly resolved from the current request and approved schema.",
+  };
+  if (/\b(?:average|mean)\b.{0,50}\b(?:duration|elapsed|time between)\b/i.test(request)
+    && roles.startTime.confidence === "high" && roles.endTime.confidence === "high") {
+    return { ...base, operation: "duration_average", source: roles.startTime.value!.split(".")[0], startField: roles.startTime.value!, endField: roles.endTime.value! };
+  }
+  if (/\b(?:average|mean)\b.{0,80}\b(?:number|count)\b.{0,80}\b(?:per|by|for each)\b/i.test(request)
+    && roles.countTarget.confidence === "high" && roles.group.confidence === "high") {
+    const source = sharedRoleSource([roles.countTarget.value!, roles.group.value!], columns);
+    if (!source) return null;
+    return { ...base, operation: "aggregate_over_groups", source, metric: fieldOnSource(roles.countTarget.value!, source, columns), entity: fieldOnSource(roles.countTarget.value!, source, columns), groupField: fieldOnSource(roles.group.value!, source, columns), distinct: true };
+  }
+  if (/\b(?:average|mean)\b.{0,40}\btotal\b.{0,80}\b(?:per|by|for each)\b/i.test(request)
+    && roles.measure.confidence === "high" && roles.group.confidence === "high") {
+    const source = roles.measure.value!.split(".")[0];
+    return { ...base, operation: "per_entity_average", source, metric: roles.measure.value!, entity: fieldOnSource(roles.group.value!, source, columns) };
+  }
+  if (/\b(?:ratio|divided by)\b/i.test(request) && roles.measure.confidence === "high") {
+    const source = roles.measure.value!.split(".")[0];
+    const secondary = roles.secondaryMeasure.confidence === "high" ? roles.secondaryMeasure.value
+      : roles.denominatorRelation.confidence === "high" && roles.denominatorRelation.value === source ? "*" : null;
+    return secondary ? { ...base, operation: "ratio", source, metric: roles.measure.value!, secondaryMetric: secondary } : null;
+  }
+  if (/\bhow many\b.{0,60}\bat least\s+\d+\b/i.test(request)
+    && roles.thresholdEntity.confidence === "high" && roles.thresholdRelation.confidence === "high") {
+    const source = roles.thresholdRelation.value!; const threshold = Number(request.match(/\bat least\s+(\d+)\b/i)?.[1] ?? 0);
+    return threshold > 0 ? { ...base, operation: "threshold_count", source, entity: fieldOnSource(roles.thresholdEntity.value!, source, columns), threshold } : null;
+  }
+  if (/\b(?:never|without)\b/i.test(request)
+    && roles.unmatchedEntity.confidence === "high" && roles.relatedRelation.confidence === "high") {
+    const entity = columnFor(roles.unmatchedEntity.value!, columns); const related = primaryIdentifierForTable(roles.relatedRelation.value!, columns);
+    return entity && related ? { ...base, operation: "anti_join", source: entity.table!, entity: roles.unmatchedEntity.value!, relatedField: `${related.table}.${related.name}` } : null;
+  }
+  if (/\bgrowth\b/i.test(request) && roles.measure.confidence === "high") {
+    return { ...base, operation: "period_growth", source: roles.measure.value!.split(".")[0], metric: roles.measure.value!, dateField: roles.dateField.confidence === "high" ? roles.dateField.value! : "" };
+  }
+  if (/\b(?:distinct|unique)\b/i.test(request) && roles.countTarget.confidence === "high") {
+    const entity = columnFor(roles.countTarget.value!, columns);
+    return entity ? { ...base, operation: "distinct_count", source: entity.table!, entity: roles.countTarget.value! } : null;
+  }
+  return null;
 }
 
 function quote(name: string) { return `"${name.replaceAll('"', '""')}"`; }
@@ -385,7 +518,7 @@ export function compileAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, colu
   const usedValues = [...operationValues[plan.operation], ...plan.filters.map((filter) => filter.column)].filter((field) => Boolean(field) && field !== "*");
   const refs = usedValues.map((field) => reference(field, columns)); const relation = fromClause(plan.source, refs, columns); const baseWhere = where(plan.filters, columns); const suffix = baseWhere.length ? `\nWHERE ${baseWhere.join(" AND ")}` : ""; const round = (value: string) => plan.decimals ? `ROUND(${value}, ${plan.decimals})` : value;
   let query: string;
-  if (plan.operation === "ratio") { const a = reference(plan.metric, columns); const b = reference(plan.secondaryMetric, columns); query = `SELECT ${round(`SUM(${a.sql}) / NULLIF(SUM(${b.sql}), 0)`)} AS ${quote("ratio")}\n${relation}${suffix}`; }
+  if (plan.operation === "ratio") { const a = reference(plan.metric, columns); const denominator = plan.secondaryMetric === "*" ? "COUNT(*)" : `SUM(${reference(plan.secondaryMetric, columns).sql})`; query = `SELECT ${round(`SUM(${a.sql}) / NULLIF(${denominator}, 0)`)} AS ${quote("ratio")}\n${relation}${suffix}`; }
   else if (plan.operation === "conditional_rate") { const numerator = where(plan.numeratorFilters, columns); const denominator = where(plan.denominatorFilters, columns); query = `SELECT ${round(`100.0 * COUNT(*) FILTER (WHERE ${numerator.join(" AND ") || "TRUE"}) / NULLIF(COUNT(*) FILTER (WHERE ${denominator.join(" AND ") || "TRUE"}), 0)`)} AS ${quote("rate_pct")}\n${relation}${suffix}`; }
   else if (plan.operation === "distinct_count") { const entity = reference(plan.entity, columns); query = `SELECT COUNT(DISTINCT ${entity.sql}) AS ${quote("distinct_count")}\n${relation}${suffix}`; }
   else if (plan.operation === "duration_average") { const start = reference(plan.startField, columns); const end = reference(plan.endField, columns); query = `SELECT ${round(`AVG(DATE_DIFF('minute', ${start.sql}, ${end.sql})) / 60.0`)} AS ${quote("average_duration_hours")}\n${relation}${suffix}`; }

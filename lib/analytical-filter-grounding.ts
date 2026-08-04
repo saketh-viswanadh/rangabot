@@ -1,4 +1,4 @@
-import { compileAdvancedAnalyticalPlan, normalizeAdvancedAnalyticalPlan, parseAdvancedAnalyticalPlan, type AdvancedAnalyticalPlan, type Filter } from "./advanced-analytical-plan.ts";
+import { compileAdvancedAnalyticalPlan, normalizeAdvancedAnalyticalPlan, parseAdvancedAnalyticalPlan, recoverAdvancedAnalyticalPlan, type AdvancedAnalyticalPlan, type Filter } from "./advanced-analytical-plan.ts";
 import { executeReadOnlySql, type DatasetColumn } from "./sql-runtime.ts";
 
 export type FilterGroundingDecision = {
@@ -102,7 +102,22 @@ export async function groundAdvancedAnalyticalFilters(plan: AdvancedAnalyticalPl
 }
 
 export async function compileGroundedAdvancedAnalyticalPlan(rawPlan: string, request: string, columns: DatasetColumn[], approvedDatasetPath: string) {
-  const normalized = normalizeAdvancedAnalyticalPlan(parseAdvancedAnalyticalPlan(rawPlan), request, columns);
+  let parsed: AdvancedAnalyticalPlan;
+  try { parsed = parseAdvancedAnalyticalPlan(rawPlan); }
+  catch (error) {
+    const recovered = recoverAdvancedAnalyticalPlan(request, columns);
+    if (!recovered) throw error;
+    parsed = recovered;
+  }
+  const normalized = normalizeAdvancedAnalyticalPlan(parsed, request, columns);
+  const grounded = await groundAdvancedAnalyticalFilters(normalized, request, columns, approvedDatasetPath);
+  return { proposal: compileAdvancedAnalyticalPlan(grounded.plan, columns), plan: grounded.plan, grounding: grounded.decisions };
+}
+
+export async function compileResolvedAdvancedAnalyticalPlan(request: string, columns: DatasetColumn[], approvedDatasetPath: string) {
+  const recovered = recoverAdvancedAnalyticalPlan(request, columns);
+  if (!recovered) return null;
+  const normalized = normalizeAdvancedAnalyticalPlan(recovered, request, columns);
   const grounded = await groundAdvancedAnalyticalFilters(normalized, request, columns, approvedDatasetPath);
   return { proposal: compileAdvancedAnalyticalPlan(grounded.plan, columns), plan: grounded.plan, grounding: grounded.decisions };
 }

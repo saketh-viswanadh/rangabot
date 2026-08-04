@@ -3,7 +3,7 @@ import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { groundAdvancedAnalyticalFilters } from "../lib/analytical-filter-grounding.ts";
+import { compileResolvedAdvancedAnalyticalPlan, groundAdvancedAnalyticalFilters } from "../lib/analytical-filter-grounding.ts";
 import type { AdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
 import { inspectDatasetSchema } from "../lib/sql-runtime.ts";
 
@@ -19,6 +19,8 @@ async function fixture() {
       INSERT INTO people VALUES (1, 'Ada', 'North'), (2, 'Lin', 'Shared');
       CREATE TABLE topics(topic_id INTEGER, label VARCHAR, family VARCHAR);
       INSERT INTO topics VALUES (1, 'Robotics', 'Applied'), (2, 'Shared', 'Theory');
+      CREATE TABLE sessions(session_id INTEGER, opened_at TIMESTAMP, closed_at TIMESTAMP);
+      INSERT INTO sessions VALUES (1, TIMESTAMP '2026-01-01 09:00:00', TIMESTAMP '2026-01-01 10:00:00');
     `);
   } finally { connection.closeSync(); instance.closeSync(); }
   return inspectDatasetSchema(databasePath);
@@ -52,5 +54,15 @@ test("grounds explicit categorical filters in approved local values", async () =
   const ambiguous = await groundAdvancedAnalyticalFilters(plan("Shared"), "How many people used Shared?", columns, databasePath);
   assert.equal(ambiguous.plan.action, "clarify");
   assert.match(ambiguous.plan.explanation, /multiple fields/i);
+  rmSync(databasePath, { force: true });
+});
+
+test("compiles fully resolved requests without a model plan", async () => {
+  const columns = await fixture();
+  const resolved = await compileResolvedAdvancedAnalyticalPlan("What is the average duration between opened at and closed at in hours?", columns, databasePath);
+  assert.equal(resolved?.plan.operation, "duration_average");
+  assert.match(resolved?.proposal.query ?? "", /DATE_DIFF\('minute', "sessions"\."opened_at", "sessions"\."closed_at"\)/);
+  const ambiguous = await compileResolvedAdvancedAnalyticalPlan("What is the average duration?", columns, databasePath);
+  assert.equal(ambiguous, null);
   rmSync(databasePath, { force: true });
 });
