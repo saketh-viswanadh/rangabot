@@ -92,6 +92,10 @@ current-turn contract, selected memory, and bounded history rules.
 `lib/providers/types.ts` defines the model-independent local provider contract.
 The Ollama adapter maps cancellation, timeout, unavailable runtime, missing
 model, HTTP failure, empty output, and malformed stream into stable errors.
+Generation receives one absolute deadline. Rangabot does not automatically
+retry a timeout because it cannot prove that generation never began; recovery
+requires an explicit new request. Deterministic simulations cover both buffered
+and streaming failure categories.
 
 ### Conformance
 
@@ -139,11 +143,13 @@ the per-capability gates, so the release verdict remains **fail**.
 ## Remaining release work
 
 - Clear the complete-suite gate, then repeat all critical cases three times.
-- Add deterministic provider simulations for missing model, partial stream,
-  timeout, cancellation, and empty output.
+- Complete route-level persistence simulations proving that cancellation,
+  timeout and partial streams cannot duplicate saved messages. Provider-level
+  missing-model, partial/malformed-stream, timeout, cancellation, unavailable,
+  HTTP and empty-output simulations are now covered.
 - Split the chat route into orchestration services without changing behavior.
-- Add human blind review and cross-model matrix evidence; downloading another
-  large model still requires explicit approval.
+- Complete human blind review and the full cross-model matrix. Qwen2.5 7B was
+  explicitly approved and installed; only its critical partition has run.
 - Publish a limitation ledger and issue a Pass, Conditional pass, or Fail.
 
 ## Reviewer qualification boundary
@@ -168,9 +174,8 @@ preserved output rescored under the documented v1.0.8 semantic repair is 57/60;
 every capability is at least 4/5. Three subsequent complete critical runs,
 transparently rescored under v1.0.9, finished at 20/22, 22/22, and 22/22. The
 first run genuinely failed false-premise correction and causal reasoning.
-Because intermittent critical failures count as failures, the current formal
-release verdict is **fail**. Human review cannot override this gate, and
-cross-model evidence is unavailable with only one approved chat model installed.
+Because intermittent critical failures count as failures, the formal release
+verdict at that stage was **fail**. Human review cannot override this gate.
 
 The first candidate after premise-verification hardening passed a complete
 22/22 critical run at 4.7 seconds mean latency. Its subsequent full 60-case run
@@ -192,3 +197,12 @@ the unchanged v1.0.11 model suite completed 60/60 at 57/60 overall, 22/22
 critical, and 6.6 seconds mean latency; memory use, privacy, and precedence were
 each 5/5. This satisfies the memory gates for this run but does not complete the
 release: repeated critical and blinded usefulness gates remain outstanding.
+
+On 2026-08-05, `qwen2.5:7b` also passed only 1/12 reviewer cases and remains
+blocked. The first same-context critical comparison recorded 21/22 for both
+Qwen and Llama. Qwen was 2.3x slower, but correctly rejected a material Python
+false premise that Llama repeated. That narrow benefit did not outweigh its
+memory pressure, latency and Teacher Mode failures on the 8 GB host, so the
+local artifact was removed after testing. Registry support remains for
+controlled comparisons on suitable hardware; automatic routing and reviewing
+remain disabled. A complete cross-model suite has not yet run.

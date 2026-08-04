@@ -369,6 +369,19 @@ recent-history window. Relevant approved memories may shape an answer, but the
 latest explicit user correction always wins and unrelated memories remain
 outside the model request.
 
+Cross-model reliability can be measured sequentially with
+`npm run conversation:evaluate:matrix`. The runner uses the same frozen cases
+and orchestration for every registered Ollama profile, records the configured
+context, keeps complete answers private and unloads each model before starting
+the next. See [local model guidance](docs/models.md) before overriding a model's
+memory-fit guard.
+
+Teacher Mode generation can be compared explicitly with
+`npm run knowledge:evaluate:answers -- --model=qwen2.5:7b --num-ctx=4096 --sample=5`.
+Retrieval-only evaluation does not use the chat model. Model-specific answer
+checkpoints are isolated so results cannot be accidentally reused across
+profiles.
+
 ## Next milestones
 
 1. Add conversation-aware query planning and multi-book evidence synthesis using the

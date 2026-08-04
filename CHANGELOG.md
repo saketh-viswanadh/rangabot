@@ -7,6 +7,40 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+- Added a registry-driven cross-model conversation matrix that evaluates one
+  installed Ollama model at a time, fixes its context budget, unloads it before
+  the next profile and preserves full answers only in private ignored results.
+  Critical-only is the safe default; selected diagnostics and complete-suite
+  runs are labelled separately so partial evidence cannot become a release
+  score.
+- Standardized `OLLAMA_NUM_CTX` across text, JSON and streaming generation.
+  Memory-fit guidance remains enforced by default, and an undersized-machine
+  override must be explicit. `qwen2.5:7b` remains an opt-in registry profile
+  rather than replacing the 3B starter model.
+- Replaced the earlier automatic timeout retry with one absolute generation
+  deadline. A Qwen cold diagnostic demonstrated that two per-attempt deadlines
+  could keep one request open for 328 seconds. Cancellation, timeout, unavailable
+  runtime, missing model, HTTP failure, empty output, malformed stream and
+  partial-stream behavior now have deterministic provider simulations and typed
+  API failures. Rangabot never silently starts a second generation attempt.
+- Compared Llama 3.2 3B and Qwen2.5 7B on the unchanged 22-case critical suite.
+  Both recorded 21/22. Qwen averaged 11.1 seconds versus Llama's 4.8 seconds;
+  Qwen's scored failure was an evaluator wording false negative, while Llama's
+  failure materially repeated a false claim about Python indentation. The
+  frozen scores remain unchanged. Qwen remains available as an opt-in registry
+  profile for suitable hardware, not a default or automatic route. Its local
+  4.7 GB artifact was removed after evaluation because the narrow reasoning
+  benefit did not justify its memory pressure, latency and Teacher Mode failures
+  on the tested 8 GB Mac.
+- Qwen failed the unchanged adaptive-reviewer qualification at 1/12, matching
+  the blocked Llama result. It must not review or rewrite live answers.
+- Added explicit model/context selection to Knowledge answer evaluation and
+  included both values in its checkpoint key and private result metadata. This
+  prevents a Qwen comparison from silently resuming Llama-generated answers.
+  A first three-case Qwen diagnostic completed 1/3 within the 180-second case
+  deadline; two timeouts make it unsuitable for routine Teacher Mode on the
+  tested 8 GB profile.
+
 - Added a deterministic semantic-role resolver ahead of advanced model plans.
   It independently identifies high-confidence count populations, grouping
   grains, numeric measures, row-count denominators, relation thresholds,
@@ -303,6 +337,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   starts, and returns a clear incomplete-check warning after a bounded timeout.
 - Ollama chat and embedding configuration is now centrally validated as
   loopback-only, with the documented lightweight model as the single fallback.
+- The 2026-08-02 assumption that one automatic timeout retry was safe has been
+  withdrawn. A timeout cannot prove that local generation never began, so retry
+  now requires a new explicit request rather than hidden duplicate work.
 - Answer evaluations exclude execution errors from completed-case quality and
   latency averages and report a separate conservative overall pass floor.
 - Repository previews now reject high-confidence secret content in addition to

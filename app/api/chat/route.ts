@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { completeJsonWithOllama, completeTextWithOllama, streamChatWithOllama } from "@/lib/providers/ollama";
-import type { ChatMessage } from "@/lib/providers/types";
+import { ProviderError, type ChatMessage } from "@/lib/providers/types";
 import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatalogQuestion, isKnowledgeNewsQuestion, searchKnowledgeWithDiagnostics, shouldAutoSearchKnowledge, type KnowledgeResult, type KnowledgeSearchMode } from "@/lib/knowledge";
 import { generateGroundedTeacherAnswer } from "@/lib/knowledge-grounding";
 import { buildTeacherMessages, formatKnowledgeContext } from "@/lib/teacher-mode";
@@ -269,6 +269,13 @@ export async function POST(request: Request) {
       headers: responseHeaders,
     });
   } catch (error) {
+    if (error instanceof ProviderError) {
+      const status = error.code === "timeout" ? 504
+        : error.code === "cancelled" ? 499
+          : error.code === "unavailable" || error.code === "model-missing" ? 503
+            : 502;
+      return NextResponse.json({ error: error.message, code: error.code }, { status });
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "The local model request failed." },
       { status: 500 },

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
-type Registry = { models: Array<{ id: string; label: string; tier: string; minimumMemoryGb: number; uses: string[]; notes: string }>; embeddingModels: Array<{ id: string; label: string }> };
+type Registry = { models: Array<{ id: string; label: string; tier: string; minimumMemoryGb: number; recommendedContextTokens: number; uses: string[]; notes: string }>; embeddingModels: Array<{ id: string; label: string }> };
 const registry = JSON.parse(readFileSync(resolve("config/models.json"), "utf8")) as Registry;
 const memoryGb = Math.round(totalmem() / 1024 ** 3);
 const modelArgument = process.argv.find((argument) => argument.startsWith("--model="))?.slice("--model=".length);
@@ -50,6 +50,7 @@ if (existsSync(envPath)) {
   writeFileSync(envPath, [
     "OLLAMA_BASE_URL=http://127.0.0.1:11434",
     `OLLAMA_MODEL=${selected.id}`,
+    `OLLAMA_NUM_CTX=${selected.recommendedContextTokens}`,
     `OLLAMA_EMBED_MODEL=${embedding.id}`,
     "KNOWLEDGE_BUDGET_BYTES=4294967296",
     "",

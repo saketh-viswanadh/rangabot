@@ -11,7 +11,7 @@ test("publishes usable model choices with hardware and license guidance", () => 
   assert.match(registry.verifiedAt ?? "", /^\d{4}-\d{2}-\d{2}$/);
   assert.ok((registry.models?.length ?? 0) >= 3);
   for (const model of registry.models ?? []) {
-    for (const field of ["id", "label", "tier", "minimumMemoryGb", "downloadSize", "uses", "upstream", "licenseReview"]) {
+    for (const field of ["id", "label", "tier", "minimumMemoryGb", "recommendedContextTokens", "downloadSize", "uses", "upstream", "licenseReview"]) {
       assert.ok(model[field], `model is missing ${field}`);
     }
   }
