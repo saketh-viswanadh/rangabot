@@ -1,0 +1,31 @@
+import { runAnalyticalHoldout, type AnalyticalHoldoutDefinition } from "./analytical-holdout-runner.ts";
+
+const definition: AnalyticalHoldoutDefinition = {
+  suite: "analytical-holdout-v3",
+  frozenAt: "2026-08-04",
+  databaseName: "analytical-holdout-v3.duckdb",
+  setupSql: `
+    CREATE TABLE habitats AS SELECT i::INTEGER AS habitat_id, CASE i % 4 WHEN 0 THEN 'Wetland' WHEN 1 THEN 'Forest' WHEN 2 THEN 'Grassland' ELSE 'Coast' END AS "zone", (i % 5 <> 0) AS protected FROM range(1, 13) t(i);
+    CREATE TABLE species AS SELECT i::INTEGER AS species_id, CASE i % 4 WHEN 0 THEN 'Mammal' WHEN 1 THEN 'Bird' WHEN 2 THEN 'Reptile' ELSE 'Insect' END AS class_name, CASE i % 3 WHEN 0 THEN 'Vulnerable' WHEN 1 THEN 'Stable' ELSE 'Watch' END AS conservation_status FROM range(1, 19) t(i);
+    CREATE TABLE observers AS SELECT i::INTEGER AS observer_id, CASE i % 3 WHEN 0 THEN 'Hill' WHEN 1 THEN 'River' ELSE 'Field' END AS station, (i % 4 <> 0) AS certified FROM range(1, 21) t(i);
+    CREATE TABLE sightings AS SELECT i::INTEGER AS sighting_id, ((i * 5) % 12 + 1)::INTEGER AS habitat_id, ((i * 7) % 18 + 1)::INTEGER AS species_id, ((i * 11) % 20 + 1)::INTEGER AS observer_id, DATE '2025-03-01' + ((i * 3) % 61)::INTEGER AS observed_on, (1 + i % 9)::INTEGER AS individuals, (10 + i % 70)::DOUBLE AS duration_minutes FROM range(1, 181) t(i);
+    CREATE TABLE surveys AS SELECT i::INTEGER AS survey_id, ((i * 7) % 12 + 1)::INTEGER AS habitat_id, ((i * 13) % 20 + 1)::INTEGER AS observer_id, TIMESTAMP '2025-03-01 07:00:00' + i * INTERVAL '13 hours' AS started_at, TIMESTAMP '2025-03-01 07:00:00' + i * INTERVAL '13 hours' + (30 + i % 150) * INTERVAL '1 minute' AS ended_at, DATE '2025-03-01' + ((i * 2) % 61)::INTEGER AS survey_date FROM range(1, 61) t(i);
+  `,
+  cases: [
+    { id: "ec-01", question: "What is the total number of individuals across all sightings?", goldSql: "SELECT SUM(individuals) FROM sightings", expectedPlan: { aggregate: "sum", source: "sightings", metric: "sightings.individuals", dimensions: [] } },
+    { id: "ec-02", question: "Show the average sighting duration_minutes by zone.", goldSql: "SELECT zone, AVG(duration_minutes) FROM sightings JOIN habitats USING (habitat_id) GROUP BY zone", expectedPlan: { aggregate: "avg", source: "sightings", metric: "sightings.duration_minutes", dimensions: ["habitats.zone"] } },
+    { id: "ec-03", question: "How many distinct observers recorded Mammal sightings at least once?", goldSql: "SELECT COUNT(DISTINCT observer_id) FROM sightings JOIN species USING (species_id) WHERE class_name = 'Mammal'", expectedPlan: { operation: "distinct_count", source: "sightings", entity: "observers.observer_id", filters: [{ column: "species.class_name", operator: "eq", value: "Mammal" }] } },
+    { id: "ec-04", question: "What is the average number of distinct species per habitat?", goldSql: "SELECT AVG(metric_value) FROM (SELECT habitat_id, COUNT(DISTINCT species_id) AS metric_value FROM sightings GROUP BY habitat_id) q", expectedPlan: { operation: "aggregate_over_groups", source: "sightings", metric: "sightings.species_id", groupField: "sightings.habitat_id", innerAggregate: "count", outerAggregate: "avg", distinct: true } },
+    { id: "ec-05", question: "What is the average number of surveys per habitat?", goldSql: "SELECT AVG(metric_value) FROM (SELECT habitat_id, COUNT(*) AS metric_value FROM surveys GROUP BY habitat_id) q", expectedPlan: { operation: "aggregate_over_groups", source: "surveys", metric: "surveys.survey_id", groupField: "surveys.habitat_id", innerAggregate: "count", outerAggregate: "avg", distinct: true } },
+    { id: "ec-06", question: "What is the average total individuals per species?", goldSql: "SELECT AVG(metric_value) FROM (SELECT species_id, SUM(individuals) AS metric_value FROM sightings GROUP BY species_id) q", expectedPlan: { operation: "per_entity_average", source: "sightings", metric: "sightings.individuals", entity: "sightings.species_id" } },
+    { id: "ec-07", question: "What is the ratio of total individuals divided by total duration_minutes?", goldSql: "SELECT SUM(individuals) / NULLIF(SUM(duration_minutes), 0) FROM sightings", expectedPlan: { operation: "ratio", source: "sightings", metric: "sightings.individuals", secondaryMetric: "sightings.duration_minutes" } },
+    { id: "ec-08", question: "How many certified observers are there?", goldSql: "SELECT COUNT(*) FROM observers WHERE certified = TRUE", expectedPlan: { aggregate: "count", source: "observers", metric: "*", filters: [{ column: "observers.certified", operator: "eq", value: "true" }] } },
+    { id: "ec-09", question: "What is the average duration between started_at and ended_at in hours?", goldSql: "SELECT AVG(DATE_DIFF('minute', started_at, ended_at)) / 60.0 FROM surveys", expectedPlan: { operation: "duration_average", source: "surveys", startField: "surveys.started_at", endField: "surveys.ended_at" } },
+    { id: "ec-10", question: "How many habitats have at least 5 sightings?", goldSql: "SELECT COUNT(*) FROM (SELECT habitat_id FROM sightings GROUP BY habitat_id HAVING COUNT(*) >= 5) q", expectedPlan: { operation: "threshold_count", source: "sightings", entity: "sightings.habitat_id", threshold: 5 } },
+    { id: "ec-11", question: "Which habitats were never linked to surveys?", goldSql: "SELECT habitat_id FROM habitats LEFT JOIN surveys USING (habitat_id) WHERE survey_id IS NULL ORDER BY habitat_id", expectedPlan: { operation: "anti_join", source: "habitats", entity: "habitats.habitat_id", relatedField: "surveys.survey_id" } },
+    { id: "ec-12", question: "What was the percentage growth in total individuals from March 2025 to April 2025?", goldSql: "WITH p AS (SELECT SUM(individuals) FILTER (WHERE observed_on >= DATE '2025-03-01' AND observed_on < DATE '2025-04-01') a, SUM(individuals) FILTER (WHERE observed_on >= DATE '2025-04-01' AND observed_on < DATE '2025-05-01') b FROM sightings) SELECT 100.0 * (b-a) / NULLIF(a,0) FROM p", expectedPlan: { operation: "period_growth", source: "sightings", metric: "sightings.individuals", dateField: "sightings.observed_on", firstStart: "2025-03-01", firstEnd: "2025-04-01", secondStart: "2025-04-01", secondEnd: "2025-05-01" } },
+    { id: "ec-13", question: "Which habitat is best?", boundary: "clarify" },
+  ],
+};
+
+await runAnalyticalHoldout(definition);

@@ -19,7 +19,7 @@ const schema = [
 ];
 
 function plan(overrides: Record<string, unknown>) {
-  return parseAdvancedAnalyticalPlan(JSON.stringify({ action: "query", operation: "ratio", source: "shifts", metric: "shifts.hours", secondaryMetric: "shifts.hours", entity: "", dimensions: [], startField: "", endField: "", dateField: "", relatedField: "", filters: [], numeratorFilters: [], denominatorFilters: [], threshold: 0, decimals: 2, firstStart: "", firstEnd: "", secondStart: "", secondEnd: "", explanation: "Verified operation.", ...overrides }));
+  return parseAdvancedAnalyticalPlan(JSON.stringify({ action: "query", operation: "ratio", source: "shifts", metric: "shifts.hours", secondaryMetric: "shifts.hours", entity: "", groupField: "", innerAggregate: "count", outerAggregate: "avg", distinct: false, dimensions: [], startField: "", endField: "", dateField: "", relatedField: "", filters: [], numeratorFilters: [], denominatorFilters: [], threshold: 0, decimals: 2, firstStart: "", firstEnd: "", secondStart: "", secondEnd: "", explanation: "Verified operation.", ...overrides }));
 }
 
 test("compiles domain-neutral ratio, rate, duration and grouped operations", () => {
@@ -35,6 +35,51 @@ test("compiles generic period growth and anti-join plans", () => {
   assert.match(compileAdvancedAnalyticalPlan(plan({ operation: "anti_join", source: "staff", entity: "staff.staff_id", relatedField: "shifts.staff_id", metric: "", secondaryMetric: "" }), schema).query, /LEFT JOIN "shifts" USING \("staff_id"\)/);
 });
 
+test("compiles distinct populations and aggregates over grouped values", () => {
+  const distinct = normalizeAdvancedAnalyticalPlan(plan({ operation: "distinct_count", source: "incidents", entity: "incidents.staff_id", metric: "", filters: [{ column: "incidents.severity", operator: "eq", value: "high" }] }), "How many distinct staff have high severity incidents?", schema);
+  assert.match(compileAdvancedAnalyticalPlan(distinct, schema).query, /COUNT\(DISTINCT "incidents"\."staff_id"\)/);
+
+  const nested = normalizeAdvancedAnalyticalPlan(plan({ operation: "aggregate_over_groups", source: "shifts", metric: "shifts.staff_id", groupField: "staff.team", innerAggregate: "count", outerAggregate: "avg", distinct: true }), "What is the average number of distinct staff per team?", schema);
+  const query = compileAdvancedAnalyticalPlan(nested, schema).query;
+  assert.match(query, /COUNT\(DISTINCT "staff"\."staff_id"\)/);
+  assert.match(query, /GROUP BY "staff"\."team"/);
+  assert.match(query, /AVG\("group_value"\)/);
+});
+
+test("repairs an explicit grouped-count average without domain rules", () => {
+  const normalized = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "distinct_count", source: "staff", metric: "*", entity: "staff.team",
+    groupField: "staff.team", dimensions: ["staff.team"], distinct: false,
+    filters: [{ column: "staff.team", operator: "eq", value: "{team}" }],
+  }), "What is the average number of staff per team?", schema);
+  assert.equal(normalized.operation, "aggregate_over_groups");
+  assert.equal(normalized.metric, "staff.staff_id");
+  assert.equal(normalized.groupField, "staff.team");
+  assert.equal(normalized.innerAggregate, "count");
+  assert.equal(normalized.outerAggregate, "avg");
+  assert.equal(normalized.distinct, true);
+  assert.deepEqual(normalized.filters, []);
+});
+
+test("unused model fields cannot alter the selected operation joins", () => {
+  const query = compileAdvancedAnalyticalPlan(plan({
+    operation: "distinct_count", source: "staff", entity: "staff.staff_id", metric: "shifts.hours",
+    secondaryMetric: "incidents.incident_id", relatedField: "incidents.staff_id", startField: "shifts.started_at",
+  }), schema).query;
+  assert.match(query, /FROM "staff"/);
+  assert.doesNotMatch(query, /JOIN/);
+  assert.doesNotMatch(query, /incidents|shifts/);
+});
+
+test("distinct counts use the schema relation that represents the requested observation", () => {
+  const normalized = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "distinct_count", source: "staff", entity: "staff.staff_id", metric: "shifts.staff_id",
+    secondaryMetric: "shifts.shift_id", relatedField: "shifts.staff_id",
+  }), "How many distinct staff worked shifts?", schema);
+  assert.equal(normalized.source, "shifts");
+  assert.match(compileAdvancedAnalyticalPlan(normalized, schema).query, /FROM "shifts"/);
+});
+
 test("builds its grammar only from the supplied unseen schema", () => {
   const dataset = { id: "h", name: "workforce.duckdb", path: "/private/workforce.duckdb", format: "duckdb" as const, sizeBytes: 1, addedAt: "now" };
   const messages = [{ role: "user" as const, content: "Average hours per staff member" }];
@@ -45,7 +90,9 @@ test("builds its grammar only from the supplied unseen schema", () => {
 test("production analytical planners contain no benchmark schema names", () => {
   const source = ["advanced-analytical-plan.ts", "analytical-plan.ts", "sql-proposals.ts"]
     .map((name) => readFileSync(new URL(`../lib/${name}`, import.meta.url), "utf8")).join("\n");
-  for (const term of ["campaigns", "payments", "support_tickets", "order_items", "products", "customers", "orders"]) assert.doesNotMatch(source, new RegExp(term));
+  for (const term of ["campaigns", "payments", "support_tickets", "order_items", "products", "customers", "orders", "staff", "shifts", "incidents", "machines", "runs", "authors", "articles", "members", "loans"]) {
+    assert.doesNotMatch(source, new RegExp(`["']${term}["']|\\b${term}\\.`));
+  }
   assert.equal(shouldUseAdvancedAnalyticalPlan("Average hours per staff member"), true);
 });
 

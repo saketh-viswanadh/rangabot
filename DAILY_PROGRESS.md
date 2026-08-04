@@ -1,5 +1,26 @@
 # Daily progress
 
+## 2026-08-04 — Model-independent analytical semantics
+
+- Added distinct-count and nested group-aggregate operations to the dynamic
+  schema grammar used identically by every configured Ollama model.
+- Separated probabilistic intent interpretation from trusted execution:
+  operation-specific fields alone may affect joins, request-explicit
+  categorical values are checked locally, and SQL is compiled deterministically.
+- Proved the two motivating development questions locally—distinct students who
+  studied Python returned 3 and average students per cohort returned 6—without
+  adding those table names, values, questions or answers to production logic.
+- Passed 185/185 deterministic tests, lint, typecheck, production build, privacy
+  scan and an audit with zero known production vulnerabilities.
+- Ran the new ecology-domain holdout only after the gates passed. The automated
+  result was 6/13, but three passes were coincidental result matches with wrong
+  semantics; strict readiness is 3/13. This exposed and fixed an evaluator
+  governance gap: future cases may declare test-only expected semantic roles,
+  and both meaning and result must match.
+- Kept the failed ecology cases sealed as evidence. They will not be used for
+  question-specific tuning; the next candidate needs general semantic-role
+  resolution and another unseen transfer domain.
+
 ## 2026-08-04 — Persistent conversational data context
 
 - Confirmed that filesystem approval already persisted locally, but the selected

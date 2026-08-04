@@ -125,6 +125,15 @@ planning code, but its first frozen logistics holdout passed only 5/12. Keep the
 calculation trace visible and verify the query: analytical planning remains below
 the release gate.
 
+The next semantic increment adds distinct populations, nested aggregation and
+local categorical-value grounding behind one model-independent contract. It
+passes 185/185 deterministic tests, but an unseen ecology transfer audit passed
+only 3/13 under strict semantic review. The initially printed 6/13 included
+three coincidental scalar matches generated from the wrong operation or grain.
+Future holdouts therefore require both an expected semantic-plan match and the
+correct executed result. This remains experimental for every model, not merely
+the default `llama3.2:3b` profile.
+
 `npm run conversation:evaluate:sql:holdout` runs the separate frozen logistics
 transfer suite. Once run, that version is evidence only and must not become a
 tuning set; subsequent improvements require a newly frozen unseen holdout.

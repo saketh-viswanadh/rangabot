@@ -3,7 +3,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { runAnalyticalHoldout } from "../scripts/analytical-holdout-runner.ts";
+import { analyticalPlanMatchesExpected, runAnalyticalHoldout } from "../scripts/analytical-holdout-runner.ts";
+
+test("requires semantic roles in addition to coincidental result equality", () => {
+  const expected = { operation: "aggregate_over_groups", groupField: "events.group_id", metric: "events.member_id", distinct: true };
+  assert.equal(analyticalPlanMatchesExpected({ operation: "aggregate_over_groups", groupField: "events.zone", metric: "events.event_id", distinct: true }, expected), false);
+  assert.equal(analyticalPlanMatchesExpected({ operation: "aggregate_over_groups", groupField: "events.group_id", metric: "events.member_id", distinct: true }, expected), true);
+});
 
 test("rejects a broken gold query before any model evaluation", async () => {
   const outputDirectory = mkdtempSync(join(tmpdir(), "rangabot-holdout-"));

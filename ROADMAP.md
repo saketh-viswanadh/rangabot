@@ -61,10 +61,15 @@ fine-tuning dataset and rollback workflow remain a later proposal.
 - [x] Replace free-form SQL for simple aggregates with a constrained analytical
   plan and deterministic compiler; unchanged-suite evidence improved from 3/50
   to 12/50 and the easy tier reached 9/10
-- [ ] Prove that schema-derived ratios, durations, conditional rates, grouped
-  thresholds, period growth, per-entity averages and anti-joins transfer across
-  domains. Sealed holdouts passed 5/12 in logistics and 6/10 valid cases in a
-  library domain; no medium-tier capability claim is currently permitted
+- [ ] Prove that schema-derived ratios, durations, conditional rates, distinct
+  populations, nested group aggregation, grouped thresholds, period growth,
+  per-entity averages and anti-joins transfer across domains. Sealed holdouts
+  passed 5/12 in logistics and 6/10 valid cases in a library domain. The unseen
+  ecology suite's nominal 6/13 fell to a strict 3/13 after rejecting three
+  coincidental right-result/wrong-semantics matches. No medium-tier capability
+  claim is currently permitted
+- [x] Require future analytical holdouts to validate expected semantic roles as
+  well as executed results, so synthetic data coincidences cannot earn a pass
 - [x] Preflight every analytical holdout reference before the first model call;
   invalid evaluator cases must never be counted as Rangabot failures
 - [ ] Add hard-tier windows, cohorts, percentiles, correlations, retention and

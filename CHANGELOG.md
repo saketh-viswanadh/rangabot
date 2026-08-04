@@ -7,6 +7,21 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+- Extended the model-independent analytical grammar with distinct populations
+  and nested group aggregation, then centralized local categorical-value
+  grounding. Every Ollama model now proposes the same schema-derived semantic
+  plan; trusted code ignores unused model fields, validates relationships and
+  compiles the SQL without accepting model-authored execution logic.
+- Added an explicit analytical semantic contract plus cross-domain tests that
+  prohibit fixture tables, values and expected answers from production code.
+  The full deterministic suite passes 185/185.
+- Froze an unseen 13-case ecology transfer suite. Its original result-only
+  scorer reported 6/13, but strict query review found three coincidental scalar
+  matches produced with the wrong operation or grain. The defensible score is
+  therefore 3/13. Future holdouts require an expected semantic-plan match as
+  well as the correct executed result; no broad analytical reliability claim is
+  made.
+
 - Dataset approval and chat attachment are now separate, explicit states:
   approval remains in the private local allowlist, while a conversation stores
   and restores its selected dataset until the user removes it. Reopening a chat
