@@ -36,6 +36,7 @@ type ConversationSummary = {
   id: string;
   title: string;
   projectId: string | null;
+  datasetId: string | null;
   pinned: boolean;
   createdAt: string;
   updatedAt: string;
@@ -252,7 +253,7 @@ export default function Home() {
     if (sending) return;
     const response = await fetch(`/api/conversations/${id}`, { cache: "no-store" });
     if (!response.ok) return;
-    const data = (await response.json()) as { conversation: { messages: ChatMessage[] } };
+    const data = (await response.json()) as { conversation: { messages: ChatMessage[] }; attachedDataset: AttachedDataset | null };
     followLatestRef.current = true;
     setMessages(data.conversation.messages.map((message) => ({
       ...message,
@@ -262,8 +263,21 @@ export default function Home() {
     })));
     setActiveConversationId(id);
     setAttachedCodeContext(null);
-    setAttachedDataset(null);
+    setAttachedDataset(data.attachedDataset);
     setSqlDraft(null);
+  }
+
+  async function attachDatasetToChat(dataset: AttachedDataset | null) {
+    if (!activeConversationId) {
+      setAttachedDataset(dataset);
+      return;
+    }
+    const response = await fetch(`/api/conversations/${activeConversationId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ datasetId: dataset?.id ?? null }),
+    });
+    if (response.ok) setAttachedDataset(dataset);
   }
 
   async function removeConversation(id: string) {
@@ -417,7 +431,11 @@ export default function Home() {
       const createResponse = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: storedMessages, projectId: activeProjectId }),
+        body: JSON.stringify({
+          messages: storedMessages,
+          projectId: activeProjectId,
+          ...(attachedDataset ? { datasetId: attachedDataset.id } : {}),
+        }),
       });
       if (createResponse.ok) {
         const data = (await createResponse.json()) as { conversation: { id: string } };
@@ -805,7 +823,7 @@ export default function Home() {
           <form className="composer" onSubmit={sendMessage}>
             {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
             {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
-            {attachedDataset && <div className="composer-code-context"><span><strong>Local data available to this chat</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>Analytical requests may run bounded read-only SQL locally. Expand the calculation trace to inspect it.</small></span><button type="button" onClick={() => setAttachedDataset(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
+            {attachedDataset && <div className="composer-code-context"><span><strong>Local data available to this chat</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>This attachment is remembered for this chat. Analytical requests may run bounded read-only SQL locally; expand the calculation trace to inspect it.</small></span><button type="button" onClick={() => void attachDatasetToChat(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -924,7 +942,7 @@ export default function Home() {
         </div>
       )}
       <MemoryPanel open={memoryPanelOpen} onClose={closeMemoryPanel} />
-      <SqlAnalysisPanel key={sqlDraft ? `${sqlDraft.datasetId}:${sqlDraft.query}` : "manual"} open={sqlPanelOpen} onClose={closeSqlPanel} onAttach={(dataset) => { setAttachedDataset(dataset); setSqlDraft(null); }} initialDraft={sqlDraft} />
+      <SqlAnalysisPanel key={sqlDraft ? `${sqlDraft.datasetId}:${sqlDraft.query}` : "manual"} open={sqlPanelOpen} onClose={closeSqlPanel} onAttach={(dataset) => { void attachDatasetToChat(dataset); setSqlDraft(null); }} initialDraft={sqlDraft} />
     </main>
   );
 }

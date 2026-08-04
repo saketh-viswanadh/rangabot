@@ -105,7 +105,11 @@ preview is read again at send time and supplied only to the local Ollama model.
 Rangabot treats SQL as a reasoning tool, not the primary interface. Open
 **Analyze**, approve a CSV, Parquet, or DuckDB file, and choose **Use selected data in
 chat**. That grants the current conversation persistent, revocable, read-only
-analytical access. Ask a normal question: Rangabot detects when calculation is
+analytical access. The file approval is stored once in the private local
+allowlist; each chat remembers its selected dataset and restores it when
+reopened, without asking for the path again. Removing the attachment affects
+only that chat, while revoking approval disables it everywhere. Ask a normal
+question: Rangabot detects when calculation is
 needed, sends only column names and types to local Ollama for planning, validates
 one `SELECT`, executes it inside bounded local DuckDB, and explains the verified
 result. Non-analytical messages do not touch the dataset.
@@ -113,10 +117,19 @@ result. Non-analytical messages do not touch the dataset.
 Multi-table DuckDB planning is experimental. `npm run conversation:evaluate:sql`
 creates a private deterministic eight-table commerce database and runs 50 cases
 (10 easy, 15 medium, 20 hard, 5 extreme). The original free-form
-`llama3.2:3b` baseline was 3/50. The first constrained analytical-plan compiler
-candidate reaches 12/50 overall and 9/10 easy, while medium, hard and extreme
-requests remain below release gates. Keep the calculation trace visible and
-verify the query; this is measured progress, not an unattended-use claim.
+`llama3.2:3b` baseline was 3/50. The first constrained compiler reached 12/50
+overall and 9/10 easy. A later 26/50 result is intentionally not published as a
+capability gain because its implementation encoded benchmark-domain concepts.
+The replacement is schema-derived and has no benchmark table names in production
+planning code, but its first frozen logistics holdout passed only 5/12. Keep the
+calculation trace visible and verify the query: analytical planning remains below
+the release gate.
+
+`npm run conversation:evaluate:sql:holdout` runs the separate frozen logistics
+transfer suite. Once run, that version is evidence only and must not become a
+tuning set; subsequent improvements require a newly frozen unseen holdout.
+Holdout runners preflight every reference query before invoking the model so an
+evaluator defect cannot be counted as a Rangabot failure.
 
 Every answer exposes an optional **How this was calculated** trace with the
 query, dataset name, row count, timing, and input/query fingerprints. A strict

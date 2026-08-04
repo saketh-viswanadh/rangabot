@@ -17,6 +17,7 @@ test("creates, lists, updates, opens, and deletes a local conversation", () => {
   const created = conversations.createConversation([{ role: "user", content: "Plan a tiny local app" }], project.id);
   assert.equal(created.title, "Plan a tiny local app");
   assert.equal(created.projectId, project.id);
+  assert.equal(created.datasetId, null);
   assert.equal(conversations.listProjects()[0]?.name, "Tiny app");
   assert.equal(conversations.listConversations()[0]?.id, created.id);
   assert.equal(created.pinned, false);
@@ -27,6 +28,9 @@ test("creates, lists, updates, opens, and deletes a local conversation", () => {
   ]);
   assert.equal(updated?.messages.length, 2);
   assert.equal(conversations.getConversation(created.id)?.messages[1]?.role, "assistant");
+  assert.equal(conversations.setConversationDataset(created.id, "approved-dataset")?.datasetId, "approved-dataset");
+  assert.equal(conversations.getConversation(created.id)?.datasetId, "approved-dataset");
+  assert.equal(conversations.setConversationDataset(created.id, null)?.datasetId, null);
 
   const other = conversations.createConversation([
     { role: "user", content: "Discuss a garden" },

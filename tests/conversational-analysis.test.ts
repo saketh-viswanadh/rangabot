@@ -12,11 +12,14 @@ const result: SqlExecutionResult = {
 test("runs analysis for analytical requests and contextual analytical follow-ups", () => {
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "What is the average revenue by region?" }]), true);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "How many customers are active?" }]), true);
-  assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "What was January revenue?" }]), true);
+  assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "What was total revenue in January?" }]), true);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "Which region is best?" }]), true);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "What is our most valuable product?" }]), true);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "Compare Python and SQL for data engineering." }]), false);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "Compare the rows in the attached dataset." }]), true);
+  assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "Tell me a little about this data." }]), true);
+  assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "Use the selected data." }]), true);
+  assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "What do you notice?" }]), true);
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "Hello there" }]), false);
   assert.equal(shouldRunSqlAnalysis([
     { role: "assistant", content: "North leads.", analysisTrace: { engine: "duckdb", dataset: "sales.csv", query: "SELECT 1", returnedRows: 2, truncated: false, durationMs: 12, inputSha256: "a".repeat(64), querySha256: "b".repeat(64) } },
@@ -27,6 +30,7 @@ test("runs analysis for analytical requests and contextual analytical follow-ups
 test("grounds narration numbers in verified result values", () => {
   assert.equal(analysisNarrationIsGrounded("North is 25 and South is 7.", result), true);
   assert.equal(analysisNarrationIsGrounded("North is 30 and South is 7.", result), false);
+  assert.equal(analysisNarrationIsGrounded("North is 25 and South is 7 across 2 rows.", result), true);
   assert.equal(analysisNarrationIsGrounded("North is 25, but the result was truncated.", result), false);
   assert.match(buildAnalysisNarrationMessages("Compare regions", { action: "query", query: "SELECT * FROM dataset", explanation: "Regional totals" }, result)[1].content, /North/);
 });

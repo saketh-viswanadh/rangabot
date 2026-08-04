@@ -12,6 +12,7 @@ export interface ConversationSummary {
   id: string;
   title: string;
   projectId: string | null;
+  datasetId: string | null;
   pinned: boolean;
   createdAt: string;
   updatedAt: string;
@@ -59,6 +60,9 @@ function getDatabase() {
   if (!columns.some((column) => column.name === "pinned")) {
     database.exec("ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
   }
+  if (!columns.some((column) => column.name === "dataset_id")) {
+    database.exec("ALTER TABLE conversations ADD COLUMN dataset_id TEXT");
+  }
   return database;
 }
 
@@ -87,7 +91,7 @@ export function listConversations(options: { query?: string; projectId?: string 
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const rows = getDatabase().prepare(`
-    SELECT id, title, project_id AS projectId, pinned, created_at AS createdAt, updated_at AS updatedAt
+    SELECT id, title, project_id AS projectId, dataset_id AS datasetId, pinned, created_at AS createdAt, updated_at AS updatedAt
     FROM conversations
     ${where}
     ORDER BY pinned DESC, updated_at DESC
@@ -95,25 +99,27 @@ export function listConversations(options: { query?: string; projectId?: string 
   return rows.map(toConversationSummary);
 }
 
-export function createConversation(messages: ChatMessage[], projectId: string | null = null): Conversation {
+export function createConversation(messages: ChatMessage[], projectId: string | null = null, datasetId: string | null = null): Conversation {
   const now = new Date().toISOString();
   const conversation: Conversation = {
     id: randomUUID(),
     title: titleFromMessages(messages),
     projectId,
+    datasetId,
     pinned: false,
     messages,
     createdAt: now,
     updatedAt: now,
   };
   getDatabase().prepare(`
-    INSERT INTO conversations (id, title, messages, project_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO conversations (id, title, messages, project_id, dataset_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     conversation.id,
     conversation.title,
     JSON.stringify(conversation.messages),
     conversation.projectId,
+    conversation.datasetId,
     conversation.createdAt,
     conversation.updatedAt,
   );
@@ -122,7 +128,7 @@ export function createConversation(messages: ChatMessage[], projectId: string | 
 
 export function getConversation(id: string): Conversation | null {
   const row = getDatabase().prepare(`
-    SELECT id, title, messages, project_id AS projectId, pinned, created_at AS createdAt, updated_at AS updatedAt
+    SELECT id, title, messages, project_id AS projectId, dataset_id AS datasetId, pinned, created_at AS createdAt, updated_at AS updatedAt
     FROM conversations WHERE id = ?
   `).get(id) as unknown as (ConversationSummaryRow & { messages: string }) | undefined;
   return row ? { ...toConversationSummary(row), messages: parseMessages(row.messages) } : null;
@@ -146,10 +152,17 @@ export function setConversationPinned(id: string, pinned: boolean): Conversation
   const result = getDatabase().prepare("UPDATE conversations SET pinned = ? WHERE id = ?").run(pinned ? 1 : 0, id);
   if (!result.changes) return null;
   const row = getDatabase().prepare(`
-    SELECT id, title, project_id AS projectId, pinned, created_at AS createdAt, updated_at AS updatedAt
+    SELECT id, title, project_id AS projectId, dataset_id AS datasetId, pinned, created_at AS createdAt, updated_at AS updatedAt
     FROM conversations WHERE id = ?
   `).get(id) as unknown as ConversationSummaryRow;
   return toConversationSummary(row);
+}
+
+export function setConversationDataset(id: string, datasetId: string | null): Conversation | null {
+  const updatedAt = new Date().toISOString();
+  const result = getDatabase().prepare("UPDATE conversations SET dataset_id = ?, updated_at = ? WHERE id = ?")
+    .run(datasetId, updatedAt, id);
+  return result.changes ? getConversation(id) : null;
 }
 
 export function listProjects(): ProjectSummary[] {
