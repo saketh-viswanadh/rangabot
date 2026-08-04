@@ -5,7 +5,7 @@ import type { DatasetColumn } from "../lib/sql-runtime.ts";
 
 function proposed(overrides: Record<string, unknown>) {
   return parseAdvancedAnalyticalPlan(JSON.stringify({
-    action: "query", operation: "ratio", source: "", metric: "", secondaryMetric: "", entity: "", dimensions: [],
+    action: "query", operation: "ratio", source: "", metric: "", secondaryMetric: "", entity: "", groupField: "", innerAggregate: "count", outerAggregate: "avg", distinct: false, dimensions: [],
     startField: "", endField: "", dateField: "", relatedField: "", filters: [], numeratorFilters: [], denominatorFilters: [],
     threshold: 0, decimals: 2, firstStart: "", firstEnd: "", secondStart: "", secondEnd: "", explanation: "Proposed calculation.", ...overrides,
   }));
@@ -47,6 +47,23 @@ test("current request may explicitly authorize a Boolean filter", () => {
     filters: [{ column: "runs.approved", operator: "eq", value: "false" }],
   }), "For approved runs, what is output_kg divided by energy_kwh?", manufacturing);
   assert.deepEqual(plan.filters, [{ column: "runs.approved", operator: "eq", value: "true" }]);
+});
+
+test("explicit categorical values survive without requiring database jargon", () => {
+  const plan = normalizeAdvancedAnalyticalPlan(proposed({
+    operation: "distinct_count", source: "articles", entity: "articles.author_id",
+    filters: [{ column: "articles.topic", operator: "eq", value: "Robotics" }],
+  }), "How many distinct authors published Robotics at least once?", [
+    ...publishing,
+    { table: "articles", name: "topic", type: "VARCHAR" },
+  ]);
+  assert.deepEqual(plan.filters, [{ column: "articles.topic", operator: "eq", value: "Robotics" }]);
+
+  const unsafeNumeric = normalizeAdvancedAnalyticalPlan(proposed({
+    operation: "distinct_count", source: "articles", entity: "articles.author_id",
+    filters: [{ column: "articles.article_id", operator: "gte", value: "3" }],
+  }), "How many distinct authors published at least 3 times?", publishing);
+  assert.deepEqual(unsafeNumeric.filters, []);
 });
 
 test("invalid cross-relation duration becomes a clarification", () => {

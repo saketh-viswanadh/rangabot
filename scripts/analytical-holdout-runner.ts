@@ -1,14 +1,39 @@
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, compileAdvancedAnalyticalPlan, normalizeAdvancedAnalyticalPlan, parseAdvancedAnalyticalPlan, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
+import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
+import { compileGroundedAdvancedAnalyticalPlan } from "../lib/analytical-filter-grounding.ts";
 import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan } from "../lib/analytical-plan.ts";
 import type { ApprovedDataset } from "../lib/datasets.ts";
 import { completeJsonWithOllama } from "../lib/providers/ollama.ts";
 import type { ChatMessage } from "../lib/providers/types.ts";
+import type { SqlProposal } from "../lib/sql-proposals.ts";
 import { executeReadOnlySql, inspectDatasetSchema, type SqlExecutionResult } from "../lib/sql-runtime.ts";
 
-export type AnalyticalHoldoutCase = { id: string; question: string; goldSql?: string; boundary?: "clarify" | "unavailable" };
+export type ExpectedAnalyticalPlan = {
+  operation?: string;
+  aggregate?: string;
+  source?: string;
+  metric?: string;
+  secondaryMetric?: string;
+  entity?: string;
+  groupField?: string;
+  innerAggregate?: string;
+  outerAggregate?: string;
+  distinct?: boolean;
+  startField?: string;
+  endField?: string;
+  dateField?: string;
+  relatedField?: string;
+  dimensions?: string[];
+  filters?: Array<{ column: string; operator: string; value: string }>;
+  threshold?: number;
+  firstStart?: string;
+  firstEnd?: string;
+  secondStart?: string;
+  secondEnd?: string;
+};
+export type AnalyticalHoldoutCase = { id: string; question: string; goldSql?: string; boundary?: "clarify" | "unavailable"; expectedPlan?: ExpectedAnalyticalPlan };
 export type AnalyticalHoldoutDefinition = { suite: string; frozenAt: string; databaseName: string; setupSql: string; cases: AnalyticalHoldoutCase[]; outputDirectory?: string };
 
 function cell(value: unknown) { return value === null ? "null" : typeof value === "object" ? JSON.stringify(value) : String(value); }
@@ -19,6 +44,12 @@ function equivalent(left: unknown, right: unknown) {
 }
 function resultsMatch(candidate: SqlExecutionResult, gold: SqlExecutionResult) {
   return candidate.rows.length === gold.rows.length && gold.rows.every((row) => candidate.rows.some((other) => row.every((value) => other.some((item) => equivalent(item, value)))));
+}
+export function analyticalPlanMatchesExpected(plan: Record<string, unknown>, expected?: ExpectedAnalyticalPlan) {
+  if (!expected) return true;
+  return Object.entries(expected).every(([field, value]) => Array.isArray(value)
+    ? JSON.stringify(plan[field]) === JSON.stringify(value)
+    : plan[field] === value);
 }
 
 export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefinition) {
@@ -43,14 +74,25 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
   for (const item of definition.cases) {
     const started = Date.now(); const messages: ChatMessage[] = [{ role: "user", content: item.question }];
     try {
-      const proposal = shouldUseAdvancedAnalyticalPlan(item.question)
-        ? compileAdvancedAnalyticalPlan(normalizeAdvancedAnalyticalPlan(parseAdvancedAnalyticalPlan(await completeJsonWithOllama(buildAdvancedAnalyticalMessages(messages, dataset, schema), { jsonSchema: buildAdvancedAnalyticalSchema(messages, dataset, schema), numPredict: 900, timeoutMs: 180_000 })), item.question, schema), schema)
-        : compileAnalyticalPlan(normalizeAnalyticalPlan(parseAnalyticalPlan(await completeJsonWithOllama(buildAnalyticalPlanMessages(messages, dataset, schema), { jsonSchema: buildAnalyticalPlanSchema(messages, dataset, schema), numPredict: 700, timeoutMs: 180_000 })), item.question, schema), schema);
-      if (item.boundary) results.push({ ...item, action: proposal.action, sql: proposal.query, passed: proposal.action === item.boundary, latencyMs: Date.now() - started });
+      const advanced = shouldUseAdvancedAnalyticalPlan(item.question);
+      let plan: unknown;
+      let proposal: SqlProposal;
+      if (advanced) {
+        const compiled = await compileGroundedAdvancedAnalyticalPlan(await completeJsonWithOllama(buildAdvancedAnalyticalMessages(messages, dataset, schema), { jsonSchema: buildAdvancedAnalyticalSchema(messages, dataset, schema), numPredict: 900, timeoutMs: 180_000 }), item.question, schema, databasePath);
+        plan = compiled.plan;
+        proposal = compiled.proposal;
+      } else {
+        const raw = await completeJsonWithOllama(buildAnalyticalPlanMessages(messages, dataset, schema), { jsonSchema: buildAnalyticalPlanSchema(messages, dataset, schema), numPredict: 700, timeoutMs: 180_000 });
+        const basicPlan = normalizeAnalyticalPlan(parseAnalyticalPlan(raw), item.question, schema);
+        plan = basicPlan;
+        proposal = compileAnalyticalPlan(basicPlan, schema);
+      }
+      const semanticPass = analyticalPlanMatchesExpected(plan as unknown as Record<string, unknown>, item.expectedPlan);
+      if (item.boundary) results.push({ ...item, action: proposal.action, plan, sql: proposal.query, passed: proposal.action === item.boundary && semanticPass, latencyMs: Date.now() - started });
       else {
         const candidate = await executeReadOnlySql({ approvedDatasetPath: databasePath, query: proposal.query });
         const gold = goldResults.get(item.id)!;
-        results.push({ ...item, action: proposal.action, sql: proposal.query, passed: resultsMatch(candidate, gold), latencyMs: Date.now() - started });
+        results.push({ ...item, action: proposal.action, plan, sql: proposal.query, passed: semanticPass && resultsMatch(candidate, gold), latencyMs: Date.now() - started });
       }
     } catch (error) { results.push({ ...item, action: "error", sql: null, passed: false, error: error instanceof Error ? error.message : String(error), latencyMs: Date.now() - started }); }
     console.log(`${results.at(-1)?.passed ? "PASS" : "FAIL"} ${item.id}`);

@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, compileAdvancedAnalyticalPlan, normalizeAdvancedAnalyticalPlan, parseAdvancedAnalyticalPlan, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
+import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
+import { compileGroundedAdvancedAnalyticalPlan } from "../lib/analytical-filter-grounding.ts";
 import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan } from "../lib/analytical-plan.ts";
 import type { ApprovedDataset } from "../lib/datasets.ts";
 import { completeJsonWithOllama } from "../lib/providers/ollama.ts";
@@ -59,7 +60,7 @@ for (const item of cases) {
   const started = Date.now(); const messages: ChatMessage[] = [{ role: "user", content: item.question }];
   try {
     const proposal = shouldUseAdvancedAnalyticalPlan(item.question)
-      ? compileAdvancedAnalyticalPlan(normalizeAdvancedAnalyticalPlan(parseAdvancedAnalyticalPlan(await completeJsonWithOllama(buildAdvancedAnalyticalMessages(messages, dataset, schema), { jsonSchema: buildAdvancedAnalyticalSchema(messages, dataset, schema), numPredict: 900, timeoutMs: 180_000 })), item.question, schema), schema)
+      ? (await compileGroundedAdvancedAnalyticalPlan(await completeJsonWithOllama(buildAdvancedAnalyticalMessages(messages, dataset, schema), { jsonSchema: buildAdvancedAnalyticalSchema(messages, dataset, schema), numPredict: 900, timeoutMs: 180_000 }), item.question, schema, databasePath)).proposal
       : compileAnalyticalPlan(normalizeAnalyticalPlan(parseAnalyticalPlan(await completeJsonWithOllama(buildAnalyticalPlanMessages(messages, dataset, schema), { jsonSchema: buildAnalyticalPlanSchema(messages, dataset, schema), numPredict: 700, timeoutMs: 180_000 })), item.question, schema), schema);
     if (item.boundary) results.push({ ...item, action: proposal.action, sql: proposal.query, passed: proposal.action === item.boundary, latencyMs: Date.now() - started });
     else {

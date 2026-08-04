@@ -38,6 +38,7 @@
     "conversation:evaluate:sql": "node --experimental-strip-types scripts/evaluate-conversational-sql.ts",
     "conversation:evaluate:sql:holdout": "node --experimental-strip-types scripts/evaluate-analytical-holdout.ts",
     "conversation:evaluate:sql:holdout:v2": "node --experimental-strip-types scripts/evaluate-analytical-holdout-v2.ts",
+    "conversation:evaluate:sql:holdout:v3": "node --experimental-strip-types scripts/evaluate-analytical-holdout-v3.ts",
     "conversation:reviewer:qualify": "node --experimental-strip-types scripts/qualify-conversation-reviewer.ts",
     "knowledge:validate": "node --experimental-strip-types scripts/knowledge-cli.ts validate",
     "knowledge:backup": "node --experimental-strip-types scripts/knowledge-cli.ts backup",

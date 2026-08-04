@@ -7,7 +7,8 @@ import type { ChatMessage } from "../lib/providers/types.ts";
 import { completeJsonWithOllama, completeTextWithOllama } from "../lib/providers/ollama.ts";
 import { inspectDatasetSchema, executeReadOnlySql, type SqlExecutionResult } from "../lib/sql-runtime.ts";
 import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan } from "../lib/analytical-plan.ts";
-import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, compileAdvancedAnalyticalPlan, normalizeAdvancedAnalyticalPlan, parseAdvancedAnalyticalPlan, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
+import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
+import { compileGroundedAdvancedAnalyticalPlan } from "../lib/analytical-filter-grounding.ts";
 import { analysisNarrationIsGrounded, buildAnalysisNarrationMessages, formatVerifiedAnalysisFallback, shouldRunSqlAnalysis } from "../lib/conversational-analysis.ts";
 import { buildConversationMessages } from "../lib/conversation-orchestration.ts";
 
@@ -167,7 +168,7 @@ async function runCase(testCase: ConversationalSqlCase, dataset: ApprovedDataset
     let answer: string;
     if (shouldRunSqlAnalysis(messages)) {
       const proposal = shouldUseAdvancedAnalyticalPlan(testCase.question)
-        ? compileAdvancedAnalyticalPlan(normalizeAdvancedAnalyticalPlan(parseAdvancedAnalyticalPlan(await completeJsonWithOllama(buildAdvancedAnalyticalMessages(messages, dataset, schema), { jsonSchema: buildAdvancedAnalyticalSchema(messages, dataset, schema), numPredict: 900, timeoutMs: 180_000 })), testCase.question, schema), schema)
+        ? (await compileGroundedAdvancedAnalyticalPlan(await completeJsonWithOllama(buildAdvancedAnalyticalMessages(messages, dataset, schema), { jsonSchema: buildAdvancedAnalyticalSchema(messages, dataset, schema), numPredict: 900, timeoutMs: 180_000 }), testCase.question, schema, databasePath)).proposal
         : compileAnalyticalPlan(normalizeAnalyticalPlan(parseAnalyticalPlan(await completeJsonWithOllama(buildAnalyticalPlanMessages(messages, dataset, schema), { jsonSchema: buildAnalyticalPlanSchema(messages, dataset, schema), numPredict: 700, timeoutMs: 180_000 })), testCase.question, schema), schema);
       if (proposal.action !== "query") {
         answer = proposal.explanation;
