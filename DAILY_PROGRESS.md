@@ -40,6 +40,12 @@
   checkpoints were not model-specific. Added explicit `--model` and
   `--num-ctx` controls plus model/context checkpoint isolation and result
   provenance, preventing Llama answers from contaminating a Qwen comparison.
+- Ran a three-case Qwen Teacher Mode diagnostic after the isolation fix. The
+  Python case completed and passed in 88.2 seconds; SQL and NumPy each exceeded
+  the 180-second absolute deadline. The completed-case rate is 1/1, but the
+  honest provisional floor is 1/3 with two execution errors. This is neither a
+  full-suite score nor evidence that Qwen is practical for Teacher Mode on the
+  local 8 GB machine.
 
 ## 2026-08-04 — Schema-derived semantic-role resolver
 

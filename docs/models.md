@@ -84,6 +84,12 @@ grounding review, so it is substantially heavier than retrieval-only
 context and selected cases; a Qwen run cannot reuse Llama answers. Full answers
 remain private and Git-ignored.
 
+The first three-case Qwen Teacher Mode diagnostic on the local 8 GB M1 profile
+completed only one case: it passed in 88.2 seconds, while the SQL and NumPy
+cases each exceeded the 180-second absolute deadline. Its provisional floor is
+therefore 1/3. Qwen is not recommended for routine Teacher Mode on this hardware;
+the resumable command is useful for controlled evaluation only.
+
 When contributing a model entry, include the exact Ollama identifier, upstream
 model card, license, approximate hardware requirement, intended use, known
 limitations and locally reproducible evaluation results.

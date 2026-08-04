@@ -34,6 +34,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - Added explicit model/context selection to Knowledge answer evaluation and
   included both values in its checkpoint key and private result metadata. This
   prevents a Qwen comparison from silently resuming Llama-generated answers.
+  A first three-case Qwen diagnostic completed 1/3 within the 180-second case
+  deadline; two timeouts make it unsuitable for routine Teacher Mode on the
+  tested 8 GB profile.
 
 - Added a deterministic semantic-role resolver ahead of advanced model plans.
   It independently identifies high-confidence count populations, grouping
