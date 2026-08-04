@@ -97,15 +97,16 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   persist only after explicit user approval and invalidate when input data changes
 - [x] Add a frozen adaptive-reviewer qualification gate that requires correction
   of every bad draft and preservation of every good draft before activation
-- [ ] Qualify a separate approved local reviewer model at 12/12; the installed
-  `llama3.2:3b` and `qwen2.5:7b` profiles are both blocked after scoring 1/12
-  and cannot rewrite live answers
+- [ ] Qualify a separate approved local reviewer model at 12/12; the evaluated
+  `llama3.2:3b` and `qwen2.5:7b` profiles both scored 1/12 and cannot rewrite
+  live answers. Qwen was subsequently removed from the tested 8 GB host
 - [ ] Complete Mind & Memory evaluation across every supported model profile.
   A sequential registry-driven matrix runner now applies the same frozen suite,
-  fixed context and private result format to installed profiles; full Llama/Qwen
-  evidence still needs to be run before publishing aggregate scorecards. The
-  first complete critical partition tied at 21/22, with Qwen 2.3x slower but
-  semantically correcting Llama's material false-premise failure
+  fixed context and private result format to installed profiles; a full
+  cross-model suite still needs to be run before publishing aggregate
+  scorecards. The critical partition recorded before Qwen's removal tied at
+  21/22, with Qwen 2.3x slower but semantically correcting Llama's material
+  false-premise failure
 - [ ] Add inspectable correction and memory-conflict workflows so outdated facts
   can be superseded without silently deleting provenance
 - [x] Govern official mastery attribution through evidence-backed claims,

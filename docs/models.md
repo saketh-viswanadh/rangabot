@@ -59,18 +59,21 @@ stops before loading it. `--allow-undersized-memory` is an explicit override,
 not a claim that the model will run comfortably.
 
 On an 8 GB Mac, keep `llama3.2:3b` as the default. `qwen2.5:7b` is an optional
-comparison profile whose 4.7 GB model artifact leaves little headroom for macOS,
-Next.js and runtime context. Close memory-heavy applications, use the 4096-token
-profile and never run both models concurrently.
+registry profile whose 4.7 GB model artifact leaves little headroom for macOS,
+Next.js and runtime context. It was removed from the tested machine after the
+evaluation below. Contributors who deliberately install it should close
+memory-heavy applications, use the 4096-token profile and never run both models
+concurrently.
 
 The first frozen critical comparison on the local 8 GB M1 profile recorded
 21/22 for both models. Qwen averaged 11.1 seconds versus Llama's 4.8 seconds.
 Manual inspection found that Qwen correctly rejected a false Python premise
 that Llama repeated, while Qwen's single rubric failure was an honest “not
 possible” response omitted by the frozen lexical variants. The rubric and
-recorded score were not changed after seeing the answer. Qwen therefore remains
-an opt-in reasoning comparison—not an automatic quality tier. It also failed
-the reviewer gate at 1/12 and must not revise live answers.
+recorded score were not changed after seeing the answer. The Qwen registry entry
+therefore remains useful for opt-in reasoning comparisons on suitable hardware,
+but it is not an automatic quality tier. It also failed the reviewer gate at
+1/12 and must not revise live answers.
 
 To compare Teacher Mode answer quality on a small, subject-balanced Qwen sample:
 
@@ -87,8 +90,9 @@ remain private and Git-ignored.
 The first three-case Qwen Teacher Mode diagnostic on the local 8 GB M1 profile
 completed only one case: it passed in 88.2 seconds, while the SQL and NumPy
 cases each exceeded the 180-second absolute deadline. Its provisional floor is
-therefore 1/3. Qwen is not recommended for routine Teacher Mode on this hardware;
-the resumable command is useful for controlled evaluation only.
+therefore 1/3. Qwen is not recommended for routine Teacher Mode on this hardware
+and was removed locally after this test; the command remains useful for
+controlled evaluation on hosts where the model is deliberately installed.
 
 When contributing a model entry, include the exact Ollama identifier, upstream
 model card, license, approximate hardware requirement, intended use, known

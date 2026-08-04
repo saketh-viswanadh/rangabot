@@ -15,8 +15,8 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   score.
 - Standardized `OLLAMA_NUM_CTX` across text, JSON and streaming generation.
   Memory-fit guidance remains enforced by default, and an undersized-machine
-  override must be explicit. `qwen2.5:7b` remains opt-in rather than replacing
-  the 3B starter model.
+  override must be explicit. `qwen2.5:7b` remains an opt-in registry profile
+  rather than replacing the 3B starter model.
 - Replaced the earlier automatic timeout retry with one absolute generation
   deadline. A Qwen cold diagnostic demonstrated that two per-attempt deadlines
   could keep one request open for 328 seconds. Cancellation, timeout, unavailable
@@ -27,8 +27,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   Both recorded 21/22. Qwen averaged 11.1 seconds versus Llama's 4.8 seconds;
   Qwen's scored failure was an evaluator wording false negative, while Llama's
   failure materially repeated a false claim about Python indentation. The
-  frozen scores remain unchanged. Qwen is retained only as an opt-in difficult-
-  reasoning comparison profile, not a default or automatic route.
+  frozen scores remain unchanged. Qwen remains available as an opt-in registry
+  profile for suitable hardware, not a default or automatic route. Its local
+  4.7 GB artifact was removed after evaluation because the narrow reasoning
+  benefit did not justify its memory pressure, latency and Teacher Mode failures
+  on the tested 8 GB Mac.
 - Qwen failed the unchanged adaptive-reviewer qualification at 1/12, matching
   the blocked Llama result. It must not review or rewrite live answers.
 - Added explicit model/context selection to Knowledge answer evaluation and

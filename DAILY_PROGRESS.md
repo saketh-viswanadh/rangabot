@@ -33,9 +33,9 @@
   accept that phrasing. The result remains a frozen failure rather than being
   rescored after inspection.
 - Qwen then failed reviewer qualification at 1/12, so it is barred from live
-  review. It remains installed but unloaded and opt-in because the critical run
-  demonstrates one genuine reasoning improvement over Llama; this does not
-  justify making it the default or automatically routing user requests to it.
+  review. The critical run demonstrates one genuine reasoning improvement over
+  Llama, but that did not justify making it the default or automatically routing
+  user requests to it.
 - Audited the Knowledge answer evaluator before cross-model use and found that
   checkpoints were not model-specific. Added explicit `--model` and
   `--num-ctx` controls plus model/context checkpoint isolation and result
@@ -46,6 +46,11 @@
   honest provisional floor is 1/3 with two execution errors. This is neither a
   full-suite score nor evidence that Qwen is practical for Teacher Mode on the
   local 8 GB machine.
+- Removed the local `qwen2.5:7b` artifact after the evaluation decision,
+  recovering about 4.7 GB. `llama3.2:3b` remains the configured chat model and
+  `nomic-embed-text` remains available for local embeddings. The public registry
+  entry and reproducible evaluation tooling remain for contributors with
+  suitable hardware.
 
 ## 2026-08-04 — Schema-derived semantic-role resolver
 

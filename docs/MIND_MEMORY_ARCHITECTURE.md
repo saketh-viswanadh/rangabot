@@ -201,6 +201,8 @@ release: repeated critical and blinded usefulness gates remain outstanding.
 On 2026-08-05, `qwen2.5:7b` also passed only 1/12 reviewer cases and remains
 blocked. The first same-context critical comparison recorded 21/22 for both
 Qwen and Llama. Qwen was 2.3x slower, but correctly rejected a material Python
-false premise that Llama repeated. This is enough to retain Qwen as an opt-in
-comparison profile, not enough to enable automatic routing or reviewing. A
-complete cross-model suite has not yet run.
+false premise that Llama repeated. That narrow benefit did not outweigh its
+memory pressure, latency and Teacher Mode failures on the 8 GB host, so the
+local artifact was removed after testing. Registry support remains for
+controlled comparisons on suitable hardware; automatic routing and reviewing
+remain disabled. A complete cross-model suite has not yet run.
