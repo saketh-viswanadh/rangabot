@@ -21,16 +21,6 @@ function schemaTokens(value: string) {
   return new Set(value.toLowerCase().match(/[a-z0-9]+/g)?.map((token) => token.length > 4 && token.endsWith("s") ? token.slice(0, -1) : token).filter((token) => token.length > 2 && !schemaStopWords.has(token)) ?? []);
 }
 
-const schemaConcepts: Array<{ request: RegExp; columns: RegExp }> = [
-  { request: /\b(?:revenue|sales|paid|order value)\b/i, columns: /\b(?:amount|payment_status|unit_price|discount_pct)\b/i },
-  { request: /\b(?:units?|items?|quantity)\b/i, columns: /\bquantity\b/i },
-  { request: /\b(?:margin|cost|profit)\b/i, columns: /\b(?:unit_cost|unit_price|discount_pct|quantity)\b/i },
-  { request: /\b(?:active|inactive)\b/i, columns: /\bis_active\b/i },
-  { request: /\b(?:refund|returned?|return rate)\b/i, columns: /\b(?:status|payment_status|return_quantity|return_reason|return_date)\b/i },
-  { request: /\b(?:support|tickets?|resolution|satisfaction)\b/i, columns: /\b(?:created_at|resolved_at|priority|satisfaction_score)\b/i },
-  { request: /\b(?:signup|acquisition|cohort)\b/i, columns: /\b(?:signup_date|acquisition_channel)\b/i },
-];
-
 export function focusDatabaseSchema(columns: DatasetColumn[], request: string): DatasetColumn[] {
   if (!columns.some((column) => column.table)) return columns;
   const byTable = new Map<string, DatasetColumn[]>();
@@ -45,11 +35,14 @@ export function focusDatabaseSchema(columns: DatasetColumn[], request: string): 
       if (column.name.endsWith("_id")) continue;
       score += [...schemaTokens(column.name)].filter((token) => requestTokens.has(token)).length * 2;
     }
-    for (const concept of schemaConcepts) if (concept.request.test(request) && tableColumns.some((column) => concept.columns.test(column.name))) score += 2;
     return { table, score };
   }).sort((a, b) => b.score - a.score || a.table.localeCompare(b.table));
   const selected = new Set(scores.filter((item) => item.score > 0).slice(0, 6).map((item) => item.table));
   if (!selected.size) return columns;
+  // A weak column-only match is not enough evidence to hide the rest of an
+  // unfamiliar schema. Preserve the complete schema and let the constrained
+  // planner decide instead of encoding domain synonyms here.
+  if ((scores[0]?.score ?? 0) < 5) return columns;
 
   const neighbors = new Map<string, Set<string>>();
   for (const [left, leftColumns] of byTable) for (const [right, rightColumns] of byTable) {

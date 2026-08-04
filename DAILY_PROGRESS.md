@@ -1,5 +1,48 @@
 # Daily progress
 
+## 2026-08-04 — Persistent conversational data context
+
+- Confirmed that filesystem approval already persisted locally, but the selected
+  dataset was held only in React state and was explicitly cleared whenever a
+  saved conversation reopened.
+- Added a local SQLite `dataset_id` migration, validated create/update API
+  boundaries, and per-conversation attach/remove persistence. Reopening a chat
+  restores only metadata for an approval that still exists; revoked approvals
+  fail closed.
+- Broadened attached-data routing for natural exploration requests without
+  treating unrelated uses of the word “data” as SQL intent.
+- Added persistence, removal, positive-routing and false-positive regression
+  tests. Dataset approvals are now explicitly ignored by Git.
+
+## 2026-08-03 — Organic analytical-planning reset
+
+- Audited the unpublished 26/50 candidate and found benchmark-domain regexes and
+  templates. That result is withdrawn as evidence of organic improvement.
+- Removed those templates and all benchmark table names from production
+  analytical planners. Replaced them with schema-derived field enums, typed
+  filters, key-derived join paths and a domain-neutral operation grammar.
+- Reworked tests around a workforce schema and added a source scan preventing
+  benchmark table names from returning to the production planners.
+- Froze and ran a different 12-case logistics transfer suite exactly once. It
+  passed 5/12. Failures were retained rather than tuned away; v1 is now sealed
+  and any candidate improvement must use development fixtures plus a fresh
+  unseen holdout.
+- Corrected a numeric-grounding tokenizer defect where commas between adjacent
+  JSON cells were mistaken for thousands separators. The 3/50 and 12/50 full
+  baselines had no correct-result cases rejected solely by this defect, so they
+  remain comparable and were not silently rescored.
+- No medium milestone is claimed. The last valid unchanged development result
+  remains 12/50, and the independent transfer result is 5/12.
+- Added 16 cross-domain and adversarial validator tests covering workforce,
+  manufacturing, and publishing schemas. The complete deterministic suite is
+  now 176/176.
+- The fresh library-domain v2 holdout recorded 6 passes, 4 genuine failures and
+  2 invalid cases caused by broken reference SQL. Therefore its valid-case score
+  is 6/10, not 6/12, and it is not a release pass. The suite is sealed and was
+  not used for question-specific tuning.
+- Hardened the holdout runner to execute every reference query before making any
+  model call. This prevents evaluator defects from contaminating future learning.
+
 ## 2026-08-03 — Constrained analytical-plan compiler, increment one
 
 - Replaced the model-authored SQL path with a small typed plan covering one

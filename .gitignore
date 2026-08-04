@@ -9,6 +9,8 @@ next-env.d.ts
 .DS_Store
 data/*.db
 data/*.db-*
+data/datasets.json
+data/sql-confirmations.json
 data/repositories.json
 data/artifacts/
 data/knowledge/inbox/

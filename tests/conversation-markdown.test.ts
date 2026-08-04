@@ -7,6 +7,7 @@ test("round-trips a readable Markdown conversation without losing message metada
     id: "local-test",
     title: "Python & SQL plan",
     projectId: null,
+    datasetId: null,
     pinned: false,
     createdAt: "2026-07-28T00:00:00.000Z",
     updatedAt: "2026-07-28T00:01:00.000Z",

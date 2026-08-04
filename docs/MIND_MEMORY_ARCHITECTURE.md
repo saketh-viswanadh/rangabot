@@ -21,6 +21,9 @@ for instruction precedence, memory, provider execution, or truthfulness.
 9. Private chats, live memories, and model answers never become public fixtures.
 10. No model-specific answer, benchmark phrase, or question-specific production
     prompt is allowed.
+11. Model-produced plans are proposals, never authority: each material field,
+    filter, memory, constraint, and action must have inspectable provenance in
+    the current request or an explicitly approved source.
 
 ## Request path
 
@@ -36,6 +39,24 @@ validated request
   -> narrow contract conformance where required
   -> streamed or buffered local response with an inspectable receipt
 ```
+
+Tool-using paths add one model-independent boundary before execution:
+
+```text
+model interpretation proposal
+  -> current-request provenance audit
+  -> operation and capability contract
+  -> deterministic normalization where evidence is unambiguous
+  -> focused clarification where it is not
+  -> bounded local execution
+  -> evidence-grounded narration
+```
+
+This is the same precedence principle used by memory selection. A retrieved
+memory or model-proposed filter may help only when relevant and non-conflicting;
+neither may silently override the current request. The analytical validator is
+the first executable proof of this shared proposal-audit pattern. It is not yet
+evidence that the broader tool planner is reliable.
 
 ## Architectural responsibilities
 
@@ -78,6 +99,19 @@ Normal answers remain model-generated and streamed. Requests that explicitly
 require a machine-exact token or delimiter format use buffered generation and a
 narrow deterministic normalizer. This is a contract guarantee, not an answer
 template.
+
+### Proposal provenance
+
+`lib/advanced-analytical-plan.ts` records why model-proposed fields were kept,
+removed, replaced, or converted to clarification. It validates types, output
+grain, Boolean intent, calendar boundaries, relation roles, and operation
+requirements without domain table names. This audit pattern is a candidate for
+future shared tool planning, but it must not be generalized into memory or other
+paths until separate tests show that the abstraction preserves their contracts.
+
+Evaluation follows the same trust boundary: every gold query must execute before
+the first model call. Evaluator defects invalidate affected cases and are never
+reported as product failures or silently repaired into a better score.
 
 ## Harsh baseline and release gates
 

@@ -28,24 +28,19 @@ test("builds a multi-table schema prompt without exposing the database path", ()
   assert.doesNotMatch(messages[1].content, /private\/shop/);
 });
 
-const commerceSchema = [
-  { table: "customers", name: "customer_id", type: "INTEGER" },
-  { table: "customers", name: "region", type: "VARCHAR" },
-  { table: "orders", name: "order_id", type: "INTEGER" },
-  { table: "orders", name: "customer_id", type: "INTEGER" },
-  { table: "orders", name: "status", type: "VARCHAR" },
-  { table: "payments", name: "order_id", type: "INTEGER" },
-  { table: "payments", name: "amount", type: "DOUBLE" },
-  { table: "payments", name: "payment_status", type: "VARCHAR" },
-  { table: "products", name: "product_id", type: "INTEGER" },
-  { table: "products", name: "category", type: "VARCHAR" },
-  { table: "order_items", name: "order_id", type: "INTEGER" },
-  { table: "order_items", name: "product_id", type: "INTEGER" },
-  { table: "order_items", name: "quantity", type: "INTEGER" },
+const workforceSchema = [
+  { table: "staff", name: "staff_id", type: "INTEGER" },
+  { table: "staff", name: "team", type: "VARCHAR" },
+  { table: "shifts", name: "shift_id", type: "INTEGER" },
+  { table: "shifts", name: "staff_id", type: "INTEGER" },
+  { table: "shifts", name: "hours", type: "DOUBLE" },
+  { table: "incidents", name: "incident_id", type: "INTEGER" },
+  { table: "incidents", name: "staff_id", type: "INTEGER" },
+  { table: "incidents", name: "severity", type: "VARCHAR" },
 ];
 
 test("focuses a database schema on relevant tables and necessary join bridges", () => {
-  assert.deepEqual([...new Set(focusDatabaseSchema(commerceSchema, "total successfully paid revenue").map((column) => column.table))], ["payments"]);
-  assert.deepEqual(new Set(focusDatabaseSchema(commerceSchema, "paid revenue by customer region").map((column) => column.table)), new Set(["customers", "orders", "payments"]));
-  assert.deepEqual(new Set(focusDatabaseSchema(commerceSchema, "units sold by product category excluding cancelled orders").map((column) => column.table)), new Set(["orders", "products", "order_items"]));
+  assert.deepEqual([...new Set(focusDatabaseSchema(workforceSchema, "total hours from shifts").map((column) => column.table))], ["shifts"]);
+  assert.deepEqual(new Set(focusDatabaseSchema(workforceSchema, "shift hours by staff team").map((column) => column.table)), new Set(["staff", "shifts"]));
+  assert.deepEqual(new Set(focusDatabaseSchema(workforceSchema, "incidents by staff team").map((column) => column.table)), new Set(["staff", "incidents"]));
 });

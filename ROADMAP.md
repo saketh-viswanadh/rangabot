@@ -54,14 +54,22 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   to local chat so the model can draft validated SQL into the review workspace
 - [x] Make approved local data conversational: detect analytical intent, execute
   bounded read-only SQL, audit numeric narration, and retain an inspectable trace
+- [x] Persist an approved dataset attachment with its conversation, restore it
+  on reopen, and keep attachment removal distinct from allowlist revocation
 - [x] Add native read-only multi-table DuckDB inspection plus a frozen 50-case
   benchmark covering four difficulty and four context levels
 - [x] Replace free-form SQL for simple aggregates with a constrained analytical
   plan and deterministic compiler; unchanged-suite evidence improved from 3/50
   to 12/50 and the easy tier reached 9/10
-- [ ] Extend the analytical compiler to derived metrics, multiple measures,
-  intervals, grouped subqueries and medium-tier calculations. Current medium
-  score is 2/15; no broad autonomous multi-table reliability claim is permitted
+- [ ] Prove that schema-derived ratios, durations, conditional rates, grouped
+  thresholds, period growth, per-entity averages and anti-joins transfer across
+  domains. Sealed holdouts passed 5/12 in logistics and 6/10 valid cases in a
+  library domain; no medium-tier capability claim is currently permitted
+- [x] Preflight every analytical holdout reference before the first model call;
+  invalid evaluator cases must never be counted as Rangabot failures
+- [ ] Add hard-tier windows, cohorts, percentiles, correlations, retention and
+  multi-stage analytical plans. Current hard score is 1/20 and extreme 0/5;
+  no broad autonomous multi-table reliability claim is permitted
 - [ ] Enforce provider wall-clock timeout independently of a stalled Ollama
   request; the compiler candidate recorded one 1,544.1-second timeout outlier
 - [ ] Add the same policy contract for sandboxed Python statistics, modelling,

@@ -59,8 +59,8 @@ test("removes model-added grouping, sorting, blank filters, and limits not reque
   assert.deepEqual(normalized.filters, [{ column: "payments.payment_status", operator: "eq", value: "paid" }]);
 });
 
-test("enforces user-stated business filters and rejects invented scope", () => {
-  const base = parseAnalyticalPlan(JSON.stringify({ action: "query", source: "order_items", aggregate: "count", metric: "*", alias: "result", dimensions: ["orders.order_id"], filters: [{ column: "orders.status", operator: "eq", value: "complete" }], sort: [], limit: 200, decimals: 6, explanation: "Units." }));
+test("preserves schema-selected metrics and only user-stated filters", () => {
+  const base = parseAnalyticalPlan(JSON.stringify({ action: "query", source: "order_items", aggregate: "sum", metric: "order_items.quantity", alias: "result", dimensions: ["orders.order_id"], filters: [{ column: "orders.status", operator: "neq", value: "cancelled" }, { column: "orders.status", operator: "eq", value: "complete" }], sort: [], limit: 200, decimals: 6, explanation: "Units." }));
   const normalized = normalizeAnalyticalPlan(base, "Top 3 product categories by units sold, excluding cancelled orders.", [...columns, { table: "products", name: "category", type: "VARCHAR" }, { table: "order_items", name: "quantity", type: "INTEGER" }]);
   assert.equal(normalized.aggregate, "sum");
   assert.equal(normalized.metric, "order_items.quantity");
@@ -73,5 +73,14 @@ test("turns ambiguous superlatives into a dataset-focused clarification", () => 
   const query = parseAnalyticalPlan(JSON.stringify({ action: "query", source: "customers", aggregate: "sum", metric: "*", alias: "result", dimensions: [], filters: [], sort: [], limit: 0, decimals: 0, explanation: "Best region." }));
   const normalized = normalizeAnalyticalPlan(query, "Which region is best?", columns);
   assert.equal(normalized.action, "clarify");
-  assert.match(normalized.explanation, /revenue.*order value.*satisfaction/i);
+  assert.equal(normalized.explanation, "Which measurable field should define that comparison?");
+});
+
+test("selects one canonical requested identifier and ranks top results by the metric", () => {
+  const schema = [...columns, { table: "returns", name: "return_id", type: "INTEGER" }, { table: "returns", name: "customer_id", type: "INTEGER" }];
+  const plan = parseAnalyticalPlan(JSON.stringify({ action: "query", source: "payments", aggregate: "sum", metric: "payments.amount", alias: "revenue", dimensions: ["returns.return_id", "orders.customer_id"], filters: [], sort: [{ field: "orders.customer_id", direction: "asc" }], limit: 99, decimals: 2, explanation: "Top customers." }));
+  const normalized = normalizeAnalyticalPlan(plan, "Who are the top 5 customers by paid revenue? Return customer ID and revenue.", schema);
+  assert.deepEqual(normalized.dimensions, ["customers.customer_id"]);
+  assert.deepEqual(normalized.sort, [{ field: "__metric__", direction: "desc" }]);
+  assert.equal(normalized.limit, 5);
 });

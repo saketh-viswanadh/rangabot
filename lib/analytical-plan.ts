@@ -100,19 +100,38 @@ function inferMetric(request: string, columns: DatasetColumn[]) {
   const numeric = columns.filter((column) => column.table && /(?:INT|DECIMAL|DOUBLE|REAL|FLOAT|NUMERIC)/i.test(column.type) && !column.name.endsWith("_id"));
   const candidates = numeric.map((column) => {
     let score = column.name.split("_").filter((token) => tokens.has(token)).length * 4;
-    if (/\b(?:revenue|sales|order value)\b/i.test(request) && column.name === "amount") score += 8;
-    if (/\b(?:units?|quantity|items?)\b/i.test(request) && column.name === "quantity") score += 8;
-    if (/\b(?:cost|margin|profit)\b/i.test(request) && /cost|price/.test(column.name)) score += 3;
     return { field: `${column.table}.${column.name}`, score };
   }).sort((left, right) => right.score - left.score || left.field.localeCompare(right.field));
   return candidates[0]?.score > 0 && candidates[0].score > (candidates[1]?.score ?? -1) ? candidates[0].field : null;
 }
 
+function inferDimensions(request: string, columns: DatasetColumn[]) {
+  const tokens = new Set(request.toLowerCase().match(/[a-z0-9]+/g) ?? []);
+  const candidates = columns.filter((column) => {
+    if (!column.table) return false;
+    const parts = column.name.split("_").filter((part) => part.length > 1);
+    if (!parts.length) return false;
+    if (column.name.endsWith("_id")) return new RegExp(`\\b${parts.slice(0, -1).join("[ _-]+")}[ _-]+(?:id|identifier)\\b`, "i").test(request);
+    return parts.every((part) => tokens.has(part));
+  });
+  const selected = new Map<string, DatasetColumn>();
+  for (const column of candidates) {
+    const entity = column.name.replace(/_id$/, "");
+    const current = selected.get(column.name);
+    if (!current || column.table === `${entity}s`) selected.set(column.name, column);
+  }
+  return [...selected.values()].map((column) => `${column.table}.${column.name}`);
+}
+
 function applySemanticFilters(filters: AnalyticalPlan["filters"], request: string, columns: DatasetColumn[]) {
-  const available = new Set(columns.flatMap((column) => column.table ? [`${column.table}.${column.name}`] : []));
+  const availableColumns = columns.filter((column) => column.table);
+  const available = new Set(availableColumns.map((column) => `${column.table}.${column.name}`));
   const requestTokens = new Set(request.toLowerCase().match(/[a-z0-9_]+/g) ?? []);
   const nullBoundaryRequested = /\b(?:null|missing|unresolved|without|no )\b/i.test(request);
-  const result = filters.filter((filter) => filter.value ? requestTokens.has(filter.value.toLowerCase()) : nullBoundaryRequested);
+  const result = filters.filter((filter) => {
+    if (!filter.value) return nullBoundaryRequested;
+    return available.has(filter.column) && requestTokens.has(filter.value.toLowerCase());
+  });
   const set = (column: string, operator: FilterOperator, value = "", exclusive = true) => {
     if (!available.has(column)) return;
     const replacement = { column, operator, value };
@@ -120,40 +139,49 @@ function applySemanticFilters(filters: AnalyticalPlan["filters"], request: strin
     const index = result.findIndex((filter) => filter.column === column && filter.operator === operator);
     if (index >= 0) result[index] = replacement; else result.push(replacement);
   };
-  if (/\b(?:successfully )?paid\b/i.test(request)) set("payments.payment_status", "eq", "paid");
-  if (/\bactive\b/i.test(request) && /\bcustomers?\b/i.test(request)) set("customers.is_active", "eq", "true");
-  if (/\b(?:(?:excluding|exclude|without)\s+(?:all\s+)?cancelled|non[- ]?cancelled)\b/i.test(request)) set("orders.status", "neq", "cancelled");
-  if (/\bunresolved\b/i.test(request)) set("support_tickets.resolved_at", "is_null");
+  for (const column of availableColumns.filter((candidate) => /BOOL/i.test(candidate.type))) {
+    const field = `${column.table}.${column.name}`;
+    const label = column.name.replace(/^(?:is|has)_/, "").replaceAll("_", " ");
+    if (new RegExp(`\\b${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(request)) {
+      const negated = new RegExp(`\\b(?:not|non|inactive|without|no)\\s+(?:\\w+\\s+){0,2}${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(request);
+      set(field, "eq", negated ? "false" : "true");
+    }
+  }
   const month = request.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(20\d{2})\b/i);
   if (month) {
     const monthIndex = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"].indexOf(month[1].toLowerCase());
     const start = `${month[2]}-${String(monthIndex + 1).padStart(2, "0")}-01`;
     const next = new Date(Date.UTC(Number(month[2]), monthIndex + 1, 1)).toISOString().slice(0, 10);
-    const dateField = available.has("orders.order_date") ? "orders.order_date" : [...available].find((field) => /(?:date|_at)$/.test(field));
+    const dateColumns = availableColumns.filter((column) => /DATE|TIME/i.test(column.type));
+    const requestWords = new Set(request.toLowerCase().match(/[a-z0-9]+/g) ?? []);
+    const ranked = dateColumns.map((column) => ({
+      field: `${column.table}.${column.name}`,
+      score: column.name.split("_").filter((token) => requestWords.has(token)).length,
+    })).sort((left, right) => right.score - left.score || left.field.localeCompare(right.field));
+    const dateField = ranked.length === 1 || (ranked[0]?.score ?? 0) > (ranked[1]?.score ?? 0) ? ranked[0]?.field : undefined;
     if (dateField) { set(dateField, "gte", start, true); set(dateField, "lt", next, false); }
   }
   return result;
 }
 
 export function normalizeAnalyticalPlan(plan: AnalyticalPlan, request: string, columns: DatasetColumn[] = []): AnalyticalPlan {
-  if (/\b(?:best|most valuable)\b/i.test(request)) return { ...plan, action: "clarify", explanation: "What should ‘best’ or ‘most valuable’ mean here: revenue, units, order value, gross margin, return rate, customer count, or support satisfaction?" };
-  if (/\b(?:net profit|shipping costs?|taxes?)\b/i.test(request) && !columns.some((column) => /shipping|tax/.test(column.name))) {
-    return { ...plan, action: "unavailable", explanation: "Shipping-cost and tax fields are not available in this dataset, so the requested net profit cannot be calculated." };
-  }
+  if (/\b(?:best|most valuable|highest-performing|lowest-performing)\b/i.test(request)) return { ...plan, action: "clarify", explanation: "Which measurable field should define that comparison?" };
   if (plan.action !== "query") {
     return plan;
   }
   const grouped = /\b(?:by|per|each|breakdown)\b/i.test(request);
-  const dimensions = grouped ? plan.dimensions.filter((field) => !field.endsWith("_id") || /\b(?:id|identifier)\b/i.test(request)) : [];
+  const inferredDimensions = grouped ? inferDimensions(request, columns) : [];
+  const dimensions = grouped ? (inferredDimensions.length ? inferredDimensions : plan.dimensions.filter((field) => !field.endsWith("_id") || /\b(?:id|identifier)\b/i.test(request))) : [];
   const filters = applySemanticFilters(plan.filters.filter((filter) => filter.operator === "is_null" || filter.operator === "is_not_null" || filter.value.trim() !== ""), request, columns);
   let sort = /\b(?:top|bottom|highest|lowest|rank|sort|alphabetic|order by)\b/i.test(request) ? plan.sort : [];
+  if (/\btop\b/i.test(request)) sort = [{ field: "__metric__", direction: "desc" }];
+  if (/\bbottom\b/i.test(request)) sort = [{ field: "__metric__", direction: "asc" }];
   if (/\balphabetic/i.test(request) && dimensions.length) sort = [{ field: dimensions[0], direction: "asc" }];
   const requestedLimit = request.match(/\b(?:top|bottom|first|last)\s+(\d{1,3})\b/i);
   const limit = requestedLimit ? Math.min(200, Number(requestedLimit[1])) : 0;
   const aggregate: Aggregate = /\b(?:average|mean)\b/i.test(request) ? "avg"
-    : /\b(?:units?|quantity)\b/i.test(request) ? "sum"
-      : /\b(?:count|how many)\b/i.test(request) ? "count"
-        : /\b(?:total|sum|revenue|sales)\b/i.test(request) ? "sum" : plan.aggregate;
+    : /\b(?:count|how many)\b/i.test(request) ? "count"
+      : /\b(?:total|sum)\b/i.test(request) ? "sum" : plan.aggregate;
   const inferredMetric = aggregate === "count" ? null : inferMetric(request, columns);
   const metric = inferredMetric ?? plan.metric;
   const source = metric !== "*" && metric.includes(".") ? metric.split(".")[0] : plan.source;

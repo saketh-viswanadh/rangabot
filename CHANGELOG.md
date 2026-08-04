@@ -7,6 +7,33 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+- Dataset approval and chat attachment are now separate, explicit states:
+  approval remains in the private local allowlist, while a conversation stores
+  and restores its selected dataset until the user removes it. Reopening a chat
+  no longer silently discards its analytical context.
+- Expanded model-independent analytical routing for attached-data exploration
+  such as “tell me about this data” and “what do you notice,” while unrelated
+  comparisons such as Python versus SQL remain ordinary conversation.
+
+- Replaced an unpublished benchmark-shaped analytical prototype with a
+  domain-neutral operation grammar for ratios, conditional rates, durations,
+  grouped thresholds, period growth, per-entity averages and anti-joins. Its
+  schema, fields and join graph are derived from the approved dataset; production
+  planners contain none of the commerce benchmark table names.
+- Added a frozen 12-case logistics transfer holdout. Its first and only v1 run
+  passed 5/12, so the earlier prototype's 26/50 result is withdrawn as evidence
+  of general capability and analytical planning remains experimental.
+- Added a current-request provenance audit for advanced model plans. It removes
+  unsupported filters and dimensions, validates types and operation contracts,
+  derives only unambiguous calendar/source corrections, and asks instead of
+  guessing. A fresh library holdout produced 6 valid passes out of 10 valid
+  cases; two broken reference queries invalidated the other cases. Holdout
+  preflight now executes all references before the first model call.
+- Fixed the numeric-grounding tokenizer: JSON cell separators could previously
+  join adjacent values such as `2` and `28.03` into `228.03`. Prior full-suite
+  baselines contained no cases with correct SQL rejected solely by this defect,
+  so the published 3/50 and 12/50 comparisons remain valid without rescoring.
+
 - Replaced live free-form conversational SQL generation with a typed analytical
   plan and deterministic compiler for simple aggregates. The model can select
   only grammar-approved tables, fields, operators and actions; trusted code
