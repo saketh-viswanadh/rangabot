@@ -1,5 +1,46 @@
 # Daily progress
 
+## 2026-08-05 — Reproducible cross-model runtime profiles
+
+- Reverified the public model registry and selected `qwen2.5:7b` as the general
+  7B comparison profile; the coding-only variant would not test Rangabot's full
+  conversation and memory contract.
+- Preserved `llama3.2:3b` as the default because the local M1 Air has 8 GB RAM
+  and the Qwen profile carries 16 GB guidance. Installation and evaluation are
+  explicit; no app configuration is silently changed.
+- Added a sequential matrix runner using the unchanged frozen conversation
+  cases, a fixed per-profile context, private outputs and model unloads between
+  runs. Memory-fit mismatches fail closed unless the operator explicitly opts
+  into the risk.
+- Propagated the bounded context setting through text, structured JSON and
+  streaming requests so model comparisons measure the same orchestration
+  budget rather than different Ollama defaults.
+- Installed and verified the official `qwen2.5:7b` Q4_K_M artifact locally
+  without changing `.env.local` or the default model. A deliberately selected
+  three-case diagnostic passed 3/3 on both Llama and Qwen; it is not a complete
+  suite result. Llama averaged 7.6 seconds. Qwen averaged 137.6 seconds, with a
+  328-second cold first case, demonstrating severe 8 GB memory pressure.
+- Traced that 328-second request to the old per-attempt timeout retry. Replaced
+  it with one absolute deadline and deterministic simulations for cancellation,
+  timeout, unavailable runtime, missing model, HTTP failure, empty output,
+  malformed output and partial streams. No timed-out generation is silently
+  attempted twice.
+- Ran the complete frozen 22-case critical partition once per model at the same
+  4096-token context. Llama scored 21/22 at 4.8 seconds mean latency and gave a
+  materially false explanation of Python indentation. Qwen scored 21/22 at
+  11.1 seconds; its only rubric failure said an exact Bitcoin prediction was
+  “not possible” without inventing a number, but the frozen lexical rule did not
+  accept that phrasing. The result remains a frozen failure rather than being
+  rescored after inspection.
+- Qwen then failed reviewer qualification at 1/12, so it is barred from live
+  review. It remains installed but unloaded and opt-in because the critical run
+  demonstrates one genuine reasoning improvement over Llama; this does not
+  justify making it the default or automatically routing user requests to it.
+- Audited the Knowledge answer evaluator before cross-model use and found that
+  checkpoints were not model-specific. Added explicit `--model` and
+  `--num-ctx` controls plus model/context checkpoint isolation and result
+  provenance, preventing Llama answers from contaminating a Qwen comparison.
+
 ## 2026-08-04 — Schema-derived semantic-role resolver
 
 - Split semantic-role selection from model operation planning. A deterministic,

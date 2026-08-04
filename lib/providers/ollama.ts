@@ -1,17 +1,20 @@
 import { ProviderError, type ChatMessage, type GenerationOptions, type LocalChatProvider, type ProviderStatus } from "./types.ts";
-import { getConfiguredChatModel, getLocalOllamaBaseUrl } from "../local-runtime-config.ts";
+import { getConfiguredChatModel, getConfiguredContextTokens, getLocalOllamaBaseUrl } from "../local-runtime-config.ts";
 
 const configuredModel = getConfiguredChatModel();
+
+function generationOptions(options: GenerationOptions | undefined, defaultNumPredict: number) {
+  return {
+    num_predict: options?.numPredict ?? defaultNumPredict,
+    num_ctx: options?.numContext ?? getConfiguredContextTokens(),
+  };
+}
 
 export function providerErrorFrom(error: unknown): ProviderError {
   if (error instanceof ProviderError) return error;
   if (error instanceof DOMException && error.name === "TimeoutError") return new ProviderError("timeout", "The local model timed out.", { cause: error });
   if (error instanceof DOMException && error.name === "AbortError") return new ProviderError("cancelled", "Generation was stopped.", { cause: error });
   return new ProviderError("unavailable", error instanceof Error ? error.message : "Could not connect to the local model.", { cause: error });
-}
-
-export function shouldRetryProviderError(error: unknown, signal: AbortSignal | undefined, attempt: number) {
-  return attempt === 0 && !signal?.aborted && providerErrorFrom(error).code === "timeout";
 }
 
 async function ollamaFetch(path: string, init?: RequestInit, timeoutMs = 120_000) {
@@ -68,7 +71,7 @@ export async function completeJsonWithOllama(messages: ChatMessage[], options?: 
       messages: messages.map(({ role, content }) => ({ role, content })),
       format: options?.jsonSchema ?? "json",
       stream: false,
-      options: { num_predict: options?.numPredict ?? 1800 },
+      options: generationOptions(options, 1800),
     }),
   }, options?.timeoutMs ?? 120_000);
   if (!response.ok) throw new ProviderError(response.status === 404 ? "model-missing" : "http", `Ollama request failed (${response.status}): ${await response.text()}`);
@@ -79,35 +82,33 @@ export async function completeJsonWithOllama(messages: ChatMessage[], options?: 
 }
 
 export async function completeTextWithOllama(messages: ChatMessage[], options?: GenerationOptions): Promise<string> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const response = await ollamaFetch("/api/chat", {
-        method: "POST",
-        signal: options?.signal,
-        body: JSON.stringify({
-          model: configuredModel,
-          messages: messages.map(({ role, content }) => ({ role, content })),
-          stream: false,
-          options: { num_predict: options?.numPredict ?? 1000 },
-        }),
-      }, options?.timeoutMs ?? 120_000);
-      if (!response.ok) throw new ProviderError(response.status === 404 ? "model-missing" : "http", `Ollama request failed (${response.status}): ${await response.text()}`);
-      const data = (await response.json()) as { message?: { content?: string } };
-      const content = data.message?.content?.trim();
-      if (!content) throw new ProviderError("empty-output", "Ollama returned an empty response.");
-      return content;
-    } catch (error) {
-      if (!shouldRetryProviderError(error, options?.signal, attempt)) throw providerErrorFrom(error);
-    }
-  }
-  throw new ProviderError("timeout", "The local model timed out after one safe retry.");
+  const response = await ollamaFetch("/api/chat", {
+    method: "POST",
+    signal: options?.signal,
+    body: JSON.stringify({
+      model: configuredModel,
+      messages: messages.map(({ role, content }) => ({ role, content })),
+      stream: false,
+      options: generationOptions(options, 1000),
+    }),
+  }, options?.timeoutMs ?? 120_000);
+  if (!response.ok) throw new ProviderError(response.status === 404 ? "model-missing" : "http", `Ollama request failed (${response.status}): ${await response.text()}`);
+  const data = (await response.json()) as { message?: { content?: string } };
+  const content = data.message?.content?.trim();
+  if (!content) throw new ProviderError("empty-output", "Ollama returned an empty response.");
+  return content;
 }
 
 export async function streamChatWithOllama(messages: ChatMessage[], options?: GenerationOptions): Promise<ReadableStream<Uint8Array>> {
   const response = await ollamaFetch("/api/chat", {
     method: "POST",
     signal: options?.signal,
-    body: JSON.stringify({ model: configuredModel, messages: messages.map(({ role, content }) => ({ role, content })), stream: true }),
+    body: JSON.stringify({
+      model: configuredModel,
+      messages: messages.map(({ role, content }) => ({ role, content })),
+      stream: true,
+      options: generationOptions(options, 1000),
+    }),
   }, options?.timeoutMs ?? 120_000);
 
   if (!response.ok) {
@@ -121,6 +122,7 @@ export async function streamChatWithOllama(messages: ChatMessage[], options?: Ge
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   let buffer = "";
+  let emitted = false;
 
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
@@ -128,15 +130,16 @@ export async function streamChatWithOllama(messages: ChatMessage[], options?: Ge
         const { done, value } = await reader.read();
         if (done) {
           buffer += decoder.decode();
-          if (buffer.trim()) processLine(buffer, controller, encoder);
-          controller.close();
+          if (buffer.trim()) emitted = processLine(buffer, controller, encoder) || emitted;
+          if (emitted) controller.close();
+          else controller.error(new ProviderError("empty-output", "Ollama returned an empty response stream."));
           return;
         }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
-        for (const line of lines) processLine(line, controller, encoder);
+        for (const line of lines) emitted = processLine(line, controller, encoder) || emitted;
       } catch (error) {
         controller.error(providerErrorFrom(error));
       }
@@ -152,12 +155,14 @@ function processLine(
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
 ) {
-  if (!line.trim()) return;
+  if (!line.trim()) return false;
   let chunk: OllamaStreamChunk;
   try { chunk = JSON.parse(line) as OllamaStreamChunk; }
   catch (error) { throw new ProviderError("invalid-stream", "Ollama returned a malformed stream chunk.", { cause: error }); }
   if (chunk.error) throw new ProviderError("http", chunk.error);
-  if (chunk.message?.content) controller.enqueue(encoder.encode(chunk.message.content));
+  if (!chunk.message?.content) return false;
+  controller.enqueue(encoder.encode(chunk.message.content));
+  return true;
 }
 
 export const ollamaProvider: LocalChatProvider = {

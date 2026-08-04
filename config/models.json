@@ -1,12 +1,13 @@
 {
   "schemaVersion": 1,
-  "verifiedAt": "2026-07-28",
+  "verifiedAt": "2026-08-05",
   "models": [
     {
       "id": "llama3.2:3b",
       "label": "Llama 3.2 3B",
       "tier": "lightweight",
       "minimumMemoryGb": 8,
+      "recommendedContextTokens": 4096,
       "downloadSize": "approximately 2.0 GB",
       "contextWindow": "128K upstream; use a conservative local context on limited-memory hardware",
       "uses": ["general-chat", "brainstorming", "basic-coding"],
@@ -19,6 +20,7 @@
       "label": "Qwen2.5-Coder 3B",
       "tier": "lightweight",
       "minimumMemoryGb": 8,
+      "recommendedContextTokens": 4096,
       "downloadSize": "approximately 1.9 GB",
       "contextWindow": "32K upstream",
       "uses": ["coding", "sql", "code-explanation"],
@@ -31,10 +33,11 @@
       "label": "Qwen2.5 7B",
       "tier": "balanced",
       "minimumMemoryGb": 16,
+      "recommendedContextTokens": 4096,
       "downloadSize": "approximately 4.7 GB",
       "contextWindow": "32K Ollama artifact",
       "uses": ["general-chat", "reasoning", "teaching", "coding"],
-      "notes": "Higher-quality general option for machines with more memory. Verify current availability in Ollama.",
+      "notes": "Higher-quality general option. On machines below 16 GB, keep it opt-in, run one model at a time, and expect memory pressure; do not make it the automatic default.",
       "upstream": "https://ollama.com/library/qwen2.5",
       "licenseReview": "Review the exact upstream model variant and license before use."
     }

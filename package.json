@@ -35,6 +35,7 @@
     "conversation:evaluate:baseline": "node --experimental-strip-types scripts/evaluate-conversation.ts --baseline",
     "conversation:evaluate:validate": "node --experimental-strip-types scripts/evaluate-conversation.ts --validate-only",
     "conversation:evaluate:memory": "node --experimental-strip-types scripts/evaluate-memory-selection.ts",
+    "conversation:evaluate:matrix": "node --experimental-strip-types scripts/evaluate-model-matrix.ts",
     "conversation:evaluate:sql": "node --experimental-strip-types scripts/evaluate-conversational-sql.ts",
     "conversation:evaluate:sql:holdout": "node --experimental-strip-types scripts/evaluate-analytical-holdout.ts",
     "conversation:evaluate:sql:holdout:v2": "node --experimental-strip-types scripts/evaluate-analytical-holdout-v2.ts",

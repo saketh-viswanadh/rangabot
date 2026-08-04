@@ -3,6 +3,7 @@ import modelRegistry from "../config/models.json" with { type: "json" };
 export const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
 export const DEFAULT_CHAT_MODEL = modelRegistry.models[0].id;
 export const DEFAULT_EMBEDDING_MODEL = modelRegistry.embeddingModels[0].id;
+export const DEFAULT_CHAT_CONTEXT_TOKENS = modelRegistry.models[0].recommendedContextTokens;
 export const DEFAULT_KNOWLEDGE_BUDGET_BYTES = 4 * 1024 ** 3;
 
 function isLoopbackHostname(hostname: string) {
@@ -33,6 +34,15 @@ export function getConfiguredChatModel(value = process.env.OLLAMA_MODEL) {
 
 export function getConfiguredEmbeddingModel(value = process.env.OLLAMA_EMBED_MODEL) {
   return value?.trim() || DEFAULT_EMBEDDING_MODEL;
+}
+
+export function getConfiguredContextTokens(value = process.env.OLLAMA_NUM_CTX) {
+  if (!value?.trim()) return DEFAULT_CHAT_CONTEXT_TOKENS;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 512 || parsed > 131_072) {
+    throw new Error("OLLAMA_NUM_CTX must be an integer between 512 and 131072.");
+  }
+  return parsed;
 }
 
 export function getKnowledgeBudgetBytes(value = process.env.KNOWLEDGE_BUDGET_BYTES) {

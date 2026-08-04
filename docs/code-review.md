@@ -31,8 +31,8 @@ published. Findings are kept here so cleanup is measurable rather than implied.
 - Moved current-turn constraints into a typed answer contract and removed
   conflicting saved preferences before generation.
 - Added deterministic boundaries for unavailable external actions and typed
-  provider failures with real cancellation propagation and cancellation-safe
-  retry behavior.
+  provider failures with real cancellation propagation and no implicit
+  regeneration after an ambiguous timeout.
 - Preserved a complete v1.0.6 result of 52/60 overall and 21/22 critical at
   6.6-second mean latency. This fails release gates and remains an explicit
   blocker; targeted passes are not promoted as release evidence.

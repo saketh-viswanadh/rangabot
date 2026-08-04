@@ -57,6 +57,7 @@ export class ProviderError extends Error {
 
 export interface GenerationOptions {
   numPredict?: number;
+  numContext?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
   jsonSchema?: Record<string, unknown>;

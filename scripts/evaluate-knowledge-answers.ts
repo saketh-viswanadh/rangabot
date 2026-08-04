@@ -6,6 +6,7 @@ import { countCitedSources, generateGroundedTeacherAnswer } from "../lib/knowled
 import { knowledgeRoot, searchKnowledge } from "../lib/knowledge.ts";
 import { buildTeacherMessages } from "../lib/teacher-mode.ts";
 
+const option = (name: string) => process.argv.find((argument) => argument.startsWith(`--${name}=`))?.slice(name.length + 3);
 const localEnvironmentPath = resolve(process.cwd(), ".env.local");
 if (existsSync(localEnvironmentPath)) {
   for (const line of readFileSync(localEnvironmentPath, "utf8").split(/\r?\n/)) {
@@ -13,9 +14,11 @@ if (existsSync(localEnvironmentPath)) {
     if (match && process.env[match[1]] === undefined) process.env[match[1]] = match[2].replace(/^['"]|['"]$/g, "");
   }
 }
+if (option("model")) process.env.OLLAMA_MODEL = option("model");
+if (option("num-ctx")) process.env.OLLAMA_NUM_CTX = option("num-ctx");
 const { completeTextWithOllama } = await import("../lib/providers/ollama.ts");
+const { getConfiguredChatModel, getConfiguredContextTokens } = await import("../lib/local-runtime-config.ts");
 
-const option = (name: string) => process.argv.find((argument) => argument.startsWith(`--${name}=`))?.slice(name.length + 3);
 const fixturePath = resolve(option("file") ?? resolve(knowledgeRoot, "evaluations", "starter.json"));
 if (!existsSync(fixturePath)) throw new Error(`Evaluation file not found: ${fixturePath}`);
 const subject = option("subject");
@@ -23,6 +26,8 @@ const ids = new Set((option("ids") ?? "").split(",").filter(Boolean));
 const limit = Number(option("limit") ?? 0);
 const sample = Number(option("sample") ?? 0);
 const timeoutMs = Number(option("timeout-ms") ?? 300_000);
+const evaluationModel = getConfiguredChatModel();
+const evaluationContextTokens = getConfiguredContextTokens();
 let cases = loadKnowledgeEvaluationCases(fixturePath).filter((item) => !subject || item.subject === subject);
 if (ids.size) cases = cases.filter((item) => ids.has(item.id));
 if (sample > 0 && sample < cases.length) {
@@ -33,6 +38,7 @@ if (sample > 0 && sample < cases.length) {
 if (limit > 0) cases = cases.slice(0, limit);
 
 console.log(`Running ${cases.length} end-to-end local answer evaluations. This intentionally waits for Teacher Mode generation and review.`);
+console.log(`Model: ${evaluationModel} · context: ${evaluationContextTokens} tokens.`);
 console.log(`Per-generation timeout: ${Math.round(timeoutMs / 1000)}s. Completed cases are checkpointed locally after every answer.`);
 type AnswerEvaluationResult = ReturnType<typeof scoreKnowledgeAnswer> & {
   id: string;
@@ -48,7 +54,7 @@ type AnswerEvaluationResult = ReturnType<typeof scoreKnowledgeAnswer> & {
 };
 const outputRoot = resolve(knowledgeRoot, "evaluations", "results");
 mkdirSync(outputRoot, { recursive: true });
-const runKey = createHash("sha256").update(JSON.stringify({ fixturePath, ids: cases.map((item) => item.id) })).digest("hex").slice(0, 12);
+const runKey = createHash("sha256").update(JSON.stringify({ fixturePath, ids: cases.map((item) => item.id), model: evaluationModel, contextTokens: evaluationContextTokens })).digest("hex").slice(0, 12);
 const checkpointPath = resolve(outputRoot, `answers-checkpoint-${runKey}.json`);
 const saved = existsSync(checkpointPath) ? JSON.parse(readFileSync(checkpointPath, "utf8")) as { results?: AnswerEvaluationResult[] } : {};
 const completedResults: AnswerEvaluationResult[] = saved.results ?? [];
@@ -57,7 +63,7 @@ if (completedResults.length) console.log(`Resuming from checkpoint: ${completedR
 const errorResults: AnswerEvaluationResult[] = [];
 const saveCheckpoint = () => {
   const temporaryPath = `${checkpointPath}.tmp`;
-  writeFileSync(temporaryPath, `${JSON.stringify({ fixturePath, results: completedResults }, null, 2)}\n`);
+  writeFileSync(temporaryPath, `${JSON.stringify({ fixturePath, model: evaluationModel, contextTokens: evaluationContextTokens, results: completedResults }, null, 2)}\n`);
   renameSync(temporaryPath, checkpointPath);
 };
 for (const [index, item] of cases.entries()) {
@@ -110,8 +116,9 @@ const summary = {
   byDifficulty: groups("difficulty"),
 };
 const stamp = new Date().toISOString().replaceAll(/[:.]/g, "-");
-const outputPath = resolve(outputRoot, `answers-${stamp}.json`);
-writeFileSync(outputPath, `${JSON.stringify({ generatedAt: new Date().toISOString(), fixturePath, summary, results }, null, 2)}\n`);
+const modelSlug = evaluationModel.replaceAll(/[^a-zA-Z0-9]+/g, "-").replaceAll(/^-|-$/g, "").toLowerCase();
+const outputPath = resolve(outputRoot, `answers-${modelSlug}-${stamp}.json`);
+writeFileSync(outputPath, `${JSON.stringify({ generatedAt: new Date().toISOString(), fixturePath, runtime: { model: evaluationModel, contextTokens: evaluationContextTokens }, summary, results }, null, 2)}\n`);
 console.log("\nEnd-to-end answer quality summary");
 console.log(`Completed-case pass rate: ${(summary.passRate * 100).toFixed(1)}% (${summary.passed}/${summary.completedCases})`);
 if (summary.executionErrors) console.log(`Provisional overall pass floor: ${(summary.overallPassFloor * 100).toFixed(1)}% (${summary.passed}/${summary.cases}; ${summary.executionErrors} execution errors excluded from quality averages)`);
