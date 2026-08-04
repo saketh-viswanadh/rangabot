@@ -26,6 +26,14 @@ If a material role is ambiguous, Rangabot asks. It must not silently choose a
 metric, population, date field, threshold meaning, causal explanation, or
 unsupported statistic.
 
+Before accepting an advanced model plan, a deterministic resolver independently
+ranks schema candidates for count population, group grain, numeric measures and
+temporal endpoints, as well as row-count denominators, relation thresholds,
+unmatched relations and period grains. It uses normalized request/schema labels, identifier
+topology and mention order. Only a unique high-confidence role may correct a
+model field. The resolver returns ambiguity rather than selecting between close
+candidates, and a relation name alone cannot silently become a numeric measure.
+
 ## Trust boundary
 
 The model selects enum-constrained semantic roles. Trusted Rangabot code then:
@@ -76,3 +84,21 @@ The first ecology v3 run printed 6/13 under the older result-only rule. Manual
 semantic review rejected three coincidental matches, leaving 3/13 defensible
 passes. This is a failed transfer gate and evidence that semantic-role selection,
 not SQL safety, is the current blocker.
+
+The clinical role-development suite subsequently passed 9/9. It is explicitly a
+tuning suite and may be rerun; it is not independent transfer evidence. The
+strict ecology score remained the release baseline until astronomy v4 was run
+once on the later candidate.
+
+When every required role for a supported operation is high-confidence, trusted
+code compiles the plan without calling a model planner. This avoids making
+correctness and latency depend on model size, JSON compliance or provider
+availability. Model planning remains the fallback for unresolved interpretation;
+result execution and numeric narration grounding remain deterministic.
+
+The first and only astronomy v4 transfer run passed 10/12 (83.3%) in 27.7
+seconds. One query returned the correct distinct population through an
+equivalent shared key but failed the frozen exact-field expectation; it remains
+a failure rather than a retroactive scorer change. The conditional-rate case
+genuinely failed because the fallback model emitted an unsafe plan. V4 is sealed
+and below the 90% gate.

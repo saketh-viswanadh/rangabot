@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
-import { compileGroundedAdvancedAnalyticalPlan } from "../lib/analytical-filter-grounding.ts";
-import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan } from "../lib/analytical-plan.ts";
+import { compileGroundedAdvancedAnalyticalPlan, compileResolvedAdvancedAnalyticalPlan } from "../lib/analytical-filter-grounding.ts";
+import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan, resolveAnalyticalBoundary } from "../lib/analytical-plan.ts";
 import type { ApprovedDataset } from "../lib/datasets.ts";
 import { completeJsonWithOllama } from "../lib/providers/ollama.ts";
 import type { ChatMessage } from "../lib/providers/types.ts";
@@ -59,9 +59,10 @@ const results = [];
 for (const item of cases) {
   const started = Date.now(); const messages: ChatMessage[] = [{ role: "user", content: item.question }];
   try {
+    const resolved = shouldUseAdvancedAnalyticalPlan(item.question) ? await compileResolvedAdvancedAnalyticalPlan(item.question, schema, databasePath) : null;
     const proposal = shouldUseAdvancedAnalyticalPlan(item.question)
-      ? (await compileGroundedAdvancedAnalyticalPlan(await completeJsonWithOllama(buildAdvancedAnalyticalMessages(messages, dataset, schema), { jsonSchema: buildAdvancedAnalyticalSchema(messages, dataset, schema), numPredict: 900, timeoutMs: 180_000 }), item.question, schema, databasePath)).proposal
-      : compileAnalyticalPlan(normalizeAnalyticalPlan(parseAnalyticalPlan(await completeJsonWithOllama(buildAnalyticalPlanMessages(messages, dataset, schema), { jsonSchema: buildAnalyticalPlanSchema(messages, dataset, schema), numPredict: 700, timeoutMs: 180_000 })), item.question, schema), schema);
+      ? resolved?.proposal ?? (await compileGroundedAdvancedAnalyticalPlan(await completeJsonWithOllama(buildAdvancedAnalyticalMessages(messages, dataset, schema), { jsonSchema: buildAdvancedAnalyticalSchema(messages, dataset, schema), numPredict: 900, timeoutMs: 180_000 }), item.question, schema, databasePath)).proposal
+      : compileAnalyticalPlan(resolveAnalyticalBoundary(item.question) ?? normalizeAnalyticalPlan(parseAnalyticalPlan(await completeJsonWithOllama(buildAnalyticalPlanMessages(messages, dataset, schema), { jsonSchema: buildAnalyticalPlanSchema(messages, dataset, schema), numPredict: 700, timeoutMs: 180_000 })), item.question, schema), schema);
     if (item.boundary) results.push({ ...item, action: proposal.action, sql: proposal.query, passed: proposal.action === item.boundary, latencyMs: Date.now() - started });
     else {
       const candidate = await executeReadOnlySql({ approvedDatasetPath: databasePath, query: proposal.query });

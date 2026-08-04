@@ -134,6 +134,16 @@ Future holdouts therefore require both an expected semantic-plan match and the
 correct executed result. This remains experimental for every model, not merely
 the default `llama3.2:3b` profile.
 
+For supported requests whose population, grain, measure and relationships are
+all uniquely resolved from the approved schema, Rangabot now compiles the plan
+without waiting for a model planner. Ambiguous requests still use the typed
+local-model fallback or ask a focused question. The 9-case development suite
+passes 9/9 in 196 ms total. The subsequently frozen astronomy v4 transfer suite
+passed 10/12 (83.3%) on its first and only run. One mathematically correct query
+failed the exact-role rubric and one model-dependent conditional-rate plan was
+malformed; both remain failures. This substantially improves on strict ecology
+3/13 but remains below the 90% release target.
+
 `npm run conversation:evaluate:sql:holdout` runs the separate frozen logistics
 transfer suite. Once run, that version is evidence only and must not become a
 tuning set; subsequent improvements require a newly frozen unseen holdout.

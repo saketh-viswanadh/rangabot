@@ -66,10 +66,22 @@ fine-tuning dataset and rollback workflow remain a later proposal.
   per-entity averages and anti-joins transfer across domains. Sealed holdouts
   passed 5/12 in logistics and 6/10 valid cases in a library domain. The unseen
   ecology suite's nominal 6/13 fell to a strict 3/13 after rejecting three
-  coincidental right-result/wrong-semantics matches. No medium-tier capability
-  claim is currently permitted
+  coincidental right-result/wrong-semantics matches. Astronomy v4 then reached
+  10/12 (83.3%), still below the 90% transfer gate
 - [x] Require future analytical holdouts to validate expected semantic roles as
   well as executed results, so synthetic data coincidences cannot earn a pass
+- [x] Add the first model-independent semantic-role pass for count populations,
+  group grains, numeric measures and temporal endpoints. The clinical
+  development suite is 9/9 and astronomy transfer evidence is 10/12
+- [x] Extend role resolution to relation populations, row-count denominators,
+  local categorical filters, thresholds, anti-joins and period grains. Fully
+  resolved plans bypass model planning; ambiguous plans remain model-assisted
+- [x] Freeze and run a new transfer domain exactly once for this candidate.
+  Astronomy v4 passed 10/12 (83.3%); one exact-role mismatch and one genuine
+  conditional-rate failure remain, so the 90% transfer gate is not met
+- [ ] Add domain-neutral conditional numerator/denominator role resolution and
+  govern semantic equivalence of shared identifiers without weakening strict
+  result checks; prove both on development fixtures before a future v5 holdout
 - [x] Preflight every analytical holdout reference before the first model call;
   invalid evaluator cases must never be counted as Rangabot failures
 - [ ] Add hard-tier windows, cohorts, percentiles, correlations, retention and

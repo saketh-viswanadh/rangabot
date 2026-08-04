@@ -99,11 +99,13 @@ test("per-entity plans reject unrelated memory-like scope additions", () => {
   assert.deepEqual(plan.filters, []);
 });
 
-test("anti-join plans require separate related relations", () => {
-  const invalid = normalizeAdvancedAnalyticalPlan(proposed({ operation: "anti_join", source: "articles", entity: "articles.article_id", relatedField: "articles.author_id" }), "Which articles were never reviewed?", publishing);
-  assert.equal(invalid.action, "clarify");
+test("anti-join plans require unique separate related relations", () => {
+  const repaired = normalizeAdvancedAnalyticalPlan(proposed({ operation: "anti_join", source: "articles", entity: "articles.article_id", relatedField: "articles.author_id" }), "Which articles were never reviewed?", publishing);
+  assert.deepEqual({ action: repaired.action, source: repaired.source, entity: repaired.entity, related: repaired.relatedField }, { action: "query", source: "articles", entity: "articles.article_id", related: "reviews.review_id" });
   const valid = normalizeAdvancedAnalyticalPlan(proposed({ operation: "anti_join", source: "reviews", entity: "articles.article_id", relatedField: "reviews.review_id" }), "Which articles were never reviewed?", publishing);
   assert.equal(valid.source, "articles");
+  const absent = normalizeAdvancedAnalyticalPlan(proposed({ operation: "anti_join", source: "articles", entity: "articles.article_id", relatedField: "articles.author_id" }), "Which articles were never discussed?", publishing);
+  assert.equal(absent.action, "clarify");
 });
 
 test("conditional rates fail closed after unsupported numerator removal", () => {
