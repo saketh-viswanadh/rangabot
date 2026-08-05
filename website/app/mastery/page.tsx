@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { masteryPaths, repositoryUrl } from "../../lib/site-content";
 import { PageHero } from "../../components/PageHero";
 
@@ -21,7 +20,7 @@ export default function MasteryPage() {
       <section className="mastery-principles">
         <div className="section-shell"><div className="section-heading"><div><span className="eyebrow">The scoring covenant</span><h2>No victory by declaration.</h2></div><p>Private answers remain private. Public evidence points to reproducible suites, merged implementation and clear limitations.</p></div><div className="feature-list"><article><span>01</span><h3>Criteria, not code</h3><p>A merged feature proves delivery, not mastery. Every listed behavior must pass.</p></article><article><span>02</span><h3>Regressions count</h3><p>A formerly dependable capability can return to training when a gate fails.</p></article><article><span>03</span><h3>Credit stays</h3><p>Contributor achievements remain attached to the people and evidence that earned them.</p></article></div></div>
       </section>
-      <section className="community-call section-shell" style={{ marginTop: 110 }}><div><span className="eyebrow">Complete audit</span><h2>Inspect every node and checklist.</h2><p>The repository contains the generated criterion-level Path to Mastery, evidence registry and contributor governance.</p></div><div className="community-actions"><Link className="button button-gold" href={`${repositoryUrl}/blob/main/docs/PATH_TO_MASTERY.md`}>Open the full audit <span>↗</span></Link></div></section>
+      <section className="community-call section-shell" style={{ marginTop: 110 }}><div><span className="eyebrow">Complete audit</span><h2>Inspect every node and checklist.</h2><p>The repository contains the generated criterion-level Path to Mastery, evidence registry and contributor governance.</p></div><div className="community-actions"><a className="button button-gold" href={`${repositoryUrl}/blob/main/docs/PATH_TO_MASTERY.md`}>Open the full audit <span>↗</span></a></div></section>
     </>
   );
 }

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { PageHero } from "../../components/PageHero";
 
 export const metadata: Metadata = { title: "Product", description: "Explore Rangabot's Mind, Memory, Scholar, Analyst and Builder capabilities." };
@@ -66,8 +65,8 @@ export default function ProductPage() {
   return (
     <>
       <PageHero eyebrow="The product" title="More than a model in a chat window." description="Rangabot coordinates private models, approved knowledge, selective memory and bounded local tools—then exposes enough of the process to earn trust.">
-        <Link className="button button-gold" href="/showcase">Take the product tour <span>→</span></Link>
-        <Link className="text-link" href="/mastery">See what remains <span>↗</span></Link>
+        <a className="button button-gold" href="/showcase">Take the product tour <span>→</span></a>
+        <a className="text-link" href="/mastery">See what remains <span>↗</span></a>
       </PageHero>
       {sections.map((section, index) => (
         <section className="content-section section-shell" id={section.id} key={section.id}>

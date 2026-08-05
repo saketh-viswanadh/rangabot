@@ -1,4 +1,3 @@
-import Link from "next/link";
 import Image from "next/image";
 import { footerGroups } from "../lib/site-content";
 
@@ -11,7 +10,7 @@ export function SiteFooter() {
       </div>
       <div className="footer-links">
         {footerGroups.map((group) => (
-          <div key={group.title}><strong>{group.title}</strong>{group.links.map(([label, href]) => <Link key={href} href={href}>{label}</Link>)}</div>
+          <div key={group.title}><strong>{group.title}</strong>{group.links.map(([label, href]) => <a key={href} href={href}>{label}</a>)}</div>
         ))}
       </div>
       <div className="footer-base">

@@ -50,6 +50,29 @@ test("renders every approved public route", async () => {
   }
 });
 
+test("keeps primary navigation usable without client-side routing", async () => {
+  const response = await render();
+  const html = await response.text();
+  const internalPaths = [...html.matchAll(/href="(\/[^"]*)"/g)]
+    .map((match) => match[1].split("#")[0])
+    .filter((pathname) => !pathname.startsWith("/_next/") && !pathname.startsWith("/ranga/") && !pathname.startsWith("/media/"));
+
+  for (const pathname of new Set(internalPaths)) {
+    const destination = await render(pathname);
+    assert.equal(destination.status, 200, `navigation target ${pathname}`);
+  }
+
+  const sourceFiles = [
+    "../app/page.tsx",
+    "../app/product/page.tsx",
+    "../app/community/page.tsx",
+    "../components/SiteHeader.tsx",
+    "../components/SiteFooter.tsx",
+  ];
+  const sources = await Promise.all(sourceFiles.map((pathname) => readFile(new URL(pathname, import.meta.url), "utf8")));
+  assert.doesNotMatch(sources.join("\n"), /next\/link|<Link\b/);
+});
+
 test("keeps starter infrastructure and private product data out of the site", async () => {
   const [page, layout, packageJson, hosting] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),

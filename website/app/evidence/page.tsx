@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { PageHero } from "../../components/PageHero";
 import { repositoryUrl } from "../../lib/site-content";
 
@@ -24,7 +23,7 @@ export default function EvidencePage() {
         <div className="score-table"><div className="score-row score-head"><span>Capability</span><span>Result</span><span>Evidence scope</span><span>State</span></div>{scores.map(([name, score, scope, state]) => <div className="score-row" key={name}><strong>{name}</strong><span>{score}</span><p>{scope}</p><span className={`score-state ${state === "Pass" ? "pass" : state === "Below gate" ? "below" : ""}`}>{state}</span></div>)}</div>
         <div className="evidence-note"><div><span className="eyebrow">What this proves</span><h2>A candidate, not a universal promise.</h2></div><p>Model behavior varies by model, quantization, context, hardware and run. These results describe exact evaluated candidates. They do not imply that every Ollama model will match them.</p></div>
       </section>
-      <section className="section-shell callout"><strong>Private fixtures stay private.</strong><p>Full model answers, personal chats, saved memories, document titles and Knowledge Vault files remain Git-ignored. Public methodology and aggregate results are reviewable.</p><Link className="text-link" href={`${repositoryUrl}/blob/main/docs/CORE_CONVERSATION_CONTRACT.md`}>Read the frozen contract <span>↗</span></Link></section>
+      <section className="section-shell callout"><strong>Private fixtures stay private.</strong><p>Full model answers, personal chats, saved memories, document titles and Knowledge Vault files remain Git-ignored. Public methodology and aggregate results are reviewable.</p><a className="text-link" href={`${repositoryUrl}/blob/main/docs/CORE_CONVERSATION_CONTRACT.md`}>Read the frozen contract <span>↗</span></a></section>
     </>
   );
 }
