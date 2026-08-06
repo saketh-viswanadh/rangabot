@@ -137,6 +137,9 @@ function packExecutionAudit(input: {
       && evidence.returnedRows === input.candidate.receipt.returnedRows
       && evidence.truncated === input.candidate.receipt.truncated
       && evidence.rowLimit === input.candidate.receipt.rowLimit
+      && evidence.durationMs === input.candidate.receipt.durationMs
+      && evidence.readOnly === true
+      && evidence.externalAccess === false
     : input.outcome.result.evidence.length === 0;
   const receiptPass = exactStringSet(input.outcome.result.receipt.permissionsUsed, expectedPermissions)
     && exactStringSet(input.outcome.result.receipt.grantIdsUsed, expectedGrants)
@@ -261,7 +264,10 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
         results.push({ ...item, action: proposal.action, plan, sql: proposal.query, packAudit, passed: proposal.action === item.boundary && semanticPass && packPass, latencyMs: Date.now() - started });
       }
       else {
-        const candidate = await executeReadOnlySql({ approvedDatasetPath: databasePath, query: proposal.query });
+        const candidate = mode === "expert-pack"
+          ? packOutcome?.diagnostics?.execution
+          : await executeReadOnlySql({ approvedDatasetPath: databasePath, query: proposal.query });
+        if (!candidate) throw new Error("The successful Analytics Pack result omitted its private execution diagnostic.");
         const gold = goldResults.get(item.id)!;
         const resultComparison = compareSqlResults(candidate, gold, { candidateSql: proposal.query, referenceSql: item.goldSql!, ...ANALYTICAL_EVALUATION_TOLERANCE });
         if (packOutcome && packRequest) packAudit = packExecutionAudit({ request: packRequest, outcome: packOutcome, dataset, proposal, candidate });

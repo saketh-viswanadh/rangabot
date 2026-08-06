@@ -43,7 +43,7 @@ export type AnalyticsPackOutcome = {
   result: ExpertPackResult;
   trace?: NonNullable<ChatMessage["analysisTrace"]>;
   /** Private evaluator seam; never serialized by the chat route. */
-  diagnostics?: { plan: Record<string, unknown>; proposal: SqlProposal };
+  diagnostics?: { plan: Record<string, unknown>; proposal: SqlProposal; execution?: SqlExecutionResult };
 };
 
 type Usage = {
@@ -300,7 +300,7 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
       modelBackgroundClaims: [],
       warnings,
       receipt: receipt(usage),
-    }, trace, { plan: semanticPlan, proposal });
+    }, trace, { plan: semanticPlan, proposal, execution: result });
   } catch (error) {
     return mappedFailure(request, error, phase, usage, options.signal);
   }

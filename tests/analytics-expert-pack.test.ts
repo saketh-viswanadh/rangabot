@@ -85,6 +85,7 @@ test("wraps the legacy analytical path with exact evidence, grants, model, and t
     engine: "duckdb", dataset: "shop.duckdb", query: fixture.state.sqlCalls[0].query, returnedRows: 1, truncated: false,
     durationMs: 12, inputSha256, querySha256, packId: "analytics", packVersion: "0.1.0", modelMode: "general", modelId: "llama3.2:3b",
   });
+  assert.deepEqual(outcome.diagnostics?.execution, execution());
 });
 
 test("uses a deterministic verified fallback when narration fails without hiding the execution", async () => {
