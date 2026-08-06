@@ -48,7 +48,7 @@ export type AnalyticalHoldoutCase = { id: string; question: string; goldSql?: st
 export type AnalyticalHoldoutDefinition = { suite: string; frozenAt: string; databaseName: string; setupSql: string; cases: AnalyticalHoldoutCase[]; outputDirectory?: string; evidenceKind?: "sealed" | "development" };
 export type AnalyticalHoldoutRunOptions = { mode?: "legacy" | "expert-pack" };
 
-const runnerVersion = "2.1.1";
+const runnerVersion = "2.1.2";
 export function analyticalPlanMatchesExpected(plan: Record<string, unknown>, expected?: ExpectedAnalyticalPlan) {
   if (!expected) return true;
   return Object.entries(expected).every(([field, value]) => Array.isArray(value)
@@ -264,15 +264,20 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
         results.push({ ...item, action: proposal.action, plan, sql: proposal.query, packAudit, passed: proposal.action === item.boundary && semanticPass && packPass, latencyMs: Date.now() - started });
       }
       else {
-        const candidate = mode === "expert-pack"
-          ? packOutcome?.diagnostics?.execution
-          : await executeReadOnlySql({ approvedDatasetPath: databasePath, query: proposal.query });
-        if (!candidate) throw new Error("The successful Analytics Pack result omitted its private execution diagnostic.");
-        const gold = goldResults.get(item.id)!;
-        const resultComparison = compareSqlResults(candidate, gold, { candidateSql: proposal.query, referenceSql: item.goldSql!, ...ANALYTICAL_EVALUATION_TOLERANCE });
-        if (packOutcome && packRequest) packAudit = packExecutionAudit({ request: packRequest, outcome: packOutcome, dataset, proposal, candidate });
-        const packPass = !packAudit || packAudit.envelopePass && packAudit.evidencePass && packAudit.receiptPass && packAudit.answerPass;
-        results.push({ ...item, action: proposal.action, plan, sql: proposal.query, resultComparison, packAudit, passed: semanticPass && resultComparison.passed && packPass, latencyMs: Date.now() - started });
+        if (proposal.action !== "query") {
+          if (packOutcome && packRequest) packAudit = packExecutionAudit({ request: packRequest, outcome: packOutcome, dataset, proposal });
+          results.push({ ...item, action: proposal.action, plan, sql: proposal.query, packAudit, passed: false, error: "The analytical plan did not produce an executable result.", latencyMs: Date.now() - started });
+        } else {
+          const candidate = mode === "expert-pack"
+            ? packOutcome?.diagnostics?.execution
+            : await executeReadOnlySql({ approvedDatasetPath: databasePath, query: proposal.query });
+          if (!candidate) throw new Error("The successful Analytics Pack result omitted its private execution diagnostic.");
+          const gold = goldResults.get(item.id)!;
+          const resultComparison = compareSqlResults(candidate, gold, { candidateSql: proposal.query, referenceSql: item.goldSql!, ...ANALYTICAL_EVALUATION_TOLERANCE });
+          if (packOutcome && packRequest) packAudit = packExecutionAudit({ request: packRequest, outcome: packOutcome, dataset, proposal, candidate });
+          const packPass = !packAudit || packAudit.envelopePass && packAudit.evidencePass && packAudit.receiptPass && packAudit.answerPass;
+          results.push({ ...item, action: proposal.action, plan, sql: proposal.query, resultComparison, packAudit, passed: semanticPass && resultComparison.passed && packPass, latencyMs: Date.now() - started });
+        }
       }
     } catch (error) { results.push({ ...item, action: "error", sql: null, passed: false, error: error instanceof Error ? error.message : String(error), latencyMs: Date.now() - started }); }
     console.log(`${results.at(-1)?.passed ? "PASS" : "FAIL"} ${item.id}`);
