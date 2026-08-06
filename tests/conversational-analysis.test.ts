@@ -76,4 +76,6 @@ test("falls back to a verified result table", () => {
   const answer = formatVerifiedAnalysisFallback(result);
   assert.match(answer, /\| North \| 25 \|/);
   assert.doesNotMatch(answer, /30/);
+  const scalar = formatVerifiedAnalysisFallback({ ...result, columns: ["average_per_entity"], rows: [[13.33]], receipt: { ...result.receipt, returnedRows: 1 } });
+  assert.equal(scalar, "The verified average per entity is **13.33**.");
 });

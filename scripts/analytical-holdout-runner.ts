@@ -48,7 +48,7 @@ export type AnalyticalHoldoutCase = { id: string; question: string; goldSql?: st
 export type AnalyticalHoldoutDefinition = { suite: string; frozenAt: string; databaseName: string; setupSql: string; cases: AnalyticalHoldoutCase[]; outputDirectory?: string; evidenceKind?: "sealed" | "development" };
 export type AnalyticalHoldoutRunOptions = { mode?: "legacy" | "expert-pack" };
 
-const runnerVersion = "2.1.0";
+const runnerVersion = "2.1.1";
 export function analyticalPlanMatchesExpected(plan: Record<string, unknown>, expected?: ExpectedAnalyticalPlan) {
   if (!expected) return true;
   return Object.entries(expected).every(([field, value]) => Array.isArray(value)
@@ -151,6 +151,7 @@ function packExecutionAudit(input: {
     answerPass: terminalAnswerPass,
     responseMode: input.outcome.result.status === "failure" || input.outcome.result.status === "cancelled"
       ? `terminal-${input.outcome.result.status}`
+      : input.outcome.result.status === "clarification" ? "clarification"
       : warnings.length === 0 ? "model-grounded" : warnings[0].code,
     warnings,
     resultStatus: input.outcome.result.status,

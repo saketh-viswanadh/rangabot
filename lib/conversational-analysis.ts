@@ -225,6 +225,10 @@ function markdownCell(value: unknown) {
 export function formatVerifiedAnalysisFallback(result: SqlExecutionResult) {
   if (!result.rows.length) return "The verified local calculation returned no rows. That means the requested conditions found no matching result; it does not prove that the underlying phenomenon is absent.";
   const shown = result.rows.slice(0, 20);
+  if (shown.length === 1 && result.columns.length === 1) {
+    const label = result.columns[0].replaceAll("_", " ").replace(/\s+/g, " ").trim();
+    return `The verified ${label || "result"} is **${markdownCell(shown[0][0])}**.`;
+  }
   const table = [`| ${result.columns.map(markdownCell).join(" | ")} |`, `| ${result.columns.map(() => "---").join(" | ")} |`, ...shown.map((row) => `| ${row.map(markdownCell).join(" | ")} |`)].join("\n");
   const limitation = result.receipt.truncated || result.rows.length > shown.length ? "\n\nThis display is bounded, so treat it as a partial result rather than the complete dataset." : "";
   return `Here are the verified local results:\n\n${table}${limitation}`;
