@@ -5,6 +5,9 @@
 From 2026-08-02 through 2026-08-08, the broader order below is frozen. The only
 active product priority is the versioned Core Conversation Reliability plan in
 [`docs/CORE_CONVERSATION_CONTRACT.md`](docs/CORE_CONVERSATION_CONTRACT.md).
+On 2026-08-07 the user explicitly approved beginning the already-designed Expert
+Pack foundation without weakening any Core Conversation release gate. Analytics
+is therefore an experimental reference slice, not a replacement release score.
 
 The completed foundation remains documented below. New work follows this order
 unless user feedback exposes a more urgent defect:
@@ -67,15 +70,22 @@ qualified local model, if any, powers each workflow.
 
 ### Expert Pack delivery order
 
-- [ ] **Foundation: Expert Pack Contract** — the proposed v1 specification,
-  executable manifest validator, typed request/evidence/result boundary and
-  per-pack model-assignment policy are complete. Runtime permission grants,
-  routing decision records, resource manager and qualification-result storage
-  remain before the foundation can be marked complete.
-- [ ] **Reference pack: Analytics** — adapt the existing read-only SQL work into
-  the first compliant pack, then add sandboxed Python only after its policy and
-  execution gates pass. This proves tool execution, evidence narration and
-  per-pack model selection without duplicating Mind & Memory.
+- [ ] **Foundation: Expert Pack Contract** — contract v1.2, immutable bundled
+  registry, strict manifest/request/result validators, resource-scoped runtime
+  grants, explicit provider model ids, stable HTTP failures and typed evidence
+  receipts are implemented. Routing decision records, saved model assignment,
+  resource lifecycle and qualification-result storage remain before completion.
+- [ ] **Reference pack: Analytics** — `0.1.0` now wraps the existing
+  conversation-triggered read-only SQL path behind Mind-issued conversation and
+  dataset grants. Identity pinning, schema inspection, categorical grounding,
+  final SQL, cancellation, verified narration fallback and trace provenance use
+  the same injected boundary. Native SQL now has a hard-kill process boundary;
+  route precedence and evidence-to-trace consistency have synthetic integration
+  tests. The unchanged runner-2.0 sealed run at clean commit `0a12744` remained
+  10/12 (83.3%; 5.7-second mean, 5.6-second median, 14.4-second P95), with all
+  12 envelopes audited and zero evaluator errors. One source-semantics miss and
+  one terminal conditional-rate plan failure keep it below the 90% gate. Saved
+  model choice, qualification and sandboxed Python are still blocked.
 - [ ] **Scholar pack** — adapt Knowledge Vault retrieval, citation audit,
   cross-source synthesis and Teacher Mode to the same pack boundary. Embedding
   and reranking components remain distinct from the selected generative model.

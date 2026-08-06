@@ -1,8 +1,8 @@
 # Expert Pack Contract
 
-- Contract version: 1.0.0
+- Contract version: 1.2.0
 - Manifest schema: 1
-- Status: proposed for merge approval
+- Status: approved architecture; Analytics reference implementation experimental
 
 ## Purpose
 
@@ -84,6 +84,13 @@ Automatic selection follows this order:
 No automatic choice may download a model, bypass a memory-fit guard or weaken a
 qualification threshold.
 
+The Analytics `0.1.0` reference implements the contract surface but does not yet
+implement saved per-pack selection or model switching. `General` explicitly
+passes the configured local model to the provider. `Automatic` currently reuses
+that same model and remains experimental. `Custom` fails before dataset or model
+access unless it names the already configured model. No mode downloads or loads
+another model, and none is represented as qualified.
+
 ## Resource lifecycle
 
 The router prepares an inspectable execution plan before loading a specialist.
@@ -100,15 +107,20 @@ generative weights. A plan fails safely when no qualified configuration fits.
 
 An `ExpertPackRequest` contains:
 
-- request, pack and version identities;
+- request, conversation, pack, version and capability identities;
 - the exact current user request;
-- capability-scoped permission grants;
+- bounded user/assistant conversation content selected by Mind & Memory;
+- resource-scoped, request- or conversation-bound permission grants;
 - saved or one-request model assignment; and
-- title-only references to approved context.
+- bounded references to the exact approved resources covered by those grants.
 
-The pack resolves referenced content only through Mind & Memory's approved
-capability adapters. A title or identifier is not permission to open arbitrary
-local content.
+Mind & Memory constructs this request from saved local state. The Analytics pack
+cannot mint grants: the chat control plane verifies the saved conversation's
+dataset attachment, discards client-supplied prior history, adds only the current
+user turn when needed, and issues grants for that dataset and request. The pack
+resolves referenced content only through approved capability adapters. A title
+or identifier is not permission to open arbitrary local content. Cancellation
+is a trusted runtime signal and is deliberately not serialized into the request.
 
 ## Result and evidence boundary
 
@@ -116,9 +128,15 @@ An `ExpertPackResult` has one of four states: `success`, `clarification`,
 `failure` or `cancelled`. It may include a response proposal, but the proposal
 is not the final answer.
 
-Evidence declares a kind, approved source, locator and bounded claims. Model
-background is kept separate from evidence. Receipts disclose permissions used,
-tools used, resolved model and model switches. Stable errors distinguish
+Evidence declares a kind, approved source, locator and bounded claims. Local
+execution evidence additionally binds the approved dataset id, input hash,
+query hash, read-only and no-external-access flags, row limit, returned row count,
+truncation and duration. Model background is kept separate from evidence and
+requires an inspectable model receipt. A successful result must contain
+evidence. Typed warnings reveal when model narration was unavailable or rejected
+by the grounding audit instead of silently presenting deterministic fallback as
+model prose. Receipts disclose exact grant ids, permissions, tools, resolved
+model and model switches. Stable errors distinguish
 permission, capability, qualification, resource, timeout, cancellation, tool
 and output failures.
 
@@ -167,6 +185,56 @@ requires a governed evaluator changelog and an explicit comparability decision.
 The first reference conversion must prove that the pack boundary does not
 duplicate memory, loosen dataset permissions, trust model-authored SQL or reduce
 the unchanged analytical benchmark.
+
+## Analytics reference implementation 0.1.0
+
+The bundled Analytics manifest is immutable, local-only and honestly marked
+`experimental`. The deterministic chat intent gate and route precedence are
+unchanged. Mind & Memory verifies the saved conversation attachment and issues
+the scoped request. The adapter then:
+
+1. resolves only the exact allowlisted dataset id;
+2. pins its identity before schema inspection;
+3. sends only schema and bounded conversation content to the explicit local
+   model when deterministic planning is insufficient;
+4. routes final and categorical-grounding queries through one injected,
+   cancellable DuckDB adapter with the pinned input hash;
+5. accepts only trusted-code compiled read-only SQL;
+6. numerically audits narration and falls back to the verified result table; and
+7. returns a validated result, evidence receipt and backward-compatible trace.
+
+DuckDB runs behind an isolated child-process boundary. Its absolute deadline
+covers identity hashing, import, statement preparation and execution; Stop or a
+timeout terminates a stuck native process instead of waiting indefinitely for an
+interrupt that may never settle. The HTTP seam independently verifies that the
+trace query hash, input hash, row count, truncation, duration, pack identity and
+model identity match the validated result before exposing provenance to the UI.
+The client applies the same bounded trace validator before saving it.
+
+The chat route accepts the validated proposal as the response without a second
+model synthesis step. This preserves the established analytical answer behavior
+and latency while keeping authority in the control plane. It is a deliberately
+narrow v0.1 behavior-preserving adapter, not autonomous pack collaboration.
+
+The sealed astronomy transfer suite was rerun through the complete pack adapter
+without changing its 12 cases, semantic rubric or gold results. Runner `2.0.0`
+now scores the user-visible answer, evidence, grants, permissions, tool receipt,
+model receipt and terminal envelope in addition to semantic plan and executed
+result equality. It records the exact commit, dirty state, pack/model profile,
+context, Ollama version, hardware, cold/warm state, timing and errors.
+
+The clean warm-state run at commit `0a127445e7d07c52ece641eb912df82f560e5a6a`
+remained 10/12 (83.3%): one exact-source semantic miss and one terminal invalid
+conditional-rate plan. All 12 pack-envelope audits passed and the evaluator had
+zero execution errors. Mean latency was 5.7 seconds, median 5.6 seconds and P95
+14.4 seconds on the recorded Apple M1 8 GB / Llama 3.2 3B Q4_K_M profile at a
+4096-token context. Six cases used grounded model narration, five visibly used
+the verified fallback after narration rejection, and one ended in a typed pack
+failure. This is below the manifest's 90% gate and is not a human-usefulness or
+cross-model qualification. The pack cannot be called qualified or unlock
+mastery. Saved model assignment, automatic selection, custom switching,
+lifecycle management, qualification storage, installation and Python execution
+remain incomplete.
 
 ## Deliberately deferred
 

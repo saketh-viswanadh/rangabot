@@ -1,5 +1,48 @@
 # Daily progress
 
+## 2026-08-07 — Analytics Expert Pack 0.1 reference
+
+- Moved grant issuance out of the pack and into Mind & Memory's trusted control
+  plane. It now verifies the saved conversation/dataset pair, ignores
+  client-supplied prior history, appends only the current user turn when needed,
+  and issues exact conversation- and request-scoped grants.
+- Added an immutable local Analytics manifest plus runtime request/result
+  validation for identities, capabilities, resources, permissions, grant ids,
+  tools, model resolution, evidence, terminal states and failure receipts.
+- Wrapped the existing conversational SQL path without changing its routing
+  precedence. Dataset identity, schema, hidden categorical grounding queries and
+  final execution all cross one injected DuckDB adapter with pinned hashes and
+  no external access.
+- Propagated Stop through file hashing, schema reads, grounding, SQL execution,
+  planning and narration. Cancellation is terminal and never becomes a fallback
+  or retry; provider and runtime failures now return stable typed outcomes.
+- Passed the explicitly resolved local model id to Ollama and recorded it in the
+  result/trace. General is live; Automatic currently reuses General; a different
+  Custom model fails before any data or model access. No model is downloaded.
+- Added focused registry, authority, cross-conversation, provider, cancellation,
+  grounding-adapter, evidence-forgery, trace-compatibility and HTTP status tests.
+- Fixed the hard audit's release blocker instead of weakening its test: DuckDB
+  now runs in an isolated process killed on Stop or an absolute deadline covering
+  hashing, import, preparation and execution. The former native interrupt could
+  leave the process hanging indefinitely.
+- Added synthetic integration coverage for the exact route order, saved
+  conversation/dataset binding, reply metadata, typed HTTP failures, warnings,
+  trace propagation and evidence-to-trace consistency. Malformed provenance is
+  rejected both before the response header and before client persistence.
+- Upgraded the sealed evaluator to runner 2.0. It records commit/dirty state,
+  pack/model/context/quantization, Ollama, hardware, cold/warm state, summary
+  latency and errors; every case now audits the visible answer and exact evidence,
+  permission, grant, tool, model and terminal receipts.
+- Ran the unchanged 12-case astronomy suite at clean warm commit `0a12744`. It
+  remained 10/12 (83.3%) with one exact-source semantics miss and one typed
+  invalid conditional-rate plan; all 12 envelope audits passed, evaluator errors
+  were 0, and mean/median/P95 latency was 5.7/5.6/14.4 seconds. Six cases used
+  grounded narration, five used a disclosed verified fallback and one failed
+  terminally. No case or rubric was removed, rescored or tuned.
+- The full deterministic project suite now passes 242/242 alongside the 60-case
+  fixture validator, 15/15 memory precision and recall, lint, typecheck and the
+  production build. Analytics remains experimental below its 90% gate.
+
 ## 2026-08-07 — Expert Pack Contract v1 foundation
 
 - Drafted the versioned Expert Pack Contract while keeping Mind & Memory the

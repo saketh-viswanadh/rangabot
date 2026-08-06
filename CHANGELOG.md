@@ -9,12 +9,43 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Architectural decisions
 
-- Added the proposed Expert Pack Contract v1 and executable manifest boundary.
-  Strict validation rejects unknown authority, undeclared web access, unsafe
-  parallel generative loading, incomplete per-pack model choices, weak critical
-  gates and destructive uninstall defaults. Typed requests, evidence, model
-  resolution, receipts and failures establish interfaces only; no runtime pack
-  routing or model download is enabled by this change.
+- Advanced the Expert Pack Contract to v1.2 and added Analytics `0.1.0` as the
+  first experimental runtime reference. Mind & Memory—not the pack—verifies the
+  saved conversation's exact dataset attachment, constructs bounded canonical
+  history, and issues resource-scoped dataset and request-scoped runtime grants.
+  Strict request/result validators reject identity drift, forged grants,
+  undeclared tools, widened permissions, mismatched execution resources,
+  malformed model receipts and invalid terminal states. Success now requires
+  evidence, model-background claims require a model receipt, and typed warnings
+  distinguish grounded narration from verified fallback.
+- Routed Analytics identity, schema, categorical grounding and final execution
+  through one injected read-only DuckDB boundary with input-hash pinning and
+  AbortSignal propagation. The provider now receives the resolved local model id
+  explicitly; custom switching remains disabled unless it is already the
+  configured model. Provider, timeout, cancellation and tool failures produce
+  stable pack results and HTTP recovery semantics without silent retry.
+- Isolated DuckDB in a killable local child process. The absolute SQL deadline
+  now covers hashing, import, preparation and execution, so Stop and timeout do
+  not depend on a native interrupt promise settling. In-flight cancellation and
+  timeout tests exercise a query only after execution begins.
+- Preserved the previous deterministic analytical intent gate and route order.
+  Successful answers retain the numeric narration audit and verified-table
+  fallback while adding pack/version/model provenance to backward-compatible
+  execution traces. Synthetic dispatch tests lock deterministic answer, approved
+  memory, code-allowlist and Analytics precedence. The HTTP and client seams
+  validate traces, and mismatched evidence/trace provenance fails closed.
+  Analytics remains experimental at the sealed 10/12 transfer
+  baseline, below its 90% gate; no model download, pack installation manager,
+  Python runtime or other pack was enabled.
+- Added an optional Expert Pack mode to the sealed astronomy evaluator without
+  changing its cases, semantic rubric, gold SQL or legacy default. Runner 2.0
+  records source/pack/model/context/Ollama/hardware/cold-warm provenance and
+  scores user-visible narration, evidence, permissions, grants, tools, model
+  receipts and terminal results. The clean warm run at commit `0a12744` scored
+  10/12 (83.3%; 5.7-second mean, 5.6-second median, 14.4-second P95) with all 12
+  envelopes valid and zero evaluator errors. Five successful cases required a
+  typed verified fallback after narration rejection. Targeted tests do not
+  replace this complete sealed result or the still-missing human/cross-model gates.
 - Approved an installable Expert Pack direction for Rangabot's post-reliability
   architecture. Mind & Memory remains the single privacy, precedence,
   conversation and permission control plane; Analytics, Scholar, Documents,

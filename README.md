@@ -376,13 +376,27 @@ context, keeps complete answers private and unloads each model before starting
 the next. See [local model guidance](docs/models.md) before overriding a model's
 memory-fit guard.
 
-The proposed [Expert Pack Contract](docs/EXPERT_PACK_CONTRACT.md) defines how
-future installable Analytics, Scholar, Documents, Builder and Research
-capabilities will remain governed by the same Mind & Memory control plane. It
-includes strict manifest validation, per-pack `automatic`, `general` and
-`custom` model assignment, one-model resource limits, typed evidence receipts
-and pack-specific qualification. This is an architecture contract, not a claim
-that pack installation or routing is already available.
+The [Expert Pack Contract](docs/EXPERT_PACK_CONTRACT.md) defines how installable
+Analytics, Scholar, Documents, Builder and Research capabilities remain governed
+by the same Mind & Memory control plane. Analytics `0.1.0` is the first bundled
+experimental reference: an attached-data request receives exact conversation-
+and dataset-scoped grants, all schema/grounding/final reads use one cancellable
+read-only adapter, the configured local model is explicit, and the result carries
+validated evidence, typed fallback warnings and execution receipts. DuckDB runs
+inside a hard-kill process boundary so Stop and absolute timeouts cannot strand a
+native query. The route and client reject execution traces that do not match the
+validated evidence. Run its unchanged sealed transfer path
+with `npm run conversation:evaluate:sql:pack`.
+
+This is not a pack manager or a qualification claim. The unchanged sealed suite
+scored 10/12 through runner 2.0's full response/evidence/receipt audit at clean
+commit `0a12744` (83.3%, 5.7-second mean, 5.6-second median, 14.4-second P95,
+zero evaluator execution errors), below its 90% gate. Five of eleven completed
+answers required the visible verified fallback after narration grounding failed;
+that is useful protection, not evidence that narration quality is solved. Saved
+per-pack model choices, automatic/custom switching, install/update/remove flows,
+resource lifecycle and the other packs are still roadmap work. No mode downloads
+a model or enables the internet.
 
 Teacher Mode generation can be compared explicitly with
 `npm run knowledge:evaluate:answers -- --model=qwen2.5:7b --num-ctx=4096 --sample=5`.
