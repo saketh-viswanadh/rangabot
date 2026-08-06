@@ -29,6 +29,79 @@ unless user feedback exposes a more urgent defect:
 Automatic model-weight mutation is not part of this sequence. A reviewed
 fine-tuning dataset and rollback workflow remain a later proposal.
 
+After the Core Conversation Reliability release decision, the next major
+architecture milestone is the **Expert Pack Contract**. This formalizes the
+existing principle that Mind & Memory governs every capability while allowing
+people to install only the expert workflows they need and choose which
+qualified local model, if any, powers each workflow.
+
+### Approved Expert Pack architecture
+
+1. **One Rangabot, one control plane** — Mind & Memory exclusively owns safety,
+   privacy, permissions, instruction precedence, relevant approved memory,
+   bounded conversation context, provider failure behavior and final response
+   synthesis. Packs cannot override these rules or create independent memory.
+2. **Installable capability packs** — a pack contains a manifest, bounded tools,
+   permission scopes, resource estimates, typed inputs and evidence outputs,
+   qualification fixtures, acceptance gates and an uninstall path. A model or
+   system prompt alone is not a pack.
+3. **Per-pack model choice** — every pack supports `automatic`, `general model`
+   and `custom installed model` selection. A one-request override never silently
+   changes the saved assignment.
+4. **Pack-specific qualification** — model compatibility is reported as
+   qualified, experimental, poor machine fit, incompatible or not installed.
+   General conversation quality cannot substitute for Analytics, Scholar,
+   Builder, document or reviewer qualification.
+5. **Resource-aware lifecycle** — installed weights may remain on disk, but only
+   required models load for an active stage. Rangabot prefers an already loaded
+   qualified model, executes different large models sequentially, unloads them
+   after a configurable idle period and prevents unsafe parallel loading on
+   constrained hardware.
+6. **Typed expert collaboration** — packs exchange plans, evidence, receipts and
+   validated artifacts through shared contracts, not hidden free-form agent
+   conversations. Mind & Memory produces the single coherent user-facing answer.
+7. **Evidence-backed routing** — deterministic signals such as an attached
+   dataset, selected repository or requested artifact take priority over model
+   classification. Ambiguous material actions require a focused clarification;
+   web access always requires its separate visible approval boundary.
+
+### Expert Pack delivery order
+
+- [ ] **Foundation: Expert Pack Contract** — version the manifest schema,
+  lifecycle, permission model, routing decision record, typed evidence envelope,
+  model assignment policy, resource manager and qualification-result format.
+- [ ] **Reference pack: Analytics** — adapt the existing read-only SQL work into
+  the first compliant pack, then add sandboxed Python only after its policy and
+  execution gates pass. This proves tool execution, evidence narration and
+  per-pack model selection without duplicating Mind & Memory.
+- [ ] **Scholar pack** — adapt Knowledge Vault retrieval, citation audit,
+  cross-source synthesis and Teacher Mode to the same pack boundary. Embedding
+  and reranking components remain distinct from the selected generative model.
+- [ ] **Documents pack** — conversation-led Word creation first, followed by PDF,
+  presentation and spreadsheet sub-capabilities. Templates, render inspection
+  and artifact validators—not a specialist model alone—define quality.
+- [ ] **Builder pack** — permissioned repository context, code search, bounded
+  commands, tests, patches and technical documentation with inspectable receipts.
+- [ ] **Research pack** — remain deferred until the persistent domain allowlist,
+  query preview, revocation and local-first insufficiency gates are complete.
+- [ ] **Pack manager** — install, remove, update, roll back and inspect packs;
+  show disk use, estimated RAM, permissions, model assignments, benchmark
+  evidence and limitations before activation.
+- [ ] **Resource-aware router** — plan the smallest sufficient pack/model chain,
+  estimate model switches, expose why each route was selected and fail safely
+  when no qualified configuration fits the machine.
+
+### Needs design before implementation
+
+- Define the signed/distributable pack format and trust policy for third-party
+  community packs.
+- Decide whether model downloads belong to the pack manager or remain an
+  explicit external Ollama operation referenced by the pack.
+- Define stable compatibility guarantees across pack, Rangabot, provider and
+  model versions.
+- Decide which pack metadata and benchmark aggregates are safe to publish while
+  keeping private prompts, documents, datasets, memories and answers local.
+
 ## Approved
 
 - [x] Establish a versioned, balanced 60-case synthetic Mind & Memory benchmark and a shared

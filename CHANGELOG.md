@@ -7,6 +7,32 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+### Architectural decisions
+
+- Approved an installable Expert Pack direction for Rangabot's post-reliability
+  architecture. Mind & Memory remains the single privacy, precedence,
+  conversation and permission control plane; Analytics, Scholar, Documents,
+  Builder and later Research packs contribute bounded tools, context and typed
+  evidence without becoming separate chat personalities.
+- Defined a pack as a capability contract—not merely a prompt or bundled model.
+  Each pack must declare its tools, permissions, resource requirements,
+  supported operations, quality suite, evidence format and limitations. Planned
+  capability is not represented as shipped until its frozen acceptance gates
+  pass.
+- Approved per-pack model assignment with three user choices: automatically
+  select a qualified installed model, reuse the general conversation model, or
+  explicitly select another installed model. Compatibility and recommendation
+  are pack-specific; untested combinations remain available only with a visible
+  experimental label.
+- Approved resource-aware sequential execution. Model files may coexist on
+  disk, but Rangabot should load only the model required for the active stage,
+  prefer reuse when quality is sufficient, unload inactive large models on
+  memory-constrained machines and disclose model switches before execution.
+- Rejected compulsory one-model-per-skill routing. Deterministic runtimes,
+  validation and rendering remain the primary reliability mechanisms; specialist
+  models are optional engines whose benefit must be demonstrated by the pack's
+  unchanged qualification suite.
+
 - Added a registry-driven cross-model conversation matrix that evaluates one
   installed Ollama model at a time, fixes its context budget, unloads it before
   the next profile and preserves full answers only in private ignored results.
