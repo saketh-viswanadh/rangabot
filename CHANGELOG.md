@@ -7,6 +7,12 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+- Added the complete nine-route public Rangabot website source and independent
+  cross-platform CI coverage for its build, rendered routes, navigation, lint
+  and production dependencies. The root application and nested Sites project
+  now use their own lint and TypeScript boundaries instead of accidentally
+  applying the app's Next.js rules to the website.
+
 - Added a registry-driven cross-model conversation matrix that evaluates one
   installed Ollama model at a time, fixes its context budget, unloads it before
   the next profile and preserves full answers only in private ignored results.

@@ -1,5 +1,22 @@
 # Daily progress
 
+## 2026-08-06 — Public website source and CI reconciliation
+
+- Audited the live public site at `rangabot.com` across all nine routes, its
+  desktop and mobile structure, public access, active custom-domain TLS,
+  navigation, metadata, privacy-safe content and current evidence claims.
+- Recovered a release-integrity gap: the exact deployed website source existed
+  only on a clean local branch. Published it for review in draft PR #86 without
+  redeploying or changing public access.
+- Separated the root Next.js app and nested Sites website validation boundaries.
+  Root lint and TypeScript no longer interpret the website with the wrong
+  project configuration; Ubuntu and Windows CI now install, build, test, lint
+  and audit the website independently.
+- Local validation passed 202/202 application tests, the frozen 60-case suite
+  structure check, memory precision and recall at 15/15 each, both production
+  builds, four website route/navigation tests, privacy scanning, linting and
+  production dependency audits with zero known vulnerabilities.
+
 ## 2026-08-05 — Reproducible cross-model runtime profiles
 
 - Reverified the public model registry and selected `qwen2.5:7b` as the general

@@ -1,0 +1,96 @@
+import assert from "node:assert/strict";
+import { access, readFile } from "node:fs/promises";
+import test from "node:test";
+
+const root = new URL("../", import.meta.url);
+
+async function render(pathname = "/") {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${pathname}`);
+  const { default: worker } = await import(workerUrl.href);
+
+  return worker.fetch(
+    new Request(`http://localhost${pathname}`, { headers: { accept: "text/html" } }),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+}
+
+test("server-renders the finished Rangabot home page", async () => {
+  const response = await render();
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+
+  const html = await response.text();
+  assert.match(html, /<title>Rangabot — private AI, faithfully local<\/title>/i);
+  assert.match(html, /Your knowledge\./);
+  assert.match(html, /Your computer\./);
+  assert.match(html, /Your Ranga\./);
+  assert.match(html, /Local first is a boundary/);
+  assert.match(html, /Path to Mastery/);
+  assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
+});
+
+test("renders every approved public route", async () => {
+  const routes = new Map([
+    ["/product", "More than a model"],
+    ["/showcase", "See the work"],
+    ["/mastery", "Progress that can be challenged"],
+    ["/evidence", "Numbers with names"],
+    ["/privacy", "Local by design"],
+    ["/docs", "Start small"],
+    ["/community", "Craft one capability well"],
+    ["/download", "Bring Ranga home"],
+  ]);
+
+  for (const [pathname, expected] of routes) {
+    const response = await render(pathname);
+    assert.equal(response.status, 200, pathname);
+    assert.match(await response.text(), new RegExp(expected, "i"), pathname);
+  }
+});
+
+test("keeps primary navigation usable without client-side routing", async () => {
+  const response = await render();
+  const html = await response.text();
+  const internalPaths = [...html.matchAll(/href="(\/[^"]*)"/g)]
+    .map((match) => match[1].split("#")[0])
+    .filter((pathname) => !pathname.startsWith("/_next/") && !pathname.startsWith("/ranga/") && !pathname.startsWith("/media/"));
+
+  for (const pathname of new Set(internalPaths)) {
+    const destination = await render(pathname);
+    assert.equal(destination.status, 200, `navigation target ${pathname}`);
+  }
+
+  const sourceFiles = [
+    "../app/page.tsx",
+    "../app/product/page.tsx",
+    "../app/community/page.tsx",
+    "../components/SiteHeader.tsx",
+    "../components/SiteFooter.tsx",
+  ];
+  const sources = await Promise.all(sourceFiles.map((pathname) => readFile(new URL(pathname, import.meta.url), "utf8")));
+  assert.doesNotMatch(sources.join("\n"), /next\/link|<Link\b/);
+});
+
+test("keeps starter infrastructure and private product data out of the site", async () => {
+  const [page, layout, packageJson, hosting] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
+  ]);
+
+  assert.doesNotMatch(page, /_sites-preview|SkeletonPreview|codex-preview/);
+  assert.doesNotMatch(layout, /Starter Project|codex-preview/);
+  assert.doesNotMatch(packageJson, /react-loading-skeleton/);
+  const hostingConfig = JSON.parse(hosting);
+  assert.match(hostingConfig.project_id, /^appgprj_/);
+  assert.equal(hostingConfig.d1, null);
+  assert.equal(hostingConfig.r2, null);
+  await assert.rejects(access(new URL("../app/_sites-preview/SkeletonPreview.tsx", import.meta.url)));
+
+  const combined = `${page}\n${layout}`;
+  assert.doesNotMatch(combined, /rangabot\.db|repositories\.json|knowledge\.db|\.env\.local/);
+  await assert.rejects(access(new URL("data", root)));
+});
