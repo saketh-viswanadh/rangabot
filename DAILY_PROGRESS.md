@@ -29,17 +29,24 @@
   conversation/dataset binding, reply metadata, typed HTTP failures, warnings,
   trace propagation and evidence-to-trace consistency. Malformed provenance is
   rejected both before the response header and before client persistence.
-- Upgraded the sealed evaluator to runner 2.0. It records commit/dirty state,
+- Upgraded the sealed evaluator to runner 2.1.2. It records commit/dirty state,
   pack/model/context/quantization, Ollama, hardware, cold/warm state, summary
   latency and errors; every case now audits the visible answer and exact evidence,
   permission, grant, tool, model and terminal receipts.
-- Ran the unchanged 12-case astronomy suite at clean warm commit `0a12744`. It
-  remained 10/12 (83.3%) with one exact-source semantics miss and one typed
-  invalid conditional-rate plan; all 12 envelope audits passed, evaluator errors
-  were 0, and mean/median/P95 latency was 5.7/5.6/14.4 seconds. Six cases used
-  grounded narration, five used a disclosed verified fallback and one failed
-  terminally. No case or rubric was removed, rescored or tuned.
-- The full deterministic project suite now passes 242/242 alongside the 60-case
+- Rejected the initial runner-2.0 score as qualification-comparable after an
+  independent audit found false-pass paths in result matching and numeric-only
+  narration grounding. The cases, expected plans and gold SQL stayed frozen;
+  comparator 1.0.0 now checks typed positional cells, duplicate multiplicity,
+  deterministic ordering, truncation and an explicit two-decimal tolerance.
+- Ran the unchanged 12-case astronomy suite at clean warm commit `8725d47`. It
+  remained 10/12 (83.3%) with one exact-source semantics miss and one
+  clarification instead of the required conditional-rate execution. All 12 pack
+  audits and all 10 executed-result comparisons passed; evaluator errors were 0,
+  and mean/median/P95 latency was 5.3/4.5/18.1 seconds. The stronger audit
+  rejected every generated query narration, so all 10 query answers used a
+  disclosed, persisted and visibly labelled verified fallback. No case, expected
+  plan or gold result was removed or weakened.
+- The full deterministic project suite now passes 253/253 alongside the 60-case
   fixture validator, 15/15 memory precision and recall, lint, typecheck and the
   production build. Analytics remains experimental below its 90% gate.
 

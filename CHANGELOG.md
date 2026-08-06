@@ -9,7 +9,7 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Architectural decisions
 
-- Advanced the Expert Pack Contract to v1.2 and added Analytics `0.1.0` as the
+- Advanced the Expert Pack Contract to v1.3 and added Analytics `0.1.0` as the
   first experimental runtime reference. Mind & Memory—not the pack—verifies the
   saved conversation's exact dataset attachment, constructs bounded canonical
   history, and issues resource-scoped dataset and request-scoped runtime grants.
@@ -38,14 +38,27 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   baseline, below its 90% gate; no model download, pack installation manager,
   Python runtime or other pack was enabled.
 - Added an optional Expert Pack mode to the sealed astronomy evaluator without
-  changing its cases, semantic rubric, gold SQL or legacy default. Runner 2.0
+  changing its cases, expected semantic plans, gold SQL or legacy default. A
+  final audit found that runner 2.0's result matcher ignored cell positions and
+  row multiplicity and that narration grounding checked numbers only. Runner
+  2.1.2 replaces those defective implementations with typed positional cells,
+  one-to-one multiset rows, explicit outer ordering, truncation rejection,
+  bounded row/label binding, qualitative/ranking/causal checks and a documented
+  two-decimal tolerance. The previous runner-2.0 result is superseded rather than
+  treated as directly comparable.
+- Runner 2.1.2
   records source/pack/model/context/Ollama/hardware/cold-warm provenance and
   scores user-visible narration, evidence, permissions, grants, tools, model
-  receipts and terminal results. The clean warm run at commit `0a12744` scored
-  10/12 (83.3%; 5.7-second mean, 5.6-second median, 14.4-second P95) with all 12
-  envelopes valid and zero evaluator errors. Five successful cases required a
-  typed verified fallback after narration rejection. Targeted tests do not
-  replace this complete sealed result or the still-missing human/cross-model gates.
+  receipts and terminal results. The clean warm run at commit `8725d47` scored
+  10/12 (83.3%; 5.3-second mean, 4.5-second median, 18.1-second P95) with all 12
+  pack audits, all 10 executed-result comparisons and zero evaluator errors.
+  Every generated query narration failed the stricter audit, so all 10 query
+  answers used the direct verified fallback. Targeted tests do not replace this
+  complete sealed result or the still-missing human/cross-model gates.
+- Persisted a generic `verified-fallback` answer disposition and show it beside
+  the answer with a crafted shield notice. Unknown or malformed warning headers
+  fail closed, and imported conversations now reuse the full bounded message
+  validator instead of accepting arbitrary metadata.
 - Approved an installable Expert Pack direction for Rangabot's post-reliability
   architecture. Mind & Memory remains the single privacy, precedence,
   conversation and permission control plane; Analytics, Scholar, Documents,

@@ -389,14 +389,15 @@ validated evidence. Run its unchanged sealed transfer path
 with `npm run conversation:evaluate:sql:pack`.
 
 This is not a pack manager or a qualification claim. The unchanged sealed suite
-scored 10/12 through runner 2.0's full response/evidence/receipt audit at clean
-commit `0a12744` (83.3%, 5.7-second mean, 5.6-second median, 14.4-second P95,
-zero evaluator execution errors), below its 90% gate. Five of eleven completed
-answers required the visible verified fallback after narration grounding failed;
-that is useful protection, not evidence that narration quality is solved. Saved
-per-pack model choices, automatic/custom switching, install/update/remove flows,
-resource lifecycle and the other packs are still roadmap work. No mode downloads
-a model or enables the internet.
+scored 10/12 through runner 2.1.2 and result comparator 1.0.0 at clean commit
+`8725d47` (83.3%, 5.3-second mean, 4.5-second median, 18.1-second P95, zero
+evaluator execution errors), below its 90% gate. All 12 terminal/evidence/receipt
+audits and all 10 executed-result comparisons passed. The stricter audit rejected
+all 10 generated query narrations and used a direct verified fallback, now
+disclosed visibly in chat; that is useful protection and evidence that narration
+quality remains unsolved. Saved per-pack model choices, automatic/custom
+switching, install/update/remove flows, resource lifecycle and the other packs
+are still roadmap work. No mode downloads a model or enables the internet.
 
 Teacher Mode generation can be compared explicitly with
 `npm run knowledge:evaluate:answers -- --model=qwen2.5:7b --num-ctx=4096 --sample=5`.

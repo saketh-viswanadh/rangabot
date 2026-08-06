@@ -1,6 +1,6 @@
 # Expert Pack Contract
 
-- Contract version: 1.2.0
+- Contract version: 1.3.0
 - Manifest schema: 1
 - Status: approved architecture; Analytics reference implementation experimental
 
@@ -217,24 +217,32 @@ and latency while keeping authority in the control plane. It is a deliberately
 narrow v0.1 behavior-preserving adapter, not autonomous pack collaboration.
 
 The sealed astronomy transfer suite was rerun through the complete pack adapter
-without changing its 12 cases, semantic rubric or gold results. Runner `2.0.0`
-now scores the user-visible answer, evidence, grants, permissions, tool receipt,
-model receipt and terminal envelope in addition to semantic plan and executed
-result equality. It records the exact commit, dirty state, pack/model profile,
-context, Ollama version, hardware, cold/warm state, timing and errors.
+without changing its 12 cases, expected semantic plans or gold results. A final
+audit found that runner `2.0.0` ignored cell positions and duplicate row use and
+that its narration audit checked numbers only. That result is superseded rather
+than presented as directly comparable. Runner `2.1.2`, result schema 3 and
+comparator `1.0.0` now score typed positional cells, one-to-one row multiplicity,
+outer ordering, truncation, exact pack execution evidence, bounded label/value
+binding, qualitative judgments, ranking and causal claims. The explicit
+0.005000001 absolute tolerance permits the compiler's two-decimal rendering and
+is recorded per case. Provenance still records the exact commit, dirty state,
+pack/model profile, context, Ollama version, hardware, cold/warm state, timing
+and errors.
 
-The clean warm-state run at commit `0a127445e7d07c52ece641eb912df82f560e5a6a`
-remained 10/12 (83.3%): one exact-source semantic miss and one terminal invalid
-conditional-rate plan. All 12 pack-envelope audits passed and the evaluator had
-zero execution errors. Mean latency was 5.7 seconds, median 5.6 seconds and P95
-14.4 seconds on the recorded Apple M1 8 GB / Llama 3.2 3B Q4_K_M profile at a
-4096-token context. Six cases used grounded model narration, five visibly used
-the verified fallback after narration rejection, and one ended in a typed pack
-failure. This is below the manifest's 90% gate and is not a human-usefulness or
-cross-model qualification. The pack cannot be called qualified or unlock
-mastery. Saved model assignment, automatic selection, custom switching,
-lifecycle management, qualification storage, installation and Python execution
-remain incomplete.
+The clean warm-state run at commit
+`8725d47e2bfd9a77883bff08e6ee113bc5dde1dc` remained 10/12 (83.3%): one
+exact-source semantic miss and one clarification instead of the required
+conditional-rate execution. All 12 pack audits and all 10 executed-result
+comparisons passed, with zero evaluator errors. Mean latency was 5.3 seconds,
+median 4.5 seconds and P95 18.1 seconds on the recorded Apple M1 8 GB / Llama
+3.2 3B Q4_K_M profile at a 4096-token context. The audit rejected all 10
+generated query narrations; each answer used the direct verified fallback and
+the app visibly discloses that disposition. This is safe failure recovery, not
+narration qualification. The result remains below the manifest's 90% gate and
+is not a human-usefulness or cross-model qualification. The pack cannot be
+called qualified or unlock mastery. Saved model assignment, automatic selection,
+custom switching, lifecycle management, qualification storage, installation and
+Python execution remain incomplete.
 
 ## Deliberately deferred
 

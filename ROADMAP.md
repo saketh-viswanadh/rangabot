@@ -70,7 +70,7 @@ qualified local model, if any, powers each workflow.
 
 ### Expert Pack delivery order
 
-- [ ] **Foundation: Expert Pack Contract** — contract v1.2, immutable bundled
+- [ ] **Foundation: Expert Pack Contract** — contract v1.3, immutable bundled
   registry, strict manifest/request/result validators, resource-scoped runtime
   grants, explicit provider model ids, stable HTTP failures and typed evidence
   receipts are implemented. Routing decision records, saved model assignment,
@@ -81,11 +81,14 @@ qualified local model, if any, powers each workflow.
   final SQL, cancellation, verified narration fallback and trace provenance use
   the same injected boundary. Native SQL now has a hard-kill process boundary;
   route precedence and evidence-to-trace consistency have synthetic integration
-  tests. The unchanged runner-2.0 sealed run at clean commit `0a12744` remained
-  10/12 (83.3%; 5.7-second mean, 5.6-second median, 14.4-second P95), with all
-  12 envelopes audited and zero evaluator errors. One source-semantics miss and
-  one terminal conditional-rate plan failure keep it below the 90% gate. Saved
-  model choice, qualification and sandboxed Python are still blocked.
+  tests. The unchanged runner-2.1.2 sealed run at clean commit `8725d47` remained
+  10/12 (83.3%; 5.3-second mean, 4.5-second median, 18.1-second P95), with all
+  12 pack audits, all 10 result comparisons and zero evaluator errors. One
+  source-semantics miss and one clarification instead of conditional-rate
+  execution keep it below the 90% gate. The stricter grounding audit accepted no
+  generated query narration; verified fallback is safe and visible, but narration
+  reliability is not qualified. Saved model choice, qualification and sandboxed
+  Python are still blocked.
 - [ ] **Scholar pack** — adapt Knowledge Vault retrieval, citation audit,
   cross-source synthesis and Teacher Mode to the same pack boundary. Embedding
   and reranking components remain distinct from the selected generative model.
