@@ -4,6 +4,39 @@ export const MAX_CHAT_MESSAGES = 200;
 export const MAX_CHAT_MESSAGE_CHARS = 50_000;
 export const MAX_CHAT_TOTAL_CHARS = 1_000_000;
 const messageKeys = new Set(["role", "content", "artifactIntent", "wordArtifact", "analysisTrace", "codeContext", "replyTo", "retrievalMode", "memoryUse", "memoryTitles"]);
+const analysisTraceKeys = new Set(["engine", "dataset", "query", "returnedRows", "truncated", "durationMs", "inputSha256", "querySha256", "packId", "packVersion", "modelMode", "modelId"]);
+
+export function isValidAnalysisTrace(value: unknown): value is NonNullable<ChatMessage["analysisTrace"]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const trace = value as Record<string, unknown>;
+  const hasPackProvenance = trace.packId !== undefined || trace.packVersion !== undefined;
+  const hasModelProvenance = trace.modelMode !== undefined || trace.modelId !== undefined;
+  return Object.keys(trace).every((key) => analysisTraceKeys.has(key))
+    && trace.engine === "duckdb"
+    && typeof trace.dataset === "string" && trace.dataset.length > 0 && trace.dataset.length <= 240
+    && typeof trace.query === "string" && trace.query.length > 0 && trace.query.length <= 8_000
+    && typeof trace.returnedRows === "number" && Number.isInteger(trace.returnedRows) && trace.returnedRows >= 0 && trace.returnedRows <= 200
+    && typeof trace.truncated === "boolean"
+    && typeof trace.durationMs === "number" && Number.isInteger(trace.durationMs) && trace.durationMs >= 0 && trace.durationMs <= 30_000
+    && typeof trace.inputSha256 === "string" && /^[a-f0-9]{64}$/.test(trace.inputSha256)
+    && typeof trace.querySha256 === "string" && /^[a-f0-9]{64}$/.test(trace.querySha256)
+    && (trace.packId === undefined || typeof trace.packId === "string" && /^[a-z][a-z0-9-]{0,63}$/.test(trace.packId))
+    && (trace.packVersion === undefined || typeof trace.packVersion === "string" && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(trace.packVersion))
+    && (trace.modelMode === undefined || ["automatic", "general", "custom"].includes(String(trace.modelMode)))
+    && (trace.modelId === undefined || typeof trace.modelId === "string" && trace.modelId.length > 0 && trace.modelId.length <= 120)
+    && (!hasPackProvenance || trace.packId !== undefined && trace.packVersion !== undefined)
+    && (!hasModelProvenance || trace.modelMode !== undefined && trace.modelId !== undefined && hasPackProvenance);
+}
+
+export function parseAnalysisTraceHeader(value: string | null) {
+  if (!value || value.length > 30_000) return null;
+  try {
+    const parsed: unknown = JSON.parse(decodeURIComponent(value));
+    return isValidAnalysisTrace(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 function validOptionalMetadata(message: Record<string, unknown>) {
   if (!Object.keys(message).every((key) => messageKeys.has(key))) return false;
@@ -40,17 +73,7 @@ function validOptionalMetadata(message: Record<string, unknown>) {
       || artifact.previewPages < 0 || artifact.previewPages > 1000) return false;
   }
   if (message.analysisTrace !== undefined) {
-    if (!message.analysisTrace || typeof message.analysisTrace !== "object") return false;
-    const trace = message.analysisTrace as Record<string, unknown>;
-    if (!Object.keys(trace).every((key) => ["engine", "dataset", "query", "returnedRows", "truncated", "durationMs", "inputSha256", "querySha256"].includes(key))
-      || trace.engine !== "duckdb"
-      || typeof trace.dataset !== "string" || trace.dataset.length < 1 || trace.dataset.length > 240
-      || typeof trace.query !== "string" || trace.query.length < 1 || trace.query.length > 8_000
-      || typeof trace.returnedRows !== "number" || !Number.isInteger(trace.returnedRows) || trace.returnedRows < 0 || trace.returnedRows > 200
-      || typeof trace.truncated !== "boolean"
-      || typeof trace.durationMs !== "number" || !Number.isInteger(trace.durationMs) || trace.durationMs < 0 || trace.durationMs > 30_000
-      || typeof trace.inputSha256 !== "string" || !/^[a-f0-9]{64}$/.test(trace.inputSha256)
-      || typeof trace.querySha256 !== "string" || !/^[a-f0-9]{64}$/.test(trace.querySha256)) return false;
+    if (!isValidAnalysisTrace(message.analysisTrace)) return false;
   }
   return true;
 }

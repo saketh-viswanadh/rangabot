@@ -3,8 +3,12 @@ import test from "node:test";
 import {
   EXPERT_PACK_SCHEMA_VERSION,
   type ExpertPackManifest,
+  type ExpertPackRequest,
+  type ExpertPackResult,
   validateExpertPackManifest,
   validateExpertPackModelAssignment,
+  validateExpertPackRequest,
+  validateExpertPackResult,
 } from "../lib/expert-packs.ts";
 
 const analyticsManifest = (): ExpertPackManifest => ({
@@ -44,6 +48,35 @@ const analyticsManifest = (): ExpertPackManifest => ({
     removableArtifacts: ["derived-cache", "qualification-results"],
   },
 });
+
+function validRequest(): ExpertPackRequest {
+  return {
+    requestId: "request-a", conversationId: "conversation-a", packId: "analytics", packVersion: "1.0.0", capability: "sql-analysis",
+    currentRequest: "Count the approved rows", conversation: [{ role: "user", content: "Count the approved rows" }],
+    grants: [
+      { id: "dataset-grant", permission: "approved-dataset:read", scope: { kind: "conversation", id: "conversation-a" }, resource: { kind: "dataset", id: "dataset-a" } },
+      { id: "runtime-grant", permission: "local-runtime:execute", scope: { kind: "request", id: "request-a" } },
+    ],
+    modelAssignment: { mode: "general", requestOverride: false },
+    contextReferences: [{ id: "dataset-a", kind: "dataset", title: "Approved data" }],
+  };
+}
+
+function validResult(): ExpertPackResult {
+  return {
+    requestId: "request-a", packId: "analytics", packVersion: "1.0.0", status: "success", responseProposal: "There are 2 rows.",
+    evidence: [{
+      id: "query-evidence", kind: "table", source: "local-execution", locator: `duckdb:${"a".repeat(64)}:${"b".repeat(64)}`, claims: ["Returned 2 verified rows."],
+      localExecution: { engine: "duckdb", resourceId: "dataset-a", inputSha256: "a".repeat(64), querySha256: "b".repeat(64), readOnly: true, externalAccess: false, rowLimit: 200, returnedRows: 2, truncated: false, durationMs: 12 },
+    }],
+    modelBackgroundClaims: [],
+    warnings: [],
+    receipt: {
+      permissionsUsed: ["approved-dataset:read", "local-runtime:execute"], grantIdsUsed: ["dataset-grant", "runtime-grant"], toolsUsed: ["duckdb-readonly"], modelSwitches: 0,
+      model: { requested: { mode: "general", requestOverride: false }, resolvedModelId: "local:3b", compatibility: "experimental", qualificationSuiteId: "analytics-pack", reason: "Verified only for this experimental pack." },
+    },
+  };
+}
 
 test("accepts a model-independent Expert Pack v1 manifest", () => {
   assert.deepEqual(validateExpertPackManifest(analyticsManifest()), { valid: true, errors: [] });
@@ -90,4 +123,69 @@ test("rejects unknown manifest fields instead of silently expanding authority", 
   const result = validateExpertPackManifest(manifest);
   assert.equal(result.valid, false);
   assert.match(result.errors.join("\n"), /remoteEndpoint is not allowed/);
+});
+
+test("validates exact request-scoped and conversation-scoped pack authority", () => {
+  const manifest = analyticsManifest();
+  assert.deepEqual(validateExpertPackRequest(validRequest(), manifest), { valid: true, errors: [] });
+
+  const wrongDataset = validRequest();
+  wrongDataset.grants[0] = { ...wrongDataset.grants[0], resource: { kind: "dataset", id: "dataset-b" } };
+  assert.match(validateExpertPackRequest(wrongDataset, manifest).errors.join("\n"), /no matching context reference/);
+
+  const replayed = validRequest();
+  replayed.grants[0] = { ...replayed.grants[0], scope: { kind: "conversation", id: "conversation-b" } };
+  assert.match(validateExpertPackRequest(replayed, manifest).errors.join("\n"), /not bound/);
+
+  const widenedRuntime = validRequest();
+  widenedRuntime.grants[1] = { ...widenedRuntime.grants[1], scope: { kind: "request", id: "request-b" } };
+  assert.match(validateExpertPackRequest(widenedRuntime, manifest).errors.join("\n"), /not bound/);
+});
+
+test("rejects forged result permissions, grants, tools, resources, and model receipts", () => {
+  const manifest = analyticsManifest();
+  const request = validRequest();
+  assert.deepEqual(validateExpertPackResult(validResult(), manifest, request), { valid: true, errors: [] });
+
+  const forgedTool = validResult();
+  forgedTool.receipt.toolsUsed = ["shell"];
+  assert.match(validateExpertPackResult(forgedTool, manifest, request).errors.join("\n"), /undeclared/);
+
+  const missingDatasetGrant = validResult();
+  missingDatasetGrant.receipt.grantIdsUsed = ["runtime-grant"];
+  assert.match(validateExpertPackResult(missingDatasetGrant, manifest, request).errors.join("\n"), /permission has no matching used grant/);
+
+  const wrongResource = validResult();
+  wrongResource.evidence[0].localExecution = { ...wrongResource.evidence[0].localExecution!, resourceId: "dataset-b" };
+  assert.match(validateExpertPackResult(wrongResource, manifest, request).errors.join("\n"), /resource is not attached/);
+
+  const forgedModel = validResult();
+  forgedModel.receipt.model = { ...forgedModel.receipt.model!, requested: { mode: "custom", modelId: "hidden:70b", requestOverride: true } };
+  assert.match(validateExpertPackResult(forgedModel, manifest, request).errors.join("\n"), /does not match/);
+});
+
+test("enforces mutually exclusive success, clarification, failure, and cancellation envelopes", () => {
+  const manifest = analyticsManifest();
+  const request = validRequest();
+  const clarification: ExpertPackResult = { requestId: "request-a", packId: "analytics", packVersion: "1.0.0", status: "clarification", responseProposal: "Which metric?", clarification: "Which metric?", evidence: [], modelBackgroundClaims: [], warnings: [], receipt: { permissionsUsed: [], grantIdsUsed: [], toolsUsed: [], modelSwitches: 0 } };
+  assert.equal(validateExpertPackResult(clarification, manifest, request).valid, true);
+  const badCancellation: ExpertPackResult = { ...clarification, status: "failure", responseProposal: undefined, clarification: undefined, error: { code: "cancelled", message: "Stopped", retryable: true } };
+  assert.equal(validateExpertPackResult(badCancellation, manifest, request).valid, false);
+});
+
+test("requires evidence for success and inspectable model use for background claims", () => {
+  const manifest = analyticsManifest();
+  const request = validRequest();
+  const noEvidence = validResult();
+  noEvidence.evidence = [];
+  assert.match(validateExpertPackResult(noEvidence, manifest, request).errors.join("\n"), /requires at least one evidence/);
+
+  const hiddenModel = validResult();
+  hiddenModel.modelBackgroundClaims = ["This is uncited model background."];
+  hiddenModel.receipt.model = undefined;
+  assert.match(validateExpertPackResult(hiddenModel, manifest, request).errors.join("\n"), /require an inspectable model receipt/);
+
+  const forgedWarning = validResult() as unknown as Record<string, unknown>;
+  forgedWarning.warnings = [{ code: "silently-fixed", message: "Trust me." }];
+  assert.match(validateExpertPackResult(forgedWarning, manifest, request).errors.join("\n"), /warnings\[0\] is invalid/);
 });

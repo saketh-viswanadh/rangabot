@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isValidChatMessages, MAX_CHAT_MESSAGES, MAX_CHAT_TOTAL_CHARS } from "../lib/chat-validation.ts";
+import { isValidAnalysisTrace, isValidChatMessages, MAX_CHAT_MESSAGES, MAX_CHAT_TOTAL_CHARS, parseAnalysisTraceHeader } from "../lib/chat-validation.ts";
 
 test("accepts bounded chat history and rejects empty generation input", () => {
   assert.equal(isValidChatMessages([{ role: "user", content: "Hello" }]), true);
   assert.equal(isValidChatMessages([]), false);
   assert.equal(isValidChatMessages([], { allowEmpty: true }), true);
+});
+
+test("parses only bounded, complete analysis provenance headers", () => {
+  const trace = { engine: "duckdb", dataset: "sales.csv", query: "SELECT 1", returnedRows: 1, truncated: false, durationMs: 12, inputSha256: "a".repeat(64), querySha256: "b".repeat(64), packId: "analytics", packVersion: "0.1.0", modelMode: "general", modelId: "local:3b" };
+  assert.equal(isValidAnalysisTrace(trace), true);
+  assert.deepEqual(parseAnalysisTraceHeader(encodeURIComponent(JSON.stringify(trace))), trace);
+  assert.equal(parseAnalysisTraceHeader(encodeURIComponent(JSON.stringify({ ...trace, returnedRows: 201 }))), null);
+  assert.equal(parseAnalysisTraceHeader("%not-json"), null);
+  assert.equal(parseAnalysisTraceHeader("x".repeat(30_001)), null);
 });
 
 test("rejects excessive message counts and aggregate content", () => {
@@ -22,6 +31,9 @@ test("rejects unbounded or malformed persisted message metadata", () => {
   assert.equal(isValidChatMessages([{ role: "assistant", content: "Done", memoryUse: "context", memoryTitles: ["Answer style"] }]), true);
   assert.equal(isValidChatMessages([{ role: "assistant", content: "Done", memoryTitles: ["x".repeat(81)] }]), false);
   assert.equal(isValidChatMessages([{ role: "assistant", content: "Verified", analysisTrace: { engine: "duckdb", dataset: "sales.csv", query: "SELECT count(*) FROM dataset", returnedRows: 1, truncated: false, durationMs: 12, inputSha256: "a".repeat(64), querySha256: "b".repeat(64) } }]), true);
+  assert.equal(isValidChatMessages([{ role: "assistant", content: "Verified", analysisTrace: { engine: "duckdb", dataset: "sales.csv", query: "SELECT count(*) FROM dataset", returnedRows: 1, truncated: false, durationMs: 12, inputSha256: "a".repeat(64), querySha256: "b".repeat(64), packId: "analytics", packVersion: "0.1.0", modelMode: "general", modelId: "local:3b" } }]), true);
+  assert.equal(isValidChatMessages([{ role: "assistant", content: "Bad", analysisTrace: { engine: "duckdb", dataset: "sales.csv", query: "SELECT 1", returnedRows: 1, truncated: false, durationMs: 12, inputSha256: "a".repeat(64), querySha256: "b".repeat(64), packId: "analytics" } }]), false);
+  assert.equal(isValidChatMessages([{ role: "assistant", content: "Bad", analysisTrace: { engine: "duckdb", dataset: "sales.csv", query: "SELECT 1", returnedRows: 1, truncated: false, durationMs: 12, inputSha256: "a".repeat(64), querySha256: "b".repeat(64), modelMode: "general", modelId: "local:3b" } }]), false);
   assert.equal(isValidChatMessages([{ role: "assistant", content: "Bad", analysisTrace: { engine: "duckdb", dataset: "sales.csv", query: "SELECT 1", returnedRows: 999, truncated: false, durationMs: 12, inputSha256: "a".repeat(64), querySha256: "b".repeat(64) } }]), false);
   assert.equal(isValidChatMessages([{ role: "assistant", content: "Done", replyTo: { role: "system", excerpt: "bad" } }]), false);
 });

@@ -22,6 +22,10 @@ export interface ChatMessage {
     durationMs: number;
     inputSha256: string;
     querySha256: string;
+    packId?: string;
+    packVersion?: string;
+    modelMode?: "automatic" | "general" | "custom";
+    modelId?: string;
   };
   codeContext?: {
     repository: string;
@@ -56,6 +60,7 @@ export class ProviderError extends Error {
 }
 
 export interface GenerationOptions {
+  modelId?: string;
   numPredict?: number;
   numContext?: number;
   timeoutMs?: number;

@@ -1,5 +1,5 @@
 import { compileAdvancedAnalyticalPlan, normalizeAdvancedAnalyticalPlan, parseAdvancedAnalyticalPlan, recoverAdvancedAnalyticalPlan, type AdvancedAnalyticalPlan, type Filter } from "./advanced-analytical-plan.ts";
-import { executeReadOnlySql, type DatasetColumn } from "./sql-runtime.ts";
+import { executeReadOnlySql, type DatasetColumn, type SqlExecutionResult } from "./sql-runtime.ts";
 
 export type FilterGroundingDecision = {
   value: string;
@@ -18,11 +18,17 @@ function categoricalColumns(columns: DatasetColumn[]) {
   return columns.filter((column) => column.table && /CHAR|TEXT|STRING|ENUM/i.test(column.type));
 }
 
-async function matchingFields(value: string, columns: DatasetColumn[], approvedDatasetPath: string) {
+export type AnalyticalGroundingExecutor = (query: string) => Promise<SqlExecutionResult>;
+
+function defaultGroundingExecutor(approvedDatasetPath: string): AnalyticalGroundingExecutor {
+  return (query) => executeReadOnlySql({ approvedDatasetPath, query });
+}
+
+async function matchingFields(value: string, columns: DatasetColumn[], executeSql: AnalyticalGroundingExecutor) {
   const candidates = categoricalColumns(columns);
   if (!candidates.length) return new Set<string>();
   const query = candidates.map((column) => `SELECT ${literal(`${column.table}.${column.name}`)} AS ${quote("field")} WHERE EXISTS (SELECT 1 FROM ${quote(column.table!)} WHERE LOWER(CAST(${quote(column.name)} AS VARCHAR)) = LOWER(${literal(value)}))`).join("\nUNION ALL\n");
-  const result = await executeReadOnlySql({ approvedDatasetPath, query });
+  const result = await executeSql(query);
   return new Set(result.rows.flatMap((row) => typeof row[0] === "string" ? [row[0]] : []));
 }
 
@@ -36,12 +42,12 @@ function valueAppearsInRequest(request: string, value: string) {
   return ` ${words(request).join(" ")} `.includes(` ${phrase.join(" ")} `);
 }
 
-async function categoricalValuesNamedByRequest(request: string, columns: DatasetColumn[], approvedDatasetPath: string) {
+async function categoricalValuesNamedByRequest(request: string, columns: DatasetColumn[], executeSql: AnalyticalGroundingExecutor) {
   const candidates = categoricalColumns(columns);
   if (!candidates.length) return [] as Array<{ field: string; value: string }>;
   const requestLiteral = literal(request);
   const query = candidates.map((column) => `SELECT DISTINCT ${literal(`${column.table}.${column.name}`)} AS ${quote("field")}, CAST(${quote(column.name)} AS VARCHAR) AS ${quote("value")} FROM ${quote(column.table!)} WHERE ${quote(column.name)} IS NOT NULL AND LENGTH(CAST(${quote(column.name)} AS VARCHAR)) BETWEEN 2 AND 100 AND STRPOS(LOWER(${requestLiteral}), LOWER(CAST(${quote(column.name)} AS VARCHAR))) > 0`).join("\nUNION ALL\n");
-  const result = await executeReadOnlySql({ approvedDatasetPath, query });
+  const result = await executeSql(query);
   if (result.receipt.truncated) return [];
   return result.rows.flatMap((row) => typeof row[0] === "string" && typeof row[1] === "string" && valueAppearsInRequest(request, row[1]) ? [{ field: row[0], value: row[1] }] : []);
 }
@@ -52,7 +58,7 @@ async function categoricalValuesNamedByRequest(request: string, columns: Dataset
  * checks only whether the explicit user literal exists in candidate text
  * columns, then repairs a unique mismatch or asks when several columns match.
  */
-export async function groundAdvancedAnalyticalFilters(plan: AdvancedAnalyticalPlan, request: string, columns: DatasetColumn[], approvedDatasetPath: string) {
+export async function groundAdvancedAnalyticalFilters(plan: AdvancedAnalyticalPlan, request: string, columns: DatasetColumn[], approvedDatasetPath: string, executeSql: AnalyticalGroundingExecutor = defaultGroundingExecutor(approvedDatasetPath)) {
   const decisions: FilterGroundingDecision[] = [];
   if (plan.action !== "query") return { plan, decisions };
   const groups: Array<keyof Pick<AdvancedAnalyticalPlan, "filters" | "numeratorFilters" | "denominatorFilters">> = ["filters", "numeratorFilters", "denominatorFilters"];
@@ -64,7 +70,7 @@ export async function groundAdvancedAnalyticalFilters(plan: AdvancedAnalyticalPl
     if (!column || !/CHAR|TEXT|STRING|ENUM/i.test(column.type)) continue;
     let matches = cache.get(filter.value.toLocaleLowerCase());
     if (!matches) {
-      matches = await matchingFields(filter.value, columns, approvedDatasetPath);
+      matches = await matchingFields(filter.value, columns, executeSql);
       cache.set(filter.value.toLocaleLowerCase(), matches);
     }
     if (matches.has(filter.column)) {
@@ -84,7 +90,7 @@ export async function groundAdvancedAnalyticalFilters(plan: AdvancedAnalyticalPl
     decisions.push({ value: filter.value, action: "kept", reason: "The explicit value was absent, so the schema-bound filter was retained to produce an honest zero-match result." });
   }
   const existingValues = new Set(groups.flatMap((group) => (grounded[group] as Filter[]).map((filter) => filter.value.toLocaleLowerCase())));
-  const discovered = await categoricalValuesNamedByRequest(request, columns, approvedDatasetPath);
+  const discovered = await categoricalValuesNamedByRequest(request, columns, executeSql);
   const longest = discovered.filter((candidate) => !discovered.some((other) => other.value.length > candidate.value.length && valueAppearsInRequest(other.value, candidate.value)));
   const byValue = new Map<string, Array<{ field: string; value: string }>>();
   for (const candidate of longest) byValue.set(candidate.value.toLocaleLowerCase(), [...(byValue.get(candidate.value.toLocaleLowerCase()) ?? []), candidate]);
@@ -101,7 +107,7 @@ export async function groundAdvancedAnalyticalFilters(plan: AdvancedAnalyticalPl
   return { plan: grounded, decisions };
 }
 
-export async function compileGroundedAdvancedAnalyticalPlan(rawPlan: string, request: string, columns: DatasetColumn[], approvedDatasetPath: string) {
+export async function compileGroundedAdvancedAnalyticalPlan(rawPlan: string, request: string, columns: DatasetColumn[], approvedDatasetPath: string, executeSql?: AnalyticalGroundingExecutor) {
   let parsed: AdvancedAnalyticalPlan;
   try { parsed = parseAdvancedAnalyticalPlan(rawPlan); }
   catch (error) {
@@ -110,14 +116,14 @@ export async function compileGroundedAdvancedAnalyticalPlan(rawPlan: string, req
     parsed = recovered;
   }
   const normalized = normalizeAdvancedAnalyticalPlan(parsed, request, columns);
-  const grounded = await groundAdvancedAnalyticalFilters(normalized, request, columns, approvedDatasetPath);
+  const grounded = await groundAdvancedAnalyticalFilters(normalized, request, columns, approvedDatasetPath, executeSql);
   return { proposal: compileAdvancedAnalyticalPlan(grounded.plan, columns), plan: grounded.plan, grounding: grounded.decisions };
 }
 
-export async function compileResolvedAdvancedAnalyticalPlan(request: string, columns: DatasetColumn[], approvedDatasetPath: string) {
+export async function compileResolvedAdvancedAnalyticalPlan(request: string, columns: DatasetColumn[], approvedDatasetPath: string, executeSql?: AnalyticalGroundingExecutor) {
   const recovered = recoverAdvancedAnalyticalPlan(request, columns);
   if (!recovered) return null;
   const normalized = normalizeAdvancedAnalyticalPlan(recovered, request, columns);
-  const grounded = await groundAdvancedAnalyticalFilters(normalized, request, columns, approvedDatasetPath);
+  const grounded = await groundAdvancedAnalyticalFilters(normalized, request, columns, approvedDatasetPath, executeSql);
   return { proposal: compileAdvancedAnalyticalPlan(grounded.plan, columns), plan: grounded.plan, grounding: grounded.decisions };
 }

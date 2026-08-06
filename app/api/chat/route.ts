@@ -4,22 +4,15 @@ import { ProviderError, type ChatMessage } from "@/lib/providers/types";
 import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatalogQuestion, isKnowledgeNewsQuestion, searchKnowledgeWithDiagnostics, shouldAutoSearchKnowledge, type KnowledgeResult, type KnowledgeSearchMode } from "@/lib/knowledge";
 import { generateGroundedTeacherAnswer } from "@/lib/knowledge-grounding";
 import { buildTeacherMessages, formatKnowledgeContext } from "@/lib/teacher-mode";
-import { formatCodeContext, isCodeContextRequest } from "@/lib/code-context";
-import { getAllowedRepository } from "@/lib/repositories";
-import { previewRepositoryFile } from "@/lib/repository-search";
+import { isCodeContextRequest } from "@/lib/code-context";
 import { buildConversationSummaryFallback, buildWordConversationPrompt, buildWordDraftPrompt, buildWordSourceTranscript, createWordArtifact, isWordConversationSummaryRequest, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, shouldPlanWordDocument, validateWordDraftForBrief, type WordDocumentBrief } from "@/lib/word-documents";
 import { findStoryPack } from "@/lib/story-packs";
 import { isValidChatMessages } from "@/lib/chat-validation";
 import { buildKnowledgeSearchQuery } from "@/lib/knowledge-query-planning";
-import { answerDirectMemoryQuestion, directMemoryTitles, listMemories } from "@/lib/memories";
-import { answerDeterministicConversationRequest, buildConversationMessagesWithSelected, buildSemanticRepairMessages, selectConversationMemories } from "@/lib/conversation-orchestration";
+import { listMemories } from "@/lib/memories";
+import { buildConversationMessagesWithSelected, buildSemanticRepairMessages, selectConversationMemories } from "@/lib/conversation-orchestration";
 import { applySelectedMemoryToContract, chooseSemanticRepair, compileAnswerContract, enforceReasoningInvariants, needsBufferedConformance } from "@/lib/conversation-contract";
-import { getApprovedDataset } from "@/lib/datasets";
-import { executeReadOnlySql, inspectDatasetSchema } from "@/lib/sql-runtime";
-import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan, resolveAnalyticalBoundary } from "@/lib/analytical-plan";
-import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "@/lib/advanced-analytical-plan";
-import { compileGroundedAdvancedAnalyticalPlan, compileResolvedAdvancedAnalyticalPlan } from "@/lib/analytical-filter-grounding";
-import { analysisNarrationIsGrounded, buildAnalysisNarrationMessages, formatVerifiedAnalysisFallback, shouldRunSqlAnalysis } from "@/lib/conversational-analysis";
+import { dispatchCoreChat } from "@/lib/chat-core-dispatch";
 
 export const runtime = "nodejs";
 
@@ -48,7 +41,7 @@ async function generateConversationSummary(brief: WordDocumentBrief, messages: C
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { messages?: unknown; mode?: unknown; codeContext?: unknown; datasetId?: unknown };
+    const body = (await request.json()) as { messages?: unknown; mode?: unknown; codeContext?: unknown; datasetId?: unknown; conversationId?: unknown };
     if (!isValidChatMessages(body.messages)) {
       return NextResponse.json({ error: "A valid message is required." }, { status: 400 });
     }
@@ -61,79 +54,19 @@ export async function POST(request: Request) {
     if (body.codeContext !== undefined && !isCodeContextRequest(body.codeContext)) {
       return NextResponse.json({ error: "The attached code reference is invalid." }, { status: 400 });
     }
-    if (body.datasetId !== undefined && typeof body.datasetId !== "string") return NextResponse.json({ error: "The attached dataset reference is invalid." }, { status: 400 });
+    if (body.datasetId !== undefined && (typeof body.datasetId !== "string" || body.datasetId.length < 1 || body.datasetId.length > 120 || body.datasetId !== body.datasetId.trim())) return NextResponse.json({ error: "The attached dataset reference is invalid." }, { status: 400 });
+    if (body.conversationId !== undefined && (typeof body.conversationId !== "string" || body.conversationId.length < 1 || body.conversationId.length > 120)) return NextResponse.json({ error: "The conversation reference is invalid." }, { status: 400 });
 
+    const core = await dispatchCoreChat({
+      messages: body.messages,
+      codeContext: body.codeContext,
+      datasetId: typeof body.datasetId === "string" ? body.datasetId : undefined,
+      conversationId: typeof body.conversationId === "string" ? body.conversationId : undefined,
+      signal: request.signal,
+    });
+    if (core.response) return core.response;
+    const localCodeContext = core.localCodeContext;
     const latestQuestion = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
-    const deterministicAnswer = answerDeterministicConversationRequest(body.messages);
-    if (deterministicAnswer) {
-      return new Response(deterministicAnswer, {
-        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Rangabot-Response": "deterministic" },
-      });
-    }
-    const directMemoryAnswer = answerDirectMemoryQuestion(latestQuestion);
-    if (directMemoryAnswer) {
-      const titles = directMemoryTitles(latestQuestion);
-      return new Response(directMemoryAnswer, {
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-          "Cache-Control": "no-store",
-          "X-Content-Type-Options": "nosniff",
-          "X-Rangabot-Memory": "direct",
-          ...(titles.length ? { "X-Rangabot-Memory-Titles": encodeURIComponent(JSON.stringify(titles)) } : {}),
-        },
-      });
-    }
-
-    let localCodeContext: string | null = null;
-    if (body.codeContext) {
-      const repository = getAllowedRepository(body.codeContext.repositoryId);
-      if (!repository) return NextResponse.json({ error: "That folder is no longer approved." }, { status: 400 });
-      const preview = previewRepositoryFile(repository, body.codeContext.path, body.codeContext.line);
-      localCodeContext = formatCodeContext(repository, preview);
-    }
-
-    if (typeof body.datasetId === "string" && shouldRunSqlAnalysis(body.messages)) {
-      const dataset = getApprovedDataset(body.datasetId);
-      if (!dataset) return NextResponse.json({ error: "That dataset is no longer approved." }, { status: 400 });
-      const columns = await inspectDatasetSchema(dataset.path);
-      const resolved = shouldUseAdvancedAnalyticalPlan(latestQuestion) ? await compileResolvedAdvancedAnalyticalPlan(latestQuestion, columns, dataset.path) : null;
-      const proposal = shouldUseAdvancedAnalyticalPlan(latestQuestion)
-        ? resolved?.proposal ?? (await compileGroundedAdvancedAnalyticalPlan(
-          await completeJsonWithOllama(buildAdvancedAnalyticalMessages(body.messages, dataset, columns), { signal: request.signal, jsonSchema: buildAdvancedAnalyticalSchema(body.messages, dataset, columns), numPredict: 900 }),
-          latestQuestion, columns, dataset.path,
-        )).proposal
-        : compileAnalyticalPlan(resolveAnalyticalBoundary(latestQuestion) ?? normalizeAnalyticalPlan(parseAnalyticalPlan(await completeJsonWithOllama(buildAnalyticalPlanMessages(body.messages, dataset, columns), { signal: request.signal, jsonSchema: buildAnalyticalPlanSchema(body.messages, dataset, columns), numPredict: 700 })), latestQuestion, columns), columns);
-      if (proposal.action !== "query") {
-        return new Response(proposal.explanation, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff" } });
-      }
-      const result = await executeReadOnlySql({ approvedDatasetPath: dataset.path, query: proposal.query });
-      let answer: string;
-      try {
-        const narrated = await completeTextWithOllama(buildAnalysisNarrationMessages(latestQuestion, proposal, result), { signal: request.signal, numPredict: 700 });
-        answer = analysisNarrationIsGrounded(narrated, result) ? narrated : formatVerifiedAnalysisFallback(result);
-      } catch {
-        if (request.signal.aborted) throw new DOMException("The request was stopped.", "AbortError");
-        answer = formatVerifiedAnalysisFallback(result);
-      }
-      const trace: NonNullable<ChatMessage["analysisTrace"]> = {
-        engine: "duckdb",
-        dataset: dataset.name,
-        query: proposal.query,
-        returnedRows: result.receipt.returnedRows,
-        truncated: result.receipt.truncated,
-        durationMs: result.receipt.durationMs,
-        inputSha256: result.receipt.input.sha256,
-        querySha256: result.receipt.querySha256,
-      };
-      return new Response(answer, {
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-          "Cache-Control": "no-cache, no-transform",
-          "X-Content-Type-Options": "nosniff",
-          "X-Rangabot-Analysis": encodeURIComponent(JSON.stringify(trace)),
-        },
-      });
-    }
 
     if (shouldPlanWordDocument(body.messages)) {
       const rawPlan = await completeJsonWithOllama([

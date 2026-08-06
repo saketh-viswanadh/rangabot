@@ -60,6 +60,17 @@ test("sends the same explicit context budget to every model", async () => {
   assert.deepEqual((JSON.parse(requestBody) as { options?: unknown }).options, { num_predict: 1000, num_ctx: 2048 });
 });
 
+test("uses the explicitly resolved pack model instead of a hidden provider default", async () => {
+  let requestBody = "";
+  await withFetch(async (_input, init) => {
+    requestBody = String(init?.body);
+    return Response.json({ message: { content: "ok" } });
+  }, async () => {
+    assert.equal(await completeTextWithOllama([{ role: "user", content: "hello" }], { modelId: "approved-local:7b" }), "ok");
+  });
+  assert.equal((JSON.parse(requestBody) as { model?: string }).model, "approved-local:7b");
+});
+
 test("classifies missing models and empty buffered output", async () => {
   await withFetch(async () => new Response("missing", { status: 404 }), async () => {
     await assert.rejects(completeTextWithOllama([{ role: "user", content: "hello" }]), (error: unknown) => error instanceof ProviderError && error.code === "model-missing");
