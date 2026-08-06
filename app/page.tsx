@@ -10,7 +10,7 @@ import { CraftIcon } from "@/app/components/craft-icon";
 import { formatAnswerReceipt } from "@/lib/answer-receipt";
 import { SqlAnalysisPanel } from "@/app/components/sql-analysis-panel";
 import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
-import { parseAnalysisTraceHeader } from "@/lib/chat-validation";
+import { parseAnalysisTraceHeader, parsePackWarningsHeader } from "@/lib/chat-validation";
 
 const MemoryPanel = dynamic(
   () => import("@/app/components/memory-panel").then((module) => module.MemoryPanel),
@@ -426,7 +426,7 @@ export default function Home() {
     const userMessage: DisplayMessage = { id: crypto.randomUUID(), role: "user", content, replyTo: reference, codeContext };
     const assistantId = crypto.randomUUID();
     const nextMessages = [...messages, userMessage];
-    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply, codeContext: code, artifactIntent, wordArtifact, analysisTrace, retrievalMode, memoryUse, memoryTitles }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}), ...(code ? { codeContext: code } : {}), ...(artifactIntent ? { artifactIntent } : {}), ...(wordArtifact ? { wordArtifact } : {}), ...(analysisTrace ? { analysisTrace } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(memoryUse ? { memoryUse } : {}), ...(memoryTitles?.length ? { memoryTitles } : {}) }));
+    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply, codeContext: code, artifactIntent, wordArtifact, analysisTrace, retrievalMode, memoryUse, memoryTitles, answerDisposition }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}), ...(code ? { codeContext: code } : {}), ...(artifactIntent ? { artifactIntent } : {}), ...(wordArtifact ? { wordArtifact } : {}), ...(analysisTrace ? { analysisTrace } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(memoryUse ? { memoryUse } : {}), ...(memoryTitles?.length ? { memoryTitles } : {}), ...(answerDisposition ? { answerDisposition } : {}) }));
     let conversationId = activeConversationId;
     if (!conversationId) {
       const createResponse = await fetch("/api/conversations", {
@@ -465,6 +465,7 @@ export default function Home() {
     let responseMemoryUse: ChatMessage["memoryUse"];
     let responseMemoryTitles: ChatMessage["memoryTitles"];
     let responseAnalysisTrace: ChatMessage["analysisTrace"];
+    let responseAnswerDisposition: ChatMessage["answerDisposition"];
 
     try {
       const response = await fetch("/api/chat", {
@@ -503,9 +504,13 @@ export default function Home() {
       const encodedAnalysis = response.headers.get("X-Rangabot-Analysis");
       if (encodedAnalysis) {
         responseAnalysisTrace = parseAnalysisTraceHeader(encodedAnalysis) ?? undefined;
-        if (responseAnalysisTrace) {
-          setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, analysisTrace: responseAnalysisTrace } : message));
-        }
+      }
+      responseAnswerDisposition = parsePackWarningsHeader(response.headers.get("X-Rangabot-Pack-Warnings")) ?? undefined;
+      if (!responseAnalysisTrace?.packId) responseAnswerDisposition = undefined;
+      if (responseAnalysisTrace) {
+        setMessages((current) => current.map((message) => message.id === assistantId
+          ? { ...message, analysisTrace: responseAnalysisTrace, ...(responseAnswerDisposition ? { answerDisposition: responseAnswerDisposition } : {}) }
+          : message));
       }
       if (responseArtifactIntent || responseWordArtifact) {
         setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, artifactIntent: responseArtifactIntent, wordArtifact: responseWordArtifact } : message));
@@ -554,7 +559,7 @@ export default function Home() {
         )));
       }
       if (!receivedContent) throw new Error("The local model returned an empty response.");
-      finalAssistant = { role: "assistant", content: generatedContent, ...(responseArtifactIntent ? { artifactIntent: responseArtifactIntent } : {}), ...(responseWordArtifact ? { wordArtifact: responseWordArtifact } : {}), ...(responseAnalysisTrace ? { analysisTrace: responseAnalysisTrace } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(responseMemoryUse ? { memoryUse: responseMemoryUse } : {}), ...(responseMemoryTitles?.length ? { memoryTitles: responseMemoryTitles } : {}) };
+      finalAssistant = { role: "assistant", content: generatedContent, ...(responseArtifactIntent ? { artifactIntent: responseArtifactIntent } : {}), ...(responseWordArtifact ? { wordArtifact: responseWordArtifact } : {}), ...(responseAnalysisTrace ? { analysisTrace: responseAnalysisTrace } : {}), ...(responseAnswerDisposition ? { answerDisposition: responseAnswerDisposition } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(responseMemoryUse ? { memoryUse: responseMemoryUse } : {}), ...(responseMemoryTitles?.length ? { memoryTitles: responseMemoryTitles } : {}) };
     } catch (error) {
       const stopped = abortController.signal.aborted;
       finalAssistant = {
@@ -800,6 +805,7 @@ export default function Home() {
                 {message.content && (message.role === "assistant"
                   ? <MarkdownMessage content={message.content} />
                   : <p>{message.content}</p>)}
+                {message.answerDisposition === "verified-fallback" && <div className="answer-disposition" role="status"><CraftIcon name="shield" size={13} /><span><strong>Verified result fallback</strong>Rangabot answered directly from the checked local calculation.</span></div>}
                 {message.analysisTrace && <details className="analysis-trace"><summary><CraftIcon name="analysis" size={14} />How this was calculated</summary><div><span><strong>{message.analysisTrace.dataset}</strong>{message.analysisTrace.returnedRows} verified row{message.analysisTrace.returnedRows === 1 ? "" : "s"} · {message.analysisTrace.durationMs} ms{message.analysisTrace.truncated ? " · bounded result" : ""}</span><pre><code>{message.analysisTrace.query}</code></pre><small>Input {message.analysisTrace.inputSha256.slice(0, 12)}… · Query {message.analysisTrace.querySha256.slice(0, 12)}… · local DuckDB{message.analysisTrace.packId ? ` · ${message.analysisTrace.packId} pack ${message.analysisTrace.packVersion ?? ""}` : ""}{message.analysisTrace.modelId ? ` · ${message.analysisTrace.modelMode ?? "general"} model ${message.analysisTrace.modelId}` : ""}</small></div></details>}
                 {message.active && (
                   <div className="message-activity" role="status" aria-label="Rangabot is thinking">

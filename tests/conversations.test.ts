@@ -24,10 +24,11 @@ test("creates, lists, updates, opens, and deletes a local conversation", () => {
 
   const updated = conversations.updateConversation(created.id, [
     { role: "user", content: "Plan a tiny local app" },
-    { role: "assistant", content: "Start with one local route." },
+    { role: "assistant", content: "Start with one local route.", analysisTrace: { engine: "duckdb", dataset: "fixture.duckdb", query: "SELECT 1", returnedRows: 1, truncated: false, durationMs: 1, inputSha256: "a".repeat(64), querySha256: "b".repeat(64), packId: "analytics", packVersion: "0.1.0", modelMode: "general", modelId: "local:3b" }, answerDisposition: "verified-fallback" },
   ]);
   assert.equal(updated?.messages.length, 2);
   assert.equal(conversations.getConversation(created.id)?.messages[1]?.role, "assistant");
+  assert.equal(conversations.getConversation(created.id)?.messages[1]?.answerDisposition, "verified-fallback");
   assert.equal(conversations.setConversationDataset(created.id, "approved-dataset")?.datasetId, "approved-dataset");
   assert.equal(conversations.getConversation(created.id)?.datasetId, "approved-dataset");
   assert.equal(conversations.setConversationDataset(created.id, null)?.datasetId, null);

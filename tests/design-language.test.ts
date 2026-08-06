@@ -19,3 +19,9 @@ test("keeps crafted icons local, scalable and presentation-only", () => {
   assert.match(iconSource, /aria-hidden="true"/);
   assert.doesNotMatch(iconSource, /https?:\/\//);
 });
+
+test("shows a crafted visible disclosure when Analytics uses verified fallback", () => {
+  assert.match(mainPage, /answerDisposition === "verified-fallback"/);
+  assert.match(mainPage, /Verified result fallback/);
+  assert.match(mainPage, /CraftIcon name="shield"/);
+});

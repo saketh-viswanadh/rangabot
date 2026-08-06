@@ -7,6 +7,7 @@ export interface ChatMessage {
   retrievalMode?: "hybrid" | "keyword-only";
   memoryUse?: "context" | "direct";
   memoryTitles?: string[];
+  answerDisposition?: "verified-fallback";
   wordArtifact?: {
     id: string;
     title: string;

@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { issueAuthorizedAnalyticsRequest } from "../lib/analytics-pack-control.ts";
 import { runAnalyticsExpertPack } from "../lib/analytics-expert-pack.ts";
+import { ANALYTICAL_EVALUATION_TOLERANCE, ANALYTICAL_RESULT_COMPARATOR_VERSION, compareSqlResults } from "../lib/analytical-result-comparison.ts";
 import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
 import { compileGroundedAdvancedAnalyticalPlan, compileResolvedAdvancedAnalyticalPlan } from "../lib/analytical-filter-grounding.ts";
 import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan, resolveAnalyticalBoundary } from "../lib/analytical-plan.ts";
@@ -47,17 +48,7 @@ export type AnalyticalHoldoutCase = { id: string; question: string; goldSql?: st
 export type AnalyticalHoldoutDefinition = { suite: string; frozenAt: string; databaseName: string; setupSql: string; cases: AnalyticalHoldoutCase[]; outputDirectory?: string; evidenceKind?: "sealed" | "development" };
 export type AnalyticalHoldoutRunOptions = { mode?: "legacy" | "expert-pack" };
 
-const runnerVersion = "2.0.0";
-
-function cell(value: unknown) { return value === null ? "null" : typeof value === "object" ? JSON.stringify(value) : String(value); }
-function equivalent(left: unknown, right: unknown) {
-  const a = Number(cell(left)); const b = Number(cell(right));
-  if (Number.isFinite(a) && Number.isFinite(b)) return Math.abs(a - b) <= Math.max(0.02, Math.abs(b) * 0.0001);
-  return cell(left).toLowerCase() === cell(right).toLowerCase();
-}
-function resultsMatch(candidate: SqlExecutionResult, gold: SqlExecutionResult) {
-  return candidate.rows.length === gold.rows.length && gold.rows.every((row) => candidate.rows.some((other) => row.every((value) => other.some((item) => equivalent(item, value)))));
-}
+const runnerVersion = "2.1.0";
 export function analyticalPlanMatchesExpected(plan: Record<string, unknown>, expected?: ExpectedAnalyticalPlan) {
   if (!expected) return true;
   return Object.entries(expected).every(([field, value]) => Array.isArray(value)
@@ -115,6 +106,7 @@ function packExecutionAudit(input: {
   request: NonNullable<ReturnType<typeof issueAuthorizedAnalyticsRequest>>;
   outcome: Awaited<ReturnType<typeof runAnalyticsExpertPack>>;
   dataset: ApprovedDataset;
+  proposal?: SqlProposal;
   candidate?: SqlExecutionResult;
 }) {
   const manifest = getExpertPackManifest("analytics");
@@ -126,8 +118,10 @@ function packExecutionAudit(input: {
   const warnings = input.outcome.result.warnings;
   const fallbackWarning = warnings.length === 1 && ["model-narration-unavailable", "narration-grounding-rejected"].includes(warnings[0].code);
   const answerPass = input.candidate
-    ? analysisNarrationIsGrounded(response, input.candidate)
-      && (warnings.length === 0 || fallbackWarning && response === formatVerifiedAnalysisFallback(input.candidate))
+    ? fallbackWarning
+      ? response === formatVerifiedAnalysisFallback(input.candidate)
+      : warnings.length === 0
+        && analysisNarrationIsGrounded(response, input.candidate, { query: input.proposal?.query })
     : input.outcome.result.status === "clarification"
       && response === input.outcome.result.clarification;
   const terminalAnswerPass = input.outcome.result.status === "failure" || input.outcome.result.status === "cancelled"
@@ -175,6 +169,7 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
   const packManifest = mode === "expert-pack" ? getExpertPackManifest("analytics") : null;
   const provenance = {
     runnerVersion,
+    resultComparatorVersion: ANALYTICAL_RESULT_COMPARATOR_VERSION,
     source: { commit: sourceCommit, dirty: sourceDirty },
     pack: packManifest ? { id: packManifest.id, version: packManifest.version, maturity: packManifest.maturity } : null,
     model: { id: modelId, contextTokens: getConfiguredContextTokens(), ...modelProfile },
@@ -267,9 +262,10 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
       else {
         const candidate = await executeReadOnlySql({ approvedDatasetPath: databasePath, query: proposal.query });
         const gold = goldResults.get(item.id)!;
-        if (packOutcome && packRequest) packAudit = packExecutionAudit({ request: packRequest, outcome: packOutcome, dataset, candidate });
+        const resultComparison = compareSqlResults(candidate, gold, { candidateSql: proposal.query, referenceSql: item.goldSql!, ...ANALYTICAL_EVALUATION_TOLERANCE });
+        if (packOutcome && packRequest) packAudit = packExecutionAudit({ request: packRequest, outcome: packOutcome, dataset, proposal, candidate });
         const packPass = !packAudit || packAudit.envelopePass && packAudit.evidencePass && packAudit.receiptPass && packAudit.answerPass;
-        results.push({ ...item, action: proposal.action, plan, sql: proposal.query, packAudit, passed: semanticPass && resultsMatch(candidate, gold) && packPass, latencyMs: Date.now() - started });
+        results.push({ ...item, action: proposal.action, plan, sql: proposal.query, resultComparison, packAudit, passed: semanticPass && resultComparison.passed && packPass, latencyMs: Date.now() - started });
       }
     } catch (error) { results.push({ ...item, action: "error", sql: null, passed: false, error: error instanceof Error ? error.message : String(error), latencyMs: Date.now() - started }); }
     console.log(`${results.at(-1)?.passed ? "PASS" : "FAIL"} ${item.id}`);
@@ -284,7 +280,7 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
     executionErrors: results.filter((item) => item.action === "error").length,
     latency: latencySummary(latencies),
   };
-  writeFileSync(outputPath, JSON.stringify({ schemaVersion: 2, suite: definition.suite, frozenAt: definition.frozenAt, mode, startedAt, completedAt, provenance, summary, cases: results }, null, 2));
+  writeFileSync(outputPath, JSON.stringify({ schemaVersion: 3, suite: definition.suite, frozenAt: definition.frozenAt, mode, startedAt, completedAt, provenance, summary, cases: results }, null, 2));
   const passed = summary.passed;
   const label = definition.evidenceKind === "development" ? "Development suite" : "Frozen holdout";
   console.log(`\n${label} (${mode}): ${passed}/${results.length} passed.`); console.log(`Private result: ${outputPath}`);

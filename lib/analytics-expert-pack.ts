@@ -243,7 +243,7 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
     const warnings: Array<{ code: ExpertPackWarningCode; message: string }> = [];
     try {
       const narrated = await dependencies.completeText(buildAnalysisNarrationMessages(request.currentRequest, proposal, result), { signal: options.signal, modelId: configuredModel, numPredict: 700 });
-      if (analysisNarrationIsGrounded(narrated, result)) answer = narrated;
+      if (analysisNarrationIsGrounded(narrated, result, { query: proposal.query })) answer = narrated;
       else {
         answer = formatVerifiedAnalysisFallback(result);
         warnings.push({ code: "narration-grounding-rejected", message: "The model narration failed the result-grounding audit, so Rangabot used a deterministic verified fallback." });

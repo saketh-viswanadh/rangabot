@@ -1,9 +1,10 @@
 import type { ChatMessage } from "./providers/types";
+import { expertPackWarningCodes, type ExpertPackWarningCode } from "./expert-packs.ts";
 
 export const MAX_CHAT_MESSAGES = 200;
 export const MAX_CHAT_MESSAGE_CHARS = 50_000;
 export const MAX_CHAT_TOTAL_CHARS = 1_000_000;
-const messageKeys = new Set(["role", "content", "artifactIntent", "wordArtifact", "analysisTrace", "codeContext", "replyTo", "retrievalMode", "memoryUse", "memoryTitles"]);
+const messageKeys = new Set(["role", "content", "artifactIntent", "wordArtifact", "analysisTrace", "codeContext", "replyTo", "retrievalMode", "memoryUse", "memoryTitles", "answerDisposition"]);
 const analysisTraceKeys = new Set(["engine", "dataset", "query", "returnedRows", "truncated", "durationMs", "inputSha256", "querySha256", "packId", "packVersion", "modelMode", "modelId"]);
 
 export function isValidAnalysisTrace(value: unknown): value is NonNullable<ChatMessage["analysisTrace"]> {
@@ -38,11 +39,24 @@ export function parseAnalysisTraceHeader(value: string | null) {
   }
 }
 
+export function parsePackWarningsHeader(value: string | null): ChatMessage["answerDisposition"] | null {
+  if (!value || value.length > 256) return null;
+  const codes = value.split(",").map((code) => code.trim());
+  if (codes.length === 0 || codes.length > 2 || new Set(codes).size !== codes.length
+    || !codes.every((code) => expertPackWarningCodes.includes(code as ExpertPackWarningCode))) return null;
+  return "verified-fallback";
+}
+
 function validOptionalMetadata(message: Record<string, unknown>) {
   if (!Object.keys(message).every((key) => messageKeys.has(key))) return false;
   if (message.artifactIntent !== undefined && message.artifactIntent !== "word") return false;
   if (message.retrievalMode !== undefined && !["hybrid", "keyword-only"].includes(String(message.retrievalMode))) return false;
   if (message.memoryUse !== undefined && !["context", "direct"].includes(String(message.memoryUse))) return false;
+  if (message.answerDisposition !== undefined) {
+    if (message.answerDisposition !== "verified-fallback" || message.role !== "assistant"
+      || !isValidAnalysisTrace(message.analysisTrace)
+      || !message.analysisTrace.packId) return false;
+  }
   if (message.memoryTitles !== undefined && (!Array.isArray(message.memoryTitles)
     || message.memoryTitles.length > 8
     || !message.memoryTitles.every((title) => typeof title === "string" && title.length > 0 && title.length <= 80))) return false;
@@ -82,13 +96,19 @@ export function isValidChatMessages(value: unknown, options: { allowEmpty?: bool
   if (!Array.isArray(value) || (!options.allowEmpty && value.length === 0) || value.length > MAX_CHAT_MESSAGES) return false;
   let totalCharacters = 0;
   return value.every((message) => {
-    if (!message || typeof message !== "object") return false;
-    const candidate = message as Partial<ChatMessage>;
-    if (!["user", "assistant", "system"].includes(candidate.role ?? "") || typeof candidate.content !== "string") return false;
-    if (!candidate.content.trim()) return false;
-    if (candidate.content.length > MAX_CHAT_MESSAGE_CHARS) return false;
-    if (!validOptionalMetadata(message as Record<string, unknown>)) return false;
+    if (!isValidChatMessage(message)) return false;
+    const candidate = message as ChatMessage;
     totalCharacters += candidate.content.length;
     return totalCharacters <= MAX_CHAT_TOTAL_CHARS;
   });
+}
+
+export function isValidChatMessage(value: unknown): value is ChatMessage {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Partial<ChatMessage>;
+  return ["user", "assistant", "system"].includes(candidate.role ?? "")
+    && typeof candidate.content === "string"
+    && Boolean(candidate.content.trim())
+    && candidate.content.length <= MAX_CHAT_MESSAGE_CHARS
+    && validOptionalMetadata(value as Record<string, unknown>);
 }
