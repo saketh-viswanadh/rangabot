@@ -126,19 +126,23 @@ function cancelled(error: unknown, signal?: AbortSignal) {
     || error instanceof DOMException && error.name === "AbortError";
 }
 
+function failureCode(error: unknown) {
+  return error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : null;
+}
+
 function mappedFailure(request: ExpertPackRequest, error: unknown, phase: PackPhase, usage: Usage, signal?: AbortSignal) {
   if (cancelled(error, signal)) return failure(request, "cancelled", "The Analytics request was stopped.", false, usage);
-  if (error instanceof ProviderError) {
-    if (error.code === "timeout") return failure(request, "timeout", "The local model timed out while preparing the analysis.", true, usage);
-    if (error.code === "model-missing") return failure(request, "model-missing", "The configured local model is not installed.", false, usage);
-    if (error.code === "unavailable") return failure(request, "provider-unavailable", "The local model provider is unavailable.", true, usage);
-    return failure(request, "provider-failure", "The local model could not prepare the analysis.", error.code === "http" || error.code === "empty-output", usage);
+  const code = failureCode(error);
+  if (error instanceof ProviderError || ["unavailable", "model-missing", "http", "empty-output", "invalid-stream"].includes(code ?? "")) {
+    if (code === "model-missing") return failure(request, "model-missing", "The configured local model is not installed.", false, usage);
+    if (code === "unavailable") return failure(request, "provider-unavailable", "The local model provider is unavailable.", true, usage);
+    return failure(request, "provider-failure", "The local model could not prepare the analysis.", code === "http" || code === "empty-output", usage);
   }
-  if (error instanceof SqlRuntimeError) {
-    if (error.code === "timeout") return failure(request, "timeout", error.message, true, usage);
-    if (error.code === "resource-limit") return failure(request, "resource-limit", error.message, false, usage);
-    if (error.code === "invalid-query") return failure(request, "invalid-output", "The proposed analysis was not a valid read-only query.", false, usage);
-    if (error.code === "dataset-changed") return failure(request, "tool-failure", error.message, false, usage);
+  if (code === "timeout") return failure(request, "timeout", phase === "planning" || phase === "narration" ? "The local model or analytical grounding timed out." : "The local analytical runtime timed out.", true, usage);
+  if (error instanceof SqlRuntimeError || ["resource-limit", "invalid-query", "dataset-changed", "tool-failure"].includes(code ?? "")) {
+    if (code === "resource-limit") return failure(request, "resource-limit", error instanceof Error ? error.message : "The local analytical resource limit was reached.", false, usage);
+    if (code === "invalid-query") return failure(request, "invalid-output", "The proposed analysis was not a valid read-only query.", false, usage);
+    if (code === "dataset-changed") return failure(request, "tool-failure", error instanceof Error ? error.message : "The approved dataset changed during analysis.", false, usage);
     return failure(request, "tool-failure", "The local analytical runtime failed safely.", false, usage);
   }
   if (phase === "planning") return failure(request, "invalid-output", "The local model returned an invalid analytical plan.", false, usage);

@@ -132,6 +132,14 @@ test("maps planning, schema, and cancellation failures into terminal typed outco
   assert.equal(cancelledOutcome.result.evidence.length, 0);
 });
 
+test("classifies structurally typed SQL failures across runtime boundaries", async () => {
+  const fixture = dependencies({ executeSql: async () => { throw Object.assign(new Error("Provide one SQL query."), { code: "invalid-query" }); } });
+  const outcome = await runAnalyticsExpertPack(request(), fixture.value);
+  assert.equal(outcome.result.status, "failure");
+  assert.equal(outcome.result.error?.code, "invalid-output");
+  assert.equal(outcome.result.responseProposal, undefined);
+});
+
 test("fails closed before data or model access for invalid authority, revocation, and unqualified custom models", async () => {
   const invalid = request();
   invalid.grants[0] = { ...invalid.grants[0], resource: { kind: "dataset", id: "dataset-b" } };
