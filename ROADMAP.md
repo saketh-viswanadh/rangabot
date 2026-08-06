@@ -67,9 +67,11 @@ qualified local model, if any, powers each workflow.
 
 ### Expert Pack delivery order
 
-- [ ] **Foundation: Expert Pack Contract** — version the manifest schema,
-  lifecycle, permission model, routing decision record, typed evidence envelope,
-  model assignment policy, resource manager and qualification-result format.
+- [ ] **Foundation: Expert Pack Contract** — the proposed v1 specification,
+  executable manifest validator, typed request/evidence/result boundary and
+  per-pack model-assignment policy are complete. Runtime permission grants,
+  routing decision records, resource manager and qualification-result storage
+  remain before the foundation can be marked complete.
 - [ ] **Reference pack: Analytics** — adapt the existing read-only SQL work into
   the first compliant pack, then add sandboxed Python only after its policy and
   execution gates pass. This proves tool execution, evidence narration and
@@ -95,8 +97,9 @@ qualified local model, if any, powers each workflow.
 
 - Define the signed/distributable pack format and trust policy for third-party
   community packs.
-- Decide whether model downloads belong to the pack manager or remain an
-  explicit external Ollama operation referenced by the pack.
+- Define the reviewed installation flow for models referenced by packs. Contract
+  v1 forbids automatic downloads; installation remains a separate explicit user
+  action until this design is approved.
 - Define stable compatibility guarantees across pack, Rangabot, provider and
   model versions.
 - Decide which pack metadata and benchmark aggregates are safe to publish while

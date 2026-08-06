@@ -376,6 +376,14 @@ context, keeps complete answers private and unloads each model before starting
 the next. See [local model guidance](docs/models.md) before overriding a model's
 memory-fit guard.
 
+The proposed [Expert Pack Contract](docs/EXPERT_PACK_CONTRACT.md) defines how
+future installable Analytics, Scholar, Documents, Builder and Research
+capabilities will remain governed by the same Mind & Memory control plane. It
+includes strict manifest validation, per-pack `automatic`, `general` and
+`custom` model assignment, one-model resource limits, typed evidence receipts
+and pack-specific qualification. This is an architecture contract, not a claim
+that pack installation or routing is already available.
+
 Teacher Mode generation can be compared explicitly with
 `npm run knowledge:evaluate:answers -- --model=qwen2.5:7b --num-ctx=4096 --sample=5`.
 Retrieval-only evaluation does not use the chat model. Model-specific answer

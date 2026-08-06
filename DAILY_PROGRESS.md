@@ -1,5 +1,21 @@
 # Daily progress
 
+## 2026-08-07 — Expert Pack Contract v1 foundation
+
+- Drafted the versioned Expert Pack Contract while keeping Mind & Memory the
+  sole privacy, permission, precedence, memory and final-synthesis control plane.
+- Added model-independent TypeScript contracts for manifests, per-pack model
+  assignments, bounded requests, evidence, receipts and stable failures. This
+  is an interface foundation; runtime pack routing remains disabled.
+- Enforced all three user model choices (`automatic`, `general`, `custom`), a
+  one-generative-model v1 limit, explicit web permission, perfect critical-case
+  qualification, privacy-preserving uninstall and rejection of unknown fields.
+- Added six deterministic tests covering a valid Analytics-shaped reference,
+  model choice, hidden authority, network access, resource limits,
+  qualification, uninstall safety and request overrides.
+- Deliberately deferred third-party pack trust, automatic model downloads,
+  parallel large models, pack-authored UI and autonomous pack delegation.
+
 ## 2026-08-05 — Reproducible cross-model runtime profiles
 
 - Reverified the public model registry and selected `qwen2.5:7b` as the general

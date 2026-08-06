@@ -9,6 +9,12 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Architectural decisions
 
+- Added the proposed Expert Pack Contract v1 and executable manifest boundary.
+  Strict validation rejects unknown authority, undeclared web access, unsafe
+  parallel generative loading, incomplete per-pack model choices, weak critical
+  gates and destructive uninstall defaults. Typed requests, evidence, model
+  resolution, receipts and failures establish interfaces only; no runtime pack
+  routing or model download is enabled by this change.
 - Approved an installable Expert Pack direction for Rangabot's post-reliability
   architecture. Mind & Memory remains the single privacy, precedence,
   conversation and permission control plane; Analytics, Scholar, Documents,
