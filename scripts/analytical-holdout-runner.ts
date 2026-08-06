@@ -130,6 +130,9 @@ function packExecutionAudit(input: {
       && (warnings.length === 0 || fallbackWarning && response === formatVerifiedAnalysisFallback(input.candidate))
     : input.outcome.result.status === "clarification"
       && response === input.outcome.result.clarification;
+  const terminalAnswerPass = input.outcome.result.status === "failure" || input.outcome.result.status === "cancelled"
+    ? response.length === 0 && Boolean(input.outcome.result.error)
+    : answerPass;
   const evidence = input.outcome.result.evidence[0]?.localExecution;
   const evidencePass = input.candidate
     ? input.outcome.result.evidence.length === 1
@@ -151,8 +154,10 @@ function packExecutionAudit(input: {
     envelopeErrors: envelope.errors,
     evidencePass,
     receiptPass,
-    answerPass,
-    responseMode: warnings.length === 0 ? "model-grounded" : warnings[0].code,
+    answerPass: terminalAnswerPass,
+    responseMode: input.outcome.result.status === "failure" || input.outcome.result.status === "cancelled"
+      ? `terminal-${input.outcome.result.status}`
+      : warnings.length === 0 ? "model-grounded" : warnings[0].code,
     warnings,
     resultStatus: input.outcome.result.status,
     resolvedModelId: input.outcome.result.receipt.model?.resolvedModelId ?? null,
@@ -230,7 +235,12 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
           configuredModel: getConfiguredChatModel,
         });
         packOutcome = outcome;
-        if (!outcome.diagnostics) throw new Error(outcome.result.error?.message ?? "The Analytics Pack returned no diagnostic plan.");
+        if (!outcome.diagnostics) {
+          packAudit = packExecutionAudit({ request, outcome, dataset });
+          results.push({ ...item, action: outcome.result.status, sql: null, packAudit, passed: false, error: outcome.result.error?.message ?? "The Analytics Pack returned no diagnostic plan.", latencyMs: Date.now() - started });
+          console.log(`FAIL ${item.id}`);
+          continue;
+        }
         plan = outcome.diagnostics.plan;
         proposal = outcome.diagnostics.proposal;
       } else {
