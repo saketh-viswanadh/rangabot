@@ -254,6 +254,12 @@ qualified local model, if any, powers each workflow.
 - [x] Markdown and syntax-highlighted code rendering with copy controls
 - [x] Message hover affordances and reply-to-message context
 - [x] Offline welcome library with 100 quotes, 100 jokes and 100 thoughts, a 60-item no-repeat window, and weekly quality review
+- [x] Local-only fresh-chat personalization with rotating greetings, an optional
+  browser-local name or nickname, Mix/Quotes/Jokes/Thoughts/My books controls,
+  and bounded cited book facts that retain no welcome text
+- [x] Strict responsive UI pass: compact Brief/Tools header, mobile chat/project
+  drawer, semantic palette contrast, restrained motion, and an evidence-first
+  Path to Mastery without the decorative banner
 - [x] Local project folders with project-scoped chat history
 - [x] Private 4 GB Knowledge Vault with incremental local document ingestion
 - [x] Hybrid keyword and embedding retrieval with Teacher Mode citations
@@ -356,11 +362,22 @@ qualified local model, if any, powers each workflow.
   pushes directly to `main` or merges automatically.
 - Assistant Markdown is rendered locally; raw HTML is not enabled. External
   links open separately, and code highlighting and copying stay in-browser.
-- Appearance preferences stay in browser-local storage. Reply references remain
-  in the local conversation record and are expanded only for the local model.
-- Welcome content is reviewed and bundled with the app. It never introduces a
-  runtime network request. The dated library is reviewed weekly, changed only
-  when quality improves, and guarded by count, length, attribution and duplicate tests.
+- Appearance and fresh-chat preferences stay in browser-local storage. The
+  optional welcome name and category are presentation settings only: they never
+  enter chat history, Local memory, the Knowledge Vault, or a provider request.
+  Reply references remain in the local conversation record and are expanded only
+  for the local model.
+- Quotes, jokes, and thoughts are reviewed and bundled with the app; they never
+  introduce a runtime network request. The dated library is reviewed weekly,
+  changed only when quality improves, and guarded by count, length, attribution
+  and duplicate tests.
+- My books welcome content is sampled only from the existing local Knowledge
+  Vault index. Selection uses bounded indexed windows, filters unsuitable text,
+  returns a visible local citation, and stores only opaque recent-item IDs in the
+  browser; it is not model training, retrieval for a chat answer, or a new memory.
+- Maintained public demo captures start from synthetic UI state and do not load
+  local conversations, projects, folder approvals, Knowledge Brief data, or a
+  saved welcome name.
 - Projects currently organize local chats only. Selecting a project never grants
   filesystem access; repository attachment remains a separate allowlist flow.
 - Repository approvals are canonical absolute paths stored in a private local

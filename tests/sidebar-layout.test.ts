@@ -5,7 +5,7 @@ import test from "node:test";
 const page = readFileSync("app/page.tsx", "utf8");
 const styles = readFileSync("app/globals.css", "utf8");
 const icons = readFileSync("app/components/craft-icon.tsx", "utf8");
-const sidebar = page.slice(page.indexOf('<aside className="sidebar">'), page.indexOf('</aside>'));
+const sidebar = page.slice(page.indexOf('<aside id="chat-navigation"'), page.indexOf('</aside>'));
 const header = page.slice(page.indexOf('<section className="chat-panel">'), page.indexOf('<div\n          className="messages"'));
 
 test("keeps the sidebar focused on chats", () => {
@@ -15,14 +15,23 @@ test("keeps the sidebar focused on chats", () => {
   assert.doesNotMatch(sidebar, /Knowledge Brief|Path to Mastery|Local memory|Local repositories/);
 });
 
-test("places secondary tools in the compact header utility rail", () => {
-  assert.match(header, /className="utility-rail"/);
+test("places secondary tools in one compact, disclosed workbench", () => {
+  assert.match(header, /className="tools-menu"/);
   assert.match(header, />Brief</);
-  assert.match(header, />Memory</);
-  assert.match(header, />Mastery</);
-  assert.match(header, />Folders</);
-  assert.match(header, /repository-popover/);
+  assert.match(header, /<strong>Memory<\/strong>/);
+  assert.match(header, /<strong>Mastery<\/strong>/);
+  assert.match(header, /Local folders/);
+  assert.match(header, /tools-popover/);
   assert.match(header, /privacy-indicator/);
+});
+
+test("keeps chats and projects reachable through a real mobile drawer", () => {
+  assert.match(header, /className="mobile-navigation"/);
+  assert.match(header, /aria-controls="chat-navigation"/);
+  assert.match(styles, /\.sidebar \{[^}]*visibility: hidden;[^}]*pointer-events: none;[^}]*transform: translateX\(-105%\);/);
+  assert.match(styles, /\.sidebar\.open \{[^}]*visibility: visible;[^}]*pointer-events: auto;[^}]*transform: translateX\(0\);/);
+  assert.match(styles, /\.sidebar-backdrop/);
+  assert.doesNotMatch(styles, /\.sidebar \{ display: none; \}/);
 });
 
 test("keeps chat titles primary and reveals actions only on focus", () => {

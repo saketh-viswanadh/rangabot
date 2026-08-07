@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import treeData from "@/content/path-to-mastery.json";
 import contributorsData from "@/content/mastery-contributors.json";
 import evidenceData from "@/content/mastery-evidence.json";
-import masteryBanner from "@/docs/media/rangabot-social-preview.png";
 import { CraftIcon, type CraftIconName } from "@/app/components/craft-icon";
 import { materializeMasteryTree, masteryProgress, type MasteryEvidenceRegistry, type MasteryNode, type MasteryStatus, type MasteryTreeSource } from "@/lib/mastery-tree";
 import { productConfig } from "@/lib/product-config";
@@ -18,13 +17,78 @@ const evidenceById = new Map(evidence.entries.map((entry) => [entry.id, entry]))
 const repositoryUrl = productConfig.repositoryUrl;
 const statusLabels: Record<MasteryStatus, string> = { vision: "Vision", locked: "Locked", ready: "Ready", "in-progress": "In progress", training: "Training", unlocked: "Unlocked", mastered: "Mastered", regressed: "Regressed" };
 type SelectedNode = MasteryNode & { branchName: string };
-const branchIcons: CraftIconName[] = ["spark", "knowledge", "search", "code", "document", "chat", "shield", "mastery", "folder"];
+const branchIcons: Record<string, CraftIconName> = {
+  mind: "spark",
+  scholar: "knowledge",
+  analyst: "analysis",
+  builder: "code",
+  creator: "document",
+  assistant: "chat",
+  guardian: "shield",
+  companion: "mastery",
+  platform: "folder",
+};
 
 export default function MasteryPage() {
   const progress = useMemo(() => masteryProgress(tree), []);
   const nodeNames = useMemo(() => new Map(tree.branches.flatMap((branch) => branch.nodes.map((node) => [node.id, node.name]))), []);
   const [selected, setSelected] = useState<SelectedNode | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const selectedContributors = selected ? contributorsData.contributors.filter((contributor) => contributor.claims.some((claim) => claim.nodeId === selected.id)) : [];
+
+  const closeSelected = useCallback(() => {
+    const returnTarget = returnFocusRef.current;
+    setSelected(null);
+    requestAnimationFrame(() => {
+      returnTarget?.focus();
+      returnFocusRef.current = null;
+    });
+  }, []);
+
+  const openSelected = useCallback((node: MasteryNode, branchName: string) => {
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setSelected({ ...node, branchName });
+  }, []);
+
+  useEffect(() => {
+    if (!selected) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = requestAnimationFrame(() => closeButtonRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeSelected();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [closeSelected, selected]);
+
   return (
     <main className="mastery-shell">
       <header className="mastery-header">
@@ -32,7 +96,6 @@ export default function MasteryPage() {
         <div className="mastery-title"><span className="mastery-kicker">Public capability roadmap</span><h1>{tree.title}</h1><p>{tree.vision}</p></div>
         <div className="mastery-summary" aria-label="Mastery readiness summary"><strong>{progress.readinessPercent}%</strong><span>capability readiness · {progress.unlocked}/{progress.total} fully unlocked</span><small>{progress.verificationPercent}% criteria verified · {progress.developmentPercent}% development progress · evidence checked {tree.evidenceVerifiedAt}</small></div>
       </header>
-      <section className="mastery-banner" aria-label="Rangabot local AI"><Image src={masteryBanner} alt="Rangabot, private local AI that learns from your documents" priority /></section>
       <section className="mastery-legend" aria-label="Skill status legend">
         {(Object.keys(statusLabels) as MasteryStatus[]).map((status) => <span key={status} data-status={status}><i />{statusLabels[status]}</span>)}
       </section>
@@ -44,10 +107,10 @@ export default function MasteryPage() {
       <section className="mastery-paths" aria-label="Rangabot mastery paths">
         {tree.branches.map((branch, branchIndex) => (
           <article className="mastery-branch" key={branch.id} style={{ "--branch-index": branchIndex } as CSSProperties}>
-            <header><span className="branch-glyph"><CraftIcon name={branchIcons[branchIndex]} /></span><div><small>Mastery path</small><h2>{branch.name}</h2></div><strong>{branch.score.toFixed(1)}<small>/5</small></strong></header>
+            <header><span className="branch-glyph"><CraftIcon name={branchIcons[branch.id] ?? "mastery"} /></span><div><small>Mastery path</small><h2>{branch.name}</h2></div><strong>{branch.score.toFixed(1)}<small>/5</small></strong></header>
             <p>{branch.summary}</p>
             <ol>{branch.nodes.map((node, nodeIndex) => <li key={node.id} data-status={node.status} style={{ "--node-index": nodeIndex } as CSSProperties}>
-              <button type="button" onClick={() => setSelected({ ...node, branchName: branch.name })} aria-label={`${node.name}, ${statusLabels[node.status]}, score ${node.score} out of 5`}>
+              <button type="button" onClick={() => openSelected(node, branch.name)} aria-label={`${node.name}, ${statusLabels[node.status]}, score ${node.score} out of 5`}>
                 <span className="node-emblem"><i /></span>
                 <span className="node-copy"><strong>{node.name}</strong><small>{statusLabels[node.status]} · {node.score.toFixed(1)}/5</small></span>
               </button>
@@ -58,11 +121,11 @@ export default function MasteryPage() {
       </section>
       <section className="mastery-achievements" aria-labelledby="achievement-title"><div><span className="mastery-kicker">Built by the pack</span><h2 id="achievement-title">Achievements remembered</h2><p>Every credited milestone stays attached to the people who helped unlock it. Claims require merged evidence and official CODEOWNER approval.</p></div><ul>{contributorsData.contributors.map((contributor) => <li key={contributor.github}><a href={`https://github.com/${contributor.github}`} target="_blank" rel="noreferrer"><span className="contributor-avatar" aria-hidden="true">{contributor.avatar ? <Image src={contributor.avatar} alt="" width={48} height={48} /> : contributor.name.slice(0, 1)}</span><span><strong>{contributor.name}</strong><small>@{contributor.github} · {contributor.role}</small><em>{contributor.achievement}</em><b>{contributor.claims.length} verified contributions</b><span className="contributor-claims">{contributor.claims.map((claim) => <i key={claim.nodeId}>{nodeNames.get(claim.nodeId)}</i>)}</span></span></a></li>)}</ul><a className="claim-skill" href={`${repositoryUrl}/issues/new?template=mastery-claim.yml`} target="_blank" rel="noreferrer">Request an official contribution claim <CraftIcon name="external" size={12} /></a></section>
       <footer className="mastery-footer"><p><strong>This tree is also the backlog.</strong> Nodes unlock only after their code is merged and every listed acceptance criterion passes. A failed regression can relock a skill.</p><a href={repositoryUrl} target="_blank" rel="noreferrer">View Rangabot on GitHub <CraftIcon name="external" size={12} /></a></footer>
-      {selected && <div className="mastery-modal" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setSelected(null); }}>
-        <section role="dialog" aria-modal="true" aria-labelledby="selected-mastery-title" data-status={selected.status}>
-          <button className="mastery-close" type="button" onClick={() => setSelected(null)} aria-label="Close mastery details"><CraftIcon name="close" /></button>
+      {selected && <div className="mastery-modal" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) closeSelected(); }}>
+        <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="selected-mastery-title" aria-describedby="selected-mastery-description" data-status={selected.status}>
+          <button ref={closeButtonRef} className="mastery-close" type="button" onClick={closeSelected} aria-label="Close mastery details"><CraftIcon name="close" /></button>
           <span className="detail-path">{selected.branchName} · {statusLabels[selected.status]}</span><h2 id="selected-mastery-title">{selected.name}</h2>
-          <div className="detail-score"><strong>{selected.score.toFixed(1)}</strong><span>/ 5 maturity</span></div><p>{selected.description}</p>
+          <div className="detail-score"><strong>{selected.score.toFixed(1)}</strong><span>/ 5 maturity</span></div><p id="selected-mastery-description">{selected.description}</p>
           <h3>Criterion audit</h3><ul>{selected.criteria.map((criterion) => <li key={criterion.id}><strong>{criterion.state.toUpperCase()}</strong> — {criterion.text}{criterion.note ? ` — ${criterion.note}` : ""}</li>)}</ul>
           <a className="detail-checklist" href={`${repositoryUrl}/blob/main/docs/PATH_TO_MASTERY.md#${selected.id}`} target="_blank" rel="noreferrer">Open the complete public checklist <CraftIcon name="external" size={12} /></a>
           <h3>Dependencies</h3><p className="detail-tags">{selected.dependencies.length ? selected.dependencies.map((dependency) => <span key={dependency}>{dependency.replaceAll("-", " ")}</span>) : <span>Foundation node</span>}</p>

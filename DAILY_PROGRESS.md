@@ -1,5 +1,49 @@
 # Daily progress
 
+## 2026-08-07 — Local fresh-chat personalization and strict UI audit
+
+- Rebuilt the empty-chat welcome around rotating, content-driven greetings and
+  an optional sanitized name or nickname. The preference is local to the browser
+  and is not promoted into chat history, Local memory, the Knowledge Vault, or
+  the model prompt.
+- Added explicit Mix, Quotes, Jokes, Thoughts, and My books controls. The first
+  four reuse the bundled offline welcome library; My books returns one
+  self-contained cited sentence from the existing local index, shows a clear
+  no-compatible-fact state, and keeps only opaque recent-item identifiers rather
+  than the sentence text.
+- Caught a serious performance regression during real browser testing: the first
+  cited-book implementation could take about 30 seconds against the populated
+  vault because it scanned large chunk content. Replaced that path with bounded
+  document/ordinal windows backed by a `(document_id, ordinal)` index and a
+  bounded row-id fallback for older read-only indexes. Observed server
+  application time fell to roughly 40–90 ms, and one end-to-end rendered refresh
+  completed in 299 ms on this local setup. These measurements are diagnostic,
+  not a general latency guarantee.
+- Consolidated secondary workbench controls under a compact Tools menu and gave
+  mobile layouts a real chat/project drawer with visible dismissal, Escape
+  handling, initial focus, and focus return. Brief and local-model status remain
+  immediately visible.
+- Rebalanced sand, sage, and lavender light/dark palettes with semantic surface,
+  text, border, focus, and status colors. All three inspected light user-bubble
+  combinations exceeded the 4.5:1 normal-text contrast target. Removed ambient
+  butterflies and the rainbow thinking frame; one restrained activity accent
+  remains.
+- Removed Path to Mastery's decorative banner, bringing the honest readiness
+  summary and capability tree above the fold. Detail dialogs now declare their
+  description, receive and contain keyboard focus, close with Escape or backdrop
+  selection, restore focus, and prevent background scrolling.
+- Browser QA covered the fresh state, personalization, category switching, a
+  cited local-book fact, desktop and 390 px mobile layouts, the mobile drawer,
+  Tools, and Mastery dialog lifecycle. The focused knowledge-welcome suite passes
+  7/7, including a 4,000-passage bounded-selection fixture. This does not prove
+  all visual combinations or turn the welcome fact into a teaching benchmark.
+- Added a public-safe welcome capture mode and refreshed the README home and
+  Mastery images. Capture mode deliberately skips private conversations,
+  projects, folder approvals, Knowledge Brief data, and saved welcome names.
+  Short desktop windows no longer auto-scroll the empty chat to its bottom
+  anchor, and the closed mobile drawer is removed from pointer and accessibility
+  navigation until opened.
+
 ## 2026-08-07 — Trusted analytical narration and execution binding
 
 - Captured the actual v5 failure baseline before changing production behavior.
