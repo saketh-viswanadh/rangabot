@@ -37,7 +37,9 @@ export function getConversationDatabase() {
   if (database) return database;
   mkdirSync(dirname(databasePath), { recursive: true });
   database = new DatabaseSync(databasePath);
-  database.exec(`
+  let transactionStarted = false;
+  try {
+    database.exec(`
     PRAGMA foreign_keys = ON;
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS conversations (
@@ -57,9 +59,9 @@ export function getConversationDatabase() {
       key TEXT PRIMARY KEY,
       applied_at TEXT NOT NULL
     );
-  `);
-  database.exec("BEGIN IMMEDIATE");
-  try {
+    `);
+    database.exec("BEGIN IMMEDIATE");
+    transactionStarted = true;
     validateSchemaMigrationsTable(database);
     const columns = database.prepare("PRAGMA table_info(conversations)").all() as unknown as { name: string }[];
     if (!columns.some((column) => column.name === "project_id")) {
@@ -110,10 +112,13 @@ export function getConversationDatabase() {
       incompatibleTurnSchema("lifecycle migration marker is invalid");
     }
     database.exec("COMMIT");
+    transactionStarted = false;
     return database;
   } catch (error) {
-    database.exec("ROLLBACK");
-    database.close();
+    if (transactionStarted) {
+      try { database.exec("ROLLBACK"); } catch { /* Closing below is authoritative. */ }
+    }
+    try { database.close(); } catch { /* Preserve the initialization error. */ }
     database = undefined;
     throw error;
   }
@@ -193,7 +198,9 @@ function validateConversationTurnIndexes(db: Database) {
   if (!ordered || ordered.unique || ordered.partial || indexColumns(db, ordered.name).join(",") !== "conversation_id,sequence") incompatibleTurnSchema("conversation order index is invalid");
   if (!pending || !pending.unique || !pending.partial || indexColumns(db, pending.name).join(",") !== "conversation_id") incompatibleTurnSchema("pending-turn index is invalid");
   const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'conversation_one_pending_turn'").get() as { sql?: string } | undefined;
-  if (!row?.sql?.toLowerCase().replace(/[\s"`\[\]]+/g, "").includes("wherestatus='pending'")) incompatibleTurnSchema("pending-turn constraint is invalid");
+  const normalized = row?.sql?.toLowerCase().replace(/[\s"`\[\]]+/g, "").replace(/;$/, "") ?? "";
+  const expected = "createuniqueindexconversation_one_pending_turnonconversation_turns(conversation_id)wherestatus='pending'";
+  if (normalized !== expected) incompatibleTurnSchema("pending-turn constraint is invalid");
 }
 
 function parseMessages(value: string): ChatMessage[] {

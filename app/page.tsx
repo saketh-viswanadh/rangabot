@@ -75,7 +75,7 @@ type TurnStartResult = { ok: boolean; conversationId?: string; error?: string; c
 const BOOK_WELCOME_HISTORY_STORAGE_KEY = "rangabot-book-welcome-history-v1";
 const TURN_CANCELLATION_TIMEOUT_MS = 2_500;
 const ADOPTED_TURN_POLL_INTERVAL_MS = 2_000;
-const ADOPTED_TURN_POLL_ATTEMPTS = 150;
+const ADOPTED_TURN_POLL_ATTEMPTS = 480;
 const PUBLIC_DEMO_MODES = new Set(["knowledge", "welcome"]);
 
 function displayMessagesFromTimeline(messages: ChatMessage[]): DisplayMessage[] {
@@ -930,7 +930,7 @@ export default function Home() {
           ? await reconcileTurnFromServer(conversationId, turnId)
           : null;
         const shouldRetainOwnership = authoritativeStatus === "pending"
-          || (stopped && !cancellationConfirmed && authoritativeStatus === null);
+          || (authoritativeStatus === null && (!stopped || !cancellationConfirmed));
         const newerTurnOwnsComposer = activeTurnRef.current && activeTurnRef.current.turnId !== turnId;
         if (conversationId && shouldRetainOwnership && !newerTurnOwnsComposer
           && sendEpoch === conversationOpenEpochRef.current && !conversationLoadingRef.current) {

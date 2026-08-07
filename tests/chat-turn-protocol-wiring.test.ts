@@ -34,6 +34,7 @@ test("client ownership survives cancellation and navigation races", () => {
   assert.match(cancellationFlow, /return false/);
   assert.match(stopFlow, /authoritativeStatus === "pending"/);
   assert.match(stopFlow, /setAdoptedPendingTurn\(activeTurn\)/);
+  assert.match(sendFlow, /authoritativeStatus === null && \(!stopped \|\| !cancellationConfirmed\)/);
   assert.match(openFlow, /conversationLoadingRef\.current = true/);
   assert.match(openFlow, /setReplyTo\(null\)/);
   assert.match(sendFlow, /conversationLoadingRef\.current/);

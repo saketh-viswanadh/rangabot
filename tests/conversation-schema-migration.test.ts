@@ -134,6 +134,49 @@ test("rejects a same-named conversation order index with the wrong column order"
   }
 });
 
+test("rejects a same-named pending index with a weakened or expanded predicate", () => {
+  for (const predicate of ["status = 'pending' AND 0", "status = 'pending' OR status = 'failed'"]) {
+    const fixture = createFixture();
+    try {
+      const malformed = new DatabaseSync(fixture.path);
+      createLegacyConversations(malformed);
+      malformed.exec(turnTable);
+      malformed.exec("CREATE INDEX conversation_turns_order ON conversation_turns(conversation_id, sequence)");
+      malformed.exec(`CREATE UNIQUE INDEX conversation_one_pending_turn ON conversation_turns(conversation_id) WHERE ${predicate}`);
+      malformed.close();
+
+      conversations.setConversationDatabasePathForTests(fixture.path);
+      assert.throws(
+        () => conversations.getConversationDatabase(),
+        (error: unknown) => actionableSchemaError(error, /pending-turn constraint is invalid/),
+      );
+    } finally {
+      fixture.close();
+    }
+  }
+});
+
+test("a transient initialization lock never leaves an unmigrated handle cached", () => {
+  const fixture = createFixture();
+  try {
+    const locker = new DatabaseSync(fixture.path);
+    createLegacyConversations(locker);
+    locker.exec("BEGIN IMMEDIATE");
+    conversations.setConversationDatabasePathForTests(fixture.path);
+    assert.throws(() => conversations.getConversationDatabase(), /locked|busy/i);
+    locker.exec("ROLLBACK");
+    locker.close();
+
+    const recovered = conversations.getConversationDatabase();
+    const marker = recovered.prepare("SELECT key FROM schema_migrations WHERE key = ?")
+      .get("conversation-turn-lifecycle-v1") as { key: string } | undefined;
+    assert.equal(marker?.key, "conversation-turn-lifecycle-v1");
+    assert.equal(recovered.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'conversation_turns'").get() !== undefined, true);
+  } finally {
+    fixture.close();
+  }
+});
+
 test("rejects a turn table that has the right columns but omits required CHECK constraints", () => {
   const fixture = createFixture();
   try {

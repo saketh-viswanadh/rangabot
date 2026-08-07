@@ -9,6 +9,29 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Improved
 
+- Replaced browser-authored chat persistence with Core Turn Lifecycle v2. Each
+  request receives one request-bound UUID and server-owned context snapshot;
+  ambiguous starts replay idempotently, only clean completion atomically appends
+  canonical history, and failed/cancelled partials stay inspectable without
+  entering later prompts, search, or portable exports.
+- Hardened Stop, reload, navigation, timeout, and failure recovery. Pending turns
+  remain locked while network state is unknown, adopted work is polled boundedly,
+  timeouts remain failures rather than user cancellations, no cancellation is
+  retried, and project/dataset mutation or deletion cannot race active work.
+- Added transactional SQLite lifecycle migration validation, recovery from a
+  transient initialization lock, exact partial-index checks, and safe upgrade of
+  pre-project-hash turn receipts. Portable Markdown now strips machine-local
+  artifacts, analytical traces, model identifiers, memory titles, and internal
+  lifecycle metadata.
+- Propagated one absolute AbortSignal through Ollama, Analytics, Knowledge Vault,
+  and Word rendering. Word preview subprocesses receive TERM then bounded KILL;
+  uncommitted artifacts are removed, and chat requests no longer rebuild the
+  full native vector index synchronously.
+- On clean implementation commit `f4b3677`, the unchanged 60-case suite passed
+  59/60 overall and 22/22 critical at 6.5 seconds mean latency. The deterministic
+  project suite passed 368/368 after the final hostile-audit additions. This preserves a
+  conditional pass, not a claim of semantic mastery or completed human review.
+
 - Corrected the fresh-chat hierarchy after another production-size review.
   The rotating content is now passive text rather than a settings card: the
   category selector and manual rotation control have left the canvas, and Mix,

@@ -147,7 +147,7 @@ function normalizeOptions(options: ConversationTurnOptions, datasetId: string | 
   };
 }
 
-function requestHash(message: ChatMessage, options: StoredTurnOptions) {
+function requestHash(message: ChatMessage, options: unknown) {
   return createHash("sha256").update(JSON.stringify({ message, options })).digest("hex");
 }
 
@@ -211,12 +211,26 @@ export function beginConversationTurn(input: BeginConversationTurnInput): { turn
     const database = getConversationDatabase();
     const existing = getTurnRow(input.id);
     if (existing) {
-      const turn = parseTurn(existing);
-      const requestedDataset = input.conversationId ? turn.options.datasetId : input.datasetId ?? null;
-      const requestedProject = input.conversationId ? turn.options.projectId : input.projectId ?? null;
-      const hash = requestHash(userMessage, normalizeOptions(input.options, requestedDataset, requestedProject));
-      if ((input.conversationId && input.conversationId !== turn.conversationId) || hash !== turn.requestHash) {
+      let turn = parseTurn(existing);
+      const boundConversation = getConversation(turn.conversationId);
+      if (!boundConversation) throw new ConversationTurnError("integrity", "The turn's conversation is missing.");
+      const requestedDataset = input.conversationId ? boundConversation.datasetId : input.datasetId ?? null;
+      const requestedProject = input.conversationId ? boundConversation.projectId : input.projectId ?? null;
+      const normalizedOptions = normalizeOptions(input.options, requestedDataset, requestedProject);
+      const hash = requestHash(userMessage, normalizedOptions);
+      const storedOptions = JSON.parse(existing.requestOptions) as Record<string, unknown>;
+      const canUpgradeLegacyHash = !Object.prototype.hasOwnProperty.call(storedOptions, "projectId")
+        && requestedProject === boundConversation.projectId
+        && existing.requestHash === requestHash(userMessage, { ...normalizedOptions, projectId: undefined });
+      if ((input.conversationId && input.conversationId !== turn.conversationId) || (hash !== turn.requestHash && !canUpgradeLegacyHash)) {
         throw new ConversationTurnError("conflict", "That turn id is already bound to a different request.");
+      }
+      if (hash !== turn.requestHash && canUpgradeLegacyHash) {
+        database.prepare("UPDATE conversation_turns SET request_hash = ?, request_options = ? WHERE id = ?")
+          .run(hash, JSON.stringify(normalizedOptions), turn.id);
+        const upgraded = getTurnRow(turn.id);
+        if (!upgraded) throw new ConversationTurnError("integrity", "The upgraded turn could not be read.");
+        turn = parseTurn(upgraded);
       }
       return { turn, conversationId: turn.conversationId, replayed: true };
     }

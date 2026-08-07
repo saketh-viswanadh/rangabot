@@ -1,7 +1,8 @@
 # Core Conversation Contract
 
-Version: 1.1.0
-Frozen: 2026-08-02
+Version: 1.2.0
+Frozen benchmark: 2026-08-02
+Lifecycle amendment: 2026-08-07
 
 This contract defines what ordinary Rangabot conversation must do regardless of
 which supported local Ollama model is selected. It is an orchestration and
@@ -37,6 +38,30 @@ An acceptable core answer is:
 - free of unrelated saved memories or claims about Rangabot's internal prompt.
 
 Rangabot must never claim or imply that it completed an unavailable action.
+
+## Turn lifecycle standard
+
+Every saved request has one server-owned, durable turn identity. The browser may
+submit only that identity after creation; it cannot replace canonical history or
+author its own terminal state.
+
+- At most one turn may be pending for a conversation.
+- Retrying an ambiguous start reuses the same UUID and exact normalized request.
+- Only a clean completed response atomically appends its user/assistant pair to
+  canonical model history.
+- Cancelled and failed turns retain an inspectable receipt and bounded partial,
+  but never enter a later prompt, conversation search, or portable export.
+- Stop propagates through the provider and any selected local tool. Cancellation
+  is never retried, and a timeout is never mislabeled as user cancellation.
+- A browser reload may adopt and observe a pending server turn. Unknown network
+  state keeps ownership locked until an authoritative receipt is available.
+- Project/dataset binding changes and destructive deletion are rejected while
+  related work is pending.
+- One absolute deadline bounds the turn. Stale recovery begins only after the
+  maximum supported deadline and cannot convert partial output into history.
+
+These rules are model-independent. They improve the reliability of every local
+model but do not make a weak model's answer semantically correct.
 
 ## Frozen v1 benchmark
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { conversationFilename, parseConversationMarkdown, serializeConversationMarkdown } from "../lib/conversation-markdown.ts";
 
-test("round-trips a readable Markdown conversation without losing message metadata", () => {
+test("round-trips a readable Markdown conversation without machine-local metadata", () => {
   const conversation = {
     id: "local-test",
     title: "Python & SQL plan",
@@ -14,7 +14,7 @@ test("round-trips a readable Markdown conversation without losing message metada
     messages: [
       { role: "system" as const, content: "Legacy internal instruction." },
       { role: "user" as const, content: "Show me `SELECT 1`.", turn: { id: "turn-1", status: "completed" as const } },
-      { role: "assistant" as const, content: "```sql\nSELECT 1;\n```", replyTo: { role: "user" as const, excerpt: "Show me SELECT 1" }, memoryUse: "context" as const, analysisTrace: { engine: "duckdb" as const, dataset: "fixture.duckdb", query: "SELECT 1", returnedRows: 1, truncated: false, durationMs: 1, inputSha256: "a".repeat(64), querySha256: "b".repeat(64), packId: "analytics", packVersion: "0.1.0", modelMode: "general" as const, modelId: "local:3b" }, answerDisposition: "verified-fallback" as const },
+      { role: "assistant" as const, content: "```sql\nSELECT 1;\n```", replyTo: { role: "user" as const, excerpt: "Show me SELECT 1" }, memoryUse: "context" as const, memoryTitles: ["Private preference"], wordArtifact: { id: "11111111-1111-4111-8111-111111111111", title: "Local draft", filename: "draft.docx", previewPages: 1 }, analysisTrace: { engine: "duckdb" as const, dataset: "fixture.duckdb", query: "SELECT 1", returnedRows: 1, truncated: false, durationMs: 1, inputSha256: "a".repeat(64), querySha256: "b".repeat(64), packId: "analytics", packVersion: "0.1.0", modelMode: "general" as const, modelId: "local:3b" } },
     ],
   };
   const markdown = serializeConversationMarkdown(conversation);
@@ -22,9 +22,11 @@ test("round-trips a readable Markdown conversation without losing message metada
   assert.match(markdown, /# Python & SQL plan/);
   assert.match(markdown, /## Rangabot/);
   assert.doesNotMatch(markdown, /Legacy internal instruction/);
-  assert.deepEqual(parseConversationMarkdown(markdown), conversation.messages
-    .filter((message) => message.role !== "system")
-    .map(({ turn: _turn, ...message }) => message));
+  assert.deepEqual(parseConversationMarkdown(markdown), [
+    { role: "user", content: "Show me `SELECT 1`." },
+    { role: "assistant", content: "```sql\nSELECT 1;\n```", replyTo: { role: "user", excerpt: "Show me SELECT 1" } },
+  ]);
+  assert.doesNotMatch(markdown, /fixture\.duckdb|draft\.docx|Private preference|local:3b/);
   assert.equal(conversationFilename(conversation.title), "python-sql-plan.md");
 });
 

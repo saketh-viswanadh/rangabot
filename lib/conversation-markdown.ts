@@ -14,10 +14,18 @@ function readableRole(role: ChatMessage["role"]) {
   return "System";
 }
 
+function portableMessage(message: ChatMessage): ChatMessage {
+  return {
+    role: message.role,
+    content: message.content,
+    ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+  };
+}
+
 export function serializeConversationMarkdown(conversation: Conversation) {
   const messages = conversation.messages
     .filter((message) => message.role !== "system")
-    .map(({ turn: _turn, ...message }) => message);
+    .map(portableMessage);
   if (messages.length === 0 || messages.length > MAX_CONVERSATION_IMPORT_MESSAGES
     || !messages.every((message) => isValidChatMessage(message) && message.role !== "system")) {
     throw new Error("Conversation exports must contain between 1 and 500 portable messages.");
@@ -53,7 +61,7 @@ export function parseConversationMarkdown(markdown: string): ChatMessage[] {
     || (payload.version === 2 && payload.messages.some((message) => message.role === "system"))) {
     throw new Error("The Rangabot conversation payload is invalid.");
   }
-  const messages = payload.messages.filter((message) => message.role !== "system");
+  const messages = payload.messages.filter((message) => message.role !== "system").map(portableMessage);
   if (messages.length === 0 || messages.length > MAX_CONVERSATION_IMPORT_MESSAGES) {
     throw new Error("Conversation exports must contain between 1 and 500 portable messages.");
   }

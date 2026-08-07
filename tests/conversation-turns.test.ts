@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -132,6 +132,36 @@ test("first-turn idempotency binds project and dataset creation context", () => 
     (error: unknown) => error instanceof turns.ConversationTurnError && error.code === "conflict",
   );
   conversations.deleteConversation(first.conversationId);
+});
+
+test("a pre-project-hash turn upgrades only when its saved conversation binding matches", () => {
+  const turnId = randomUUID();
+  const input = {
+    id: turnId,
+    projectId: "legacy-project",
+    datasetId: null,
+    userMessage: { role: "user" as const, content: "Recover this ambiguous start safely." },
+    options: { mode: "smart" as const },
+  };
+  const started = turns.beginConversationTurn(input);
+  const database = conversations.getConversationDatabase();
+  const row = database.prepare("SELECT user_message AS userMessage, request_options AS requestOptions FROM conversation_turns WHERE id = ?")
+    .get(turnId) as { userMessage: string; requestOptions: string };
+  const oldOptions = JSON.parse(row.requestOptions) as Record<string, unknown>;
+  delete oldOptions.projectId;
+  const oldHash = createHash("sha256").update(JSON.stringify({ message: JSON.parse(row.userMessage), options: oldOptions })).digest("hex");
+  database.prepare("UPDATE conversation_turns SET request_hash = ?, request_options = ? WHERE id = ?")
+    .run(oldHash, JSON.stringify(oldOptions), turnId);
+
+  assert.throws(
+    () => turns.beginConversationTurn({ ...input, projectId: "different-project" }),
+    (error: unknown) => error instanceof turns.ConversationTurnError && error.code === "conflict",
+  );
+  const replay = turns.beginConversationTurn(input);
+  assert.equal(replay.replayed, true);
+  assert.equal(replay.turn.options.projectId, "legacy-project");
+  assert.notEqual(replay.turn.requestHash, oldHash);
+  conversations.deleteConversation(started.conversationId);
 });
 
 test("claimed prompt context is bounded without losing the current request", () => {
