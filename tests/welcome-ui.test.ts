@@ -7,11 +7,15 @@ import { buildBookWelcomeResponse } from "../lib/knowledge-welcome.ts";
 import { welcomeModes } from "../lib/welcome-preferences.ts";
 import { paletteOptions } from "../lib/appearance-preferences.ts";
 
-const page = readFileSync("app/page.tsx", "utf8");
-const preferences = readFileSync("app/components/welcome-preferences.tsx", "utf8");
-const styles = readFileSync("app/globals.css", "utf8");
-const masteryPage = readFileSync("app/mastery/page.tsx", "utf8");
-const masteryStyles = readFileSync("app/mastery/mastery.css", "utf8");
+function readSource(path: string) {
+  return readFileSync(path, "utf8").replace(/\r\n?/g, "\n");
+}
+
+const page = readSource("app/page.tsx");
+const preferences = readSource("app/components/welcome-preferences.tsx");
+const styles = readSource("app/globals.css");
+const masteryPage = readSource("app/mastery/page.tsx");
+const masteryStyles = readSource("app/mastery/mastery.css");
 const pageAst = ts.createSourceFile("app/page.tsx", page, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 
 function findNamedFunction(name: string) {
