@@ -14,7 +14,7 @@ export function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = (await request.json()) as { messages?: unknown; projectId?: unknown; datasetId?: unknown };
-  if (!isValidChatMessages(body.messages, { allowEmpty: true })) {
+  if (!isValidChatMessages(body.messages, { allowEmpty: true }) || body.messages.some((message) => message.role === "system")) {
     return NextResponse.json({ error: "Valid messages are required." }, { status: 400 });
   }
   const projectId = typeof body.projectId === "string" ? body.projectId : null;

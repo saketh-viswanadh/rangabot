@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { assembleStoryCollectionDraft, buildConversationSummaryFallback, buildFallbackWordDraft, buildStoryPartPrompt, buildWordConversationPrompt, buildWordDraftPrompt, buildWordSourceTranscript, createWordArtifact, isWordConversationSummaryRequest, parseStoryDraftPart, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, resetArtifactsRootForTests, resolveArtifactFile, setArtifactsRootForTests, shouldPlanWordDocument, validateWordBrief, validateWordDraftForBrief } from "../lib/word-documents.ts";
+import { assembleStoryCollectionDraft, buildConversationSummaryFallback, buildFallbackWordDraft, buildStoryPartPrompt, buildWordConversationPrompt, buildWordDraftPrompt, buildWordSourceTranscript, createWordArtifact, isWordConversationSummaryRequest, parseStoryDraftPart, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, resetArtifactsRootForTests, resolveArtifactFile, runPreviewCommand, setArtifactsRootForTests, shouldPlanWordDocument, validateWordBrief, validateWordDraftForBrief } from "../lib/word-documents.ts";
 import { buildRamayanaStoryCollection } from "../lib/story-packs/ramayana.ts";
 import { findStoryPack } from "../lib/story-packs/index.ts";
 
@@ -201,4 +201,35 @@ test("creates a real private DOCX with a quality report", async () => {
     resetArtifactsRootForTests();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("an aborted document turn removes its uncommitted artifact directory", async () => {
+  const root = mkdtempSync(join(tmpdir(), "rangabot-word-abort-"));
+  setArtifactsRootForTests(root);
+  const controller = new AbortController();
+  controller.abort(new DOMException("Stopped", "AbortError"));
+  try {
+    await assert.rejects(createWordArtifact(brief, {
+      subtitle: "Abort safely",
+      executiveSummary: "This document must not remain on disk.",
+      sections: [
+        { heading: "One", paragraphs: ["First section."], bullets: [] },
+        { heading: "Two", paragraphs: ["Second section."], bullets: [] },
+      ],
+      assumptions: [],
+    }, { signal: controller.signal }), (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+    assert.deepEqual(readdirSync(root), []);
+  } finally {
+    resetArtifactsRootForTests();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("an active preview subprocess is terminated before cancellation settles", async () => {
+  const controller = new AbortController();
+  const started = Date.now();
+  const running = runPreviewCommand(process.execPath, ["-e", "setInterval(() => {}, 1000)"], controller.signal);
+  setTimeout(() => controller.abort(new DOMException("Stopped", "AbortError")), 50);
+  await assert.rejects(running, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+  assert.ok(Date.now() - started < 4_000);
 });

@@ -1,5 +1,41 @@
 # Daily progress
 
+## 2026-08-07 — Core Turn Lifecycle v2
+
+- Replaced whole-transcript client writes with a durable server-owned turn
+  ledger. Starts are exact-request/idempotency bound, one turn may be pending per
+  conversation, generation is claimed once, and clean completion appends one
+  user/assistant pair in the same SQLite transaction.
+- Kept cancellation and failure useful without making them context. Bounded
+  partials, failure codes, expert warnings, retrieval/memory receipts, and Word
+  cleanup metadata remain on the terminal turn; only completed messages enter
+  prompts, search, backup, or later synthesis.
+- Closed client ownership races: parsed start receipts retry with the same UUID,
+  navigation blocks Send until its chat is authoritative, Stop verifies or
+  re-adopts uncertain work, reload adopts pending turns, bounded polling observes
+  terminal receipts, and old async completions cannot clear newer ownership.
+- Standardized one absolute timeout and AbortSignal across provider, Analytics,
+  Knowledge Vault, and Word paths. Timeout and user cancellation remain distinct;
+  uncommitted Word artifacts are removed and preview processes are awaited with a
+  bounded force-kill fallback.
+- Added guarded project/dataset mutation and deletion, strict additive database
+  migration checks, transient-lock recovery, exact index-predicate validation,
+  and compatibility upgrade for pre-project-hash receipts. Portable Markdown v2
+  now carries only conversational text and reply context—not local artifact IDs,
+  data/model traces, memory titles, or lifecycle state.
+- Preserved honest model evidence. The pre-change clean baseline was 59/60,
+  22/22 critical, and 6.5 seconds mean latency. The first dirty lifecycle
+  candidate was 58/60, 22/22 critical, and 5.9 seconds; it is not hidden. Clean
+  implementation commit `f4b3677` returned to 59/60, 22/22 critical, and 6.5
+  seconds on unchanged suite v1.0.11. The stateless benchmark shows no material
+  answer-quality regression; deterministic lifecycle tests, not that benchmark,
+  support persistence and recovery claims.
+- Full final validation includes the unchanged 60-case fixture validator,
+  15/15 memory precision and 15/15 recall, 368/368 deterministic tests, lint, typecheck,
+  production build, privacy scan, diff check, and zero production dependency
+  vulnerabilities. Repeated critical runs and blind human usefulness remain
+  release blockers.
+
 ## 2026-08-07 — Traditional neutrals and a coherent Preferences flow
 
 - Added one orthogonal Black & White palette whose light state is genuinely

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { deleteProject, updateProject } from "@/lib/conversations";
+import { updateProject } from "@/lib/conversations";
+import { deleteProjectWhenIdle } from "@/lib/conversation-mutation-guards";
 
 export const runtime = "nodejs";
 type RouteContext = { params: Promise<{ id: string }> };
@@ -13,7 +14,14 @@ export async function PUT(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  return deleteProject((await context.params).id)
+  const result = deleteProjectWhenIdle((await context.params).id);
+  if (result === "turn-in-progress") {
+    return NextResponse.json({
+      error: "Stop or finish active turns before deleting this project.",
+      code: "turn-in-progress",
+    }, { status: 409 });
+  }
+  return result === "deleted"
     ? new Response(null, { status: 204 })
     : NextResponse.json({ error: "Project not found." }, { status: 404 });
 }

@@ -1,7 +1,7 @@
 # Mind & Memory release architecture
 
 Status: release-candidate foundation
-Reviewed: 2026-08-02
+Reviewed: 2026-08-07
 
 Mind & Memory is Rangabot's control plane. Scholar, Builder, Creator, and future
 tools may add context or capabilities, but they must not invent their own rules
@@ -113,6 +113,29 @@ requirements without domain table names. This audit pattern is a candidate for
 future shared tool planning, but it must not be generalized into memory or other
 paths until separate tests show that the abstraction preserves their contracts.
 
+### Durable turn ownership
+
+`lib/conversation-turns.ts` and `lib/chat-turn-lifecycle.ts` separate an
+inspectable execution ledger from the canonical completed transcript. A
+versioned start endpoint creates or replays one request-bound UUID; the chat
+endpoint then claims only that stored turn and reconstructs its bounded context
+server-side. Clean EOF commits one pair transactionally. Cancellation, timeout,
+provider failure, empty output, malformed streams, and persistence rollback end
+the ledger receipt without contaminating later model context.
+
+The browser owns only presentation and cancellation intent. It retries an
+ambiguous start with the same UUID, blocks a second send while ownership is
+unknown, reconciles against the server, and polls boundedly after adopting a
+pending turn on reload. Dataset/project binding mutation and deletion serialize
+against pending work. Portable Markdown contains conversational text and reply
+context only; local artifact IDs, dataset traces, model IDs, memory titles, and
+internal turn receipts stay on their originating machine.
+
+The migration is additive and validates the complete table, checks, foreign key,
+indexes, and canonical marker transactionally. A failed or locked initialization
+closes the handle so a later attempt can recover instead of caching a half-
+migrated database.
+
 Evaluation follows the same trust boundary: every gold query must execute before
 the first model call. Evaluator defects invalidate affected cases and are never
 reported as product failures or silently repaired into a better score.
@@ -142,14 +165,15 @@ the per-capability gates, so the release verdict remains **fail**.
 
 ## Remaining release work
 
-- Clear the complete-suite gate, then repeat all critical cases three times.
-- Complete route-level persistence simulations proving that cancellation,
-  timeout and partial streams cannot duplicate saved messages. Provider-level
-  missing-model, partial/malformed-stream, timeout, cancellation, unavailable,
-  HTTP and empty-output simulations are now covered.
+- Repeat critical trust cases and complete the blinded human usefulness sample.
+- Keep route-level lifecycle simulations in the release gate. Cancellation,
+  timeout, partial/malformed/empty streams, unavailable/missing providers,
+  ambiguous start replay, persistence rollback, destructive-mutation races and
+  duplicate prevention are now covered deterministically.
 - Split the chat route into orchestration services without changing behavior.
-- Complete human blind review and the full cross-model matrix. Qwen2.5 7B was
-  explicitly approved and installed; only its critical partition has run.
+- Complete human blind review and a full cross-model matrix on approved hardware.
+  Qwen2.5 7B was evaluated and removed from this 8 GB host after poor machine-fit
+  evidence; its retained critical comparison is not a full matrix.
 - Publish a limitation ledger and issue a Pass, Conditional pass, or Fail.
 
 ## Reviewer qualification boundary
@@ -197,6 +221,17 @@ the unchanged v1.0.11 model suite completed 60/60 at 57/60 overall, 22/22
 critical, and 6.6 seconds mean latency; memory use, privacy, and precedence were
 each 5/5. This satisfies the memory gates for this run but does not complete the
 release: repeated critical and blinded usefulness gates remain outstanding.
+
+On clean implementation commit `f4b3677`, the unchanged v1.0.11 suite finished
+at 59/60, 22/22 critical, and 6.5 seconds mean latency. One adaptation case used
+polite wording forbidden by that fixture; every category remained at least 4/5.
+An earlier dirty-tree lifecycle candidate was 58/60 and is retained rather than
+hidden. The model suite uses the preserved stateless evaluator path, so it shows
+that lifecycle work did not materially regress answer quality; it does not test
+durable turn ownership. The latter is supported by deterministic route,
+transaction, stream, cancellation, migration, and race simulations. The formal
+verdict remains **conditional pass** until repeated critical and blind-human
+gates are complete.
 
 On 2026-08-05, `qwen2.5:7b` also passed only 1/12 reviewer cases and remains
 blocked. The first same-context critical comparison recorded 21/22 for both

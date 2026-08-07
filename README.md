@@ -68,6 +68,9 @@ model server.
 - Ollama availability and model detection
 - Streaming local Ollama chat responses
 - Stop generation control
+- Server-owned durable turn lifecycle with idempotent start, one pending turn per
+  chat, atomic completed-history commits, reload recovery, and inspectable
+  cancelled/failed receipts that never pollute later prompts
 - Local SQLite conversation history with reopen, search, pin, Markdown backup/restore and delete controls
 - Chat-focused sidebar with a compact Brief and Tools header, plus a real
   keyboard-accessible mobile chat/project drawer
@@ -430,6 +433,13 @@ Ordinary chat now uses a provider-independent Rangabot contract and a bounded
 recent-history window. Relevant approved memories may shape an answer, but the
 latest explicit user correction always wins and unrelated memories remain
 outside the model request.
+
+Saved chat uses the versioned lifecycle documented in the contract. A start
+retry reuses the same UUID, the server reconstructs history and options, and
+only a completed stream atomically joins canonical history. Failed or stopped
+partials remain visible for diagnosis but are excluded from prompts, search, and
+portable Markdown. `RANGABOT_TURN_TIMEOUT_MS` may set the absolute local turn
+deadline from 1 second through 15 minutes; the default is five minutes.
 
 Cross-model reliability can be measured sequentially with
 `npm run conversation:evaluate:matrix`. The runner uses the same frozen cases

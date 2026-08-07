@@ -4,7 +4,7 @@ import { expertPackWarningCodes, type ExpertPackWarningCode } from "./expert-pac
 export const MAX_CHAT_MESSAGES = 200;
 export const MAX_CHAT_MESSAGE_CHARS = 50_000;
 export const MAX_CHAT_TOTAL_CHARS = 1_000_000;
-const messageKeys = new Set(["role", "content", "artifactIntent", "wordArtifact", "analysisTrace", "codeContext", "replyTo", "retrievalMode", "memoryUse", "memoryTitles", "answerDisposition"]);
+const messageKeys = new Set(["role", "content", "artifactIntent", "wordArtifact", "analysisTrace", "codeContext", "replyTo", "retrievalMode", "memoryUse", "memoryTitles", "answerDisposition", "packWarnings", "knowledgeUsed"]);
 const analysisTraceKeys = new Set(["engine", "dataset", "query", "returnedRows", "truncated", "durationMs", "inputSha256", "querySha256", "packId", "packVersion", "modelMode", "modelId"]);
 
 export function isValidAnalysisTrace(value: unknown): value is NonNullable<ChatMessage["analysisTrace"]> {
@@ -40,15 +40,20 @@ export function parseAnalysisTraceHeader(value: string | null) {
 }
 
 export function parsePackWarningsHeader(value: string | null): ChatMessage["answerDisposition"] | null {
+  return parsePackWarningCodesHeader(value)?.length ? "verified-fallback" : null;
+}
+
+export function parsePackWarningCodesHeader(value: string | null): NonNullable<ChatMessage["packWarnings"]> | null {
   if (!value || value.length > 256) return null;
   const codes = value.split(",").map((code) => code.trim());
   if (codes.length === 0 || codes.length > 2 || new Set(codes).size !== codes.length
     || !codes.every((code) => expertPackWarningCodes.includes(code as ExpertPackWarningCode))) return null;
-  return "verified-fallback";
+  return codes as NonNullable<ChatMessage["packWarnings"]>;
 }
 
 function validOptionalMetadata(message: Record<string, unknown>) {
   if (!Object.keys(message).every((key) => messageKeys.has(key))) return false;
+  if (message.knowledgeUsed !== undefined && (message.knowledgeUsed !== true || message.role !== "assistant")) return false;
   if (message.artifactIntent !== undefined && message.artifactIntent !== "word") return false;
   if (message.retrievalMode !== undefined && !["hybrid", "keyword-only"].includes(String(message.retrievalMode))) return false;
   if (message.memoryUse !== undefined && !["context", "direct"].includes(String(message.memoryUse))) return false;
@@ -56,6 +61,12 @@ function validOptionalMetadata(message: Record<string, unknown>) {
     if (message.answerDisposition !== "verified-fallback" || message.role !== "assistant"
       || !isValidAnalysisTrace(message.analysisTrace)
       || !message.analysisTrace.packId) return false;
+  }
+  if (message.packWarnings !== undefined) {
+    if (message.role !== "assistant" || message.answerDisposition !== "verified-fallback"
+      || !Array.isArray(message.packWarnings) || message.packWarnings.length < 1 || message.packWarnings.length > 2
+      || new Set(message.packWarnings).size !== message.packWarnings.length
+      || !message.packWarnings.every((code) => expertPackWarningCodes.includes(code as ExpertPackWarningCode))) return false;
   }
   if (message.memoryTitles !== undefined && (!Array.isArray(message.memoryTitles)
     || message.memoryTitles.length > 8

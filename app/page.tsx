@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChatMessage, ProviderStatus } from "@/lib/providers/types";
+import { CONVERSATION_TURN_PROTOCOL_VERSION } from "@/lib/conversation-turn-contract";
+import type { ChatMessage, ConversationTurnStatus, ProviderStatus } from "@/lib/providers/types";
 import { appendWelcomeHistory, chooseWelcomeIndex, parseWelcomeHistory, WELCOME_HISTORY_STORAGE_KEY, welcomeLines } from "@/lib/welcome-content";
 import { chooseGreetingIndex, formatWelcomeGreeting } from "@/lib/welcome-greeting";
 import {
@@ -21,7 +22,7 @@ import { formatAnswerReceipt } from "@/lib/answer-receipt";
 import { SqlAnalysisPanel } from "@/app/components/sql-analysis-panel";
 import { WelcomePreferencesDialog } from "@/app/components/welcome-preferences";
 import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
-import { parseAnalysisTraceHeader, parsePackWarningsHeader } from "@/lib/chat-validation";
+import { parseAnalysisTraceHeader, parsePackWarningCodesHeader } from "@/lib/chat-validation";
 import {
   APPEARANCE_STORAGE_KEY,
   DEFAULT_PALETTE,
@@ -69,8 +70,102 @@ type KnowledgeSourceState = { name: string; status: "indexed" | "pending" | "inc
 type KnowledgeStatus = { usedBytes: number; budgetBytes: number; documents: number; chunks: number; incompatible: number; pending: number; sources: KnowledgeSourceState[] };
 type KnowledgeUpdates = { week: string; month: string; changelog: string; weekUpdatedAt: string | null };
 type KnowledgeTab = "discover" | "vault" | "updates";
+type ActiveConversationTurn = { conversationId: string; turnId: string };
+type TurnStartResult = { ok: boolean; conversationId?: string; error?: string; code?: string };
 const BOOK_WELCOME_HISTORY_STORAGE_KEY = "rangabot-book-welcome-history-v1";
+const TURN_CANCELLATION_TIMEOUT_MS = 2_500;
+const ADOPTED_TURN_POLL_INTERVAL_MS = 2_000;
+const ADOPTED_TURN_POLL_ATTEMPTS = 480;
 const PUBLIC_DEMO_MODES = new Set(["knowledge", "welcome"]);
+
+function displayMessagesFromTimeline(messages: ChatMessage[]): DisplayMessage[] {
+  const display: DisplayMessage[] = [];
+  for (const message of messages) {
+    const status = message.turn?.status;
+    display.push({
+      ...message,
+      id: message.turn ? `${message.turn.id}:${message.role}` : crypto.randomUUID(),
+      source: message.role === "assistant" && status !== "failed" ? "local" : undefined,
+      active: message.role === "assistant" && status === "pending",
+      stopped: message.role === "assistant" && status === "cancelled",
+      error: message.role === "assistant" && status === "failed",
+      knowledgeUsed: Boolean(message.knowledgeUsed || message.retrievalMode),
+    });
+    if (message.role === "user" && message.turn?.status === "pending") {
+      display.push({
+        id: `${message.turn.id}:assistant`,
+        role: "assistant",
+        content: "",
+        source: "local",
+        active: true,
+        turn: message.turn,
+      });
+    }
+  }
+  return display;
+}
+
+async function requestTurnCancellation(turn: ActiveConversationTurn, keepalive = false) {
+  const timeout = new AbortController();
+  const timer = window.setTimeout(() => timeout.abort(), TURN_CANCELLATION_TIMEOUT_MS);
+  try {
+    const response = await fetch(`/api/conversation-turns/${turn.turnId}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId: turn.conversationId }),
+      keepalive,
+      signal: timeout.signal,
+    });
+    return response.ok;
+  } catch {
+    // The server-side stream lifecycle also records cancellation when the
+    // connection closes. This explicit request covers pre-stream abandons.
+    return false;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+function parseTurnStartResult(value: unknown, response: Response, expectedTurnId: string): TurnStartResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("The local turn returned an invalid start receipt.");
+  }
+  const record = value as Record<string, unknown>;
+  const conversationId = typeof record.conversationId === "string" && record.conversationId ? record.conversationId : undefined;
+  const error = typeof record.error === "string" && record.error ? record.error : undefined;
+  const code = typeof record.code === "string" && record.code ? record.code : undefined;
+  const turn = record.turn && typeof record.turn === "object" && !Array.isArray(record.turn)
+    ? record.turn as Record<string, unknown>
+    : undefined;
+  const validTurnStatus = turn?.status === "pending" || turn?.status === "completed"
+    || turn?.status === "cancelled" || turn?.status === "failed";
+  if (response.ok && (!conversationId || turn?.id !== expectedTurnId || !validTurnStatus)) {
+    throw new Error("The local turn returned an incomplete start receipt.");
+  }
+  return { ok: response.ok, ...(conversationId ? { conversationId } : {}), ...(error ? { error } : {}), ...(code ? { code } : {}) };
+}
+
+async function startConversationTurn(payload: string, expectedTurnId: string, signal: AbortSignal): Promise<TurnStartResult> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch("/api/conversation-turns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        signal,
+      });
+      const result = parseTurnStartResult(await response.json(), response, expectedTurnId);
+      if (response.status < 500 || attempt === 1) return result;
+      lastError = new Error(result.error ?? "The local turn could not be started.");
+    } catch (error) {
+      lastError = error;
+      if (signal.aborted || attempt === 1) throw error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("The local turn could not be started.");
+}
+
 function parseBookWelcomeHistory() {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(BOOK_WELCOME_HISTORY_STORAGE_KEY) ?? "[]");
@@ -99,6 +194,8 @@ export default function Home() {
   const [replyTo, setReplyTo] = useState<DisplayMessage | null>(null);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [sending, setSending] = useState(false);
+  const [conversationLoading, setConversationLoading] = useState(false);
+  const [adoptedPendingTurn, setAdoptedPendingTurn] = useState<ActiveConversationTurn | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationSearch, setConversationSearch] = useState("");
   const [conversationTransferMessage, setConversationTransferMessage] = useState("");
@@ -129,6 +226,10 @@ export default function Home() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const activeTurnRef = useRef<ActiveConversationTurn | null>(null);
+  const sendingRef = useRef(false);
+  const conversationLoadingRef = useRef(false);
+  const conversationOpenEpochRef = useRef(0);
   const followLatestRef = useRef(true);
   const knowledgeCloseRef = useRef<HTMLButtonElement>(null);
   const conversationImportRef = useRef<HTMLInputElement>(null);
@@ -139,6 +240,45 @@ export default function Home() {
   const toolsPopoverRef = useRef<HTMLDivElement>(null);
   const preferencesTriggerRef = useRef<HTMLButtonElement>(null);
   const bookWelcomeRequestRef = useRef<AbortController | null>(null);
+  const abandonActiveTurn = useCallback(async (keepalive = false, retainSending = false) => {
+    const controller = abortRef.current;
+    controller?.abort();
+    if (abortRef.current === controller) abortRef.current = null;
+    const activeTurn = activeTurnRef.current;
+    if (activeTurnRef.current === activeTurn) activeTurnRef.current = null;
+    if (activeTurn) {
+      setAdoptedPendingTurn((current) => current?.turnId === activeTurn.turnId ? null : current);
+    }
+    if (!retainSending) {
+      sendingRef.current = false;
+      setSending(false);
+    }
+    return activeTurn ? requestTurnCancellation(activeTurn, keepalive) : true;
+  }, []);
+  const reconcileTurnFromServer = useCallback(async (conversationId: string, turnId: string, signal?: AbortSignal): Promise<ConversationTurnStatus | null> => {
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}`, { cache: "no-store", signal });
+      if (!response.ok) return null;
+      const data = (await response.json()) as { conversation?: { messages?: ChatMessage[] } };
+      if (!Array.isArray(data.conversation?.messages)) return null;
+      const receipt = data.conversation.messages.find((message) => message.turn?.id === turnId)?.turn;
+      if (!receipt) return null;
+      const authoritative = displayMessagesFromTimeline(data.conversation.messages)
+        .filter((message) => message.turn?.id === turnId);
+      if (!authoritative.length) return null;
+      setMessages((current) => {
+        const firstIndex = current.findIndex((message) => message.turn?.id === turnId);
+        if (firstIndex < 0) return current;
+        const withoutTurn = current.filter((message) => message.turn?.id !== turnId);
+        withoutTurn.splice(firstIndex, 0, ...authoritative);
+        return withoutTurn;
+      });
+      return receipt.status;
+    } catch {
+      // The terminal receipt remains available on the next local reopen.
+      return null;
+    }
+  }, []);
   const closeMemoryPanel = useCallback(() => setMemoryPanelOpen(false), []);
   const closeSqlPanel = useCallback(() => setSqlPanelOpen(false), []);
   const nextWelcomeIndex = useCallback((current: number, welcomeMode: WelcomeMode) => {
@@ -321,6 +461,10 @@ export default function Home() {
 
   async function removeProject(project: ProjectSummary) {
     if (!window.confirm(`Delete “${project.name}”? Its chats will move to All chats.`)) return;
+    const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId);
+    if (sendingRef.current && (activeProjectId === project.id || activeConversation?.projectId === project.id)) {
+      await abandonActiveTurn();
+    }
     const response = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
     if (!response.ok) return;
     if (activeProjectId === project.id) setActiveProjectId(null);
@@ -328,22 +472,45 @@ export default function Home() {
   }
 
   async function openConversation(id: string) {
-    if (sending) return;
-    const response = await fetch(`/api/conversations/${id}`, { cache: "no-store" });
-    if (!response.ok) return;
-    const data = (await response.json()) as { conversation: { messages: ChatMessage[] }; attachedDataset: AttachedDataset | null };
-    followLatestRef.current = true;
-    setMessages(data.conversation.messages.map((message) => ({
-      ...message,
-      id: crypto.randomUUID(),
-      source: message.role === "assistant" ? "local" : undefined,
-      knowledgeUsed: Boolean(message.retrievalMode),
-    })));
-    setActiveConversationId(id);
-    setAttachedCodeContext(null);
-    setAttachedDataset(data.attachedDataset);
-    setSqlDraft(null);
-    setSidebarOpen(false);
+    const openEpoch = ++conversationOpenEpochRef.current;
+    conversationLoadingRef.current = true;
+    setConversationLoading(true);
+    try {
+      if (sendingRef.current) await abandonActiveTurn();
+      if (openEpoch !== conversationOpenEpochRef.current) return;
+      const response = await fetch(`/api/conversations/${id}`, { cache: "no-store" });
+      if (!response.ok || openEpoch !== conversationOpenEpochRef.current) return;
+      const data = (await response.json()) as { conversation: { messages: ChatMessage[] }; attachedDataset: AttachedDataset | null };
+      if (openEpoch !== conversationOpenEpochRef.current) return;
+      const displayMessages = displayMessagesFromTimeline(data.conversation.messages);
+      const pendingTurn = data.conversation.messages.find((message) => message.turn?.status === "pending")?.turn;
+      followLatestRef.current = true;
+      setMessages(displayMessages);
+      setActiveConversationId(id);
+      setReplyTo(null);
+      if (pendingTurn) {
+        const adoptedTurn = { conversationId: id, turnId: pendingTurn.id };
+        activeTurnRef.current = adoptedTurn;
+        setAdoptedPendingTurn(adoptedTurn);
+        sendingRef.current = true;
+        setSending(true);
+      } else if (!activeTurnRef.current) {
+        setAdoptedPendingTurn(null);
+        sendingRef.current = false;
+        setSending(false);
+      }
+      setAttachedCodeContext(null);
+      setAttachedDataset(data.attachedDataset);
+      setSqlDraft(null);
+      setSidebarOpen(false);
+    } catch {
+      // Keep the currently open conversation intact when a local read fails.
+    } finally {
+      if (openEpoch === conversationOpenEpochRef.current) {
+        conversationLoadingRef.current = false;
+        setConversationLoading(false);
+      }
+    }
   }
 
   async function attachDatasetToChat(dataset: AttachedDataset | null) {
@@ -360,7 +527,7 @@ export default function Home() {
   }
 
   async function removeConversation(id: string) {
-    if (sending) return;
+    if (sendingRef.current && activeConversationId === id) await abandonActiveTurn();
     const response = await fetch(`/api/conversations/${id}`, { method: "DELETE" });
     if (!response.ok) return;
     if (activeConversationId === id) startNewChat();
@@ -456,6 +623,48 @@ export default function Home() {
   }, [toolsOpen]);
   useEffect(() => () => bookWelcomeRequestRef.current?.abort(), []);
   useEffect(() => {
+    const cancelOnPageHide = () => {
+      if (!sendingRef.current) return;
+      void abandonActiveTurn(true);
+    };
+    window.addEventListener("pagehide", cancelOnPageHide);
+    return () => window.removeEventListener("pagehide", cancelOnPageHide);
+  }, [abandonActiveTurn]);
+  useEffect(() => {
+    if (!adoptedPendingTurn) return;
+    let disposed = false;
+    let attempts = 0;
+    let timer: number | null = null;
+    const controller = new AbortController();
+    const poll = async () => {
+      const turnStatus = await reconcileTurnFromServer(
+        adoptedPendingTurn.conversationId,
+        adoptedPendingTurn.turnId,
+        controller.signal,
+      );
+      if (disposed) return;
+      if (turnStatus && turnStatus !== "pending") {
+        if (activeTurnRef.current?.turnId === adoptedPendingTurn.turnId) {
+          activeTurnRef.current = null;
+          sendingRef.current = false;
+          setSending(false);
+        }
+        setAdoptedPendingTurn((current) => current?.turnId === adoptedPendingTurn.turnId ? null : current);
+        return;
+      }
+      attempts += 1;
+      if (attempts < ADOPTED_TURN_POLL_ATTEMPTS) {
+        timer = window.setTimeout(() => void poll(), ADOPTED_TURN_POLL_INTERVAL_MS);
+      }
+    };
+    timer = window.setTimeout(() => void poll(), ADOPTED_TURN_POLL_INTERVAL_MS);
+    return () => {
+      disposed = true;
+      controller.abort();
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [adoptedPendingTurn, reconcileTurnFromServer]);
+  useEffect(() => {
     if (PUBLIC_DEMO_MODES.has(new URLSearchParams(window.location.search).get("demo") ?? "")) {
       setConversations([]);
       return;
@@ -542,7 +751,11 @@ export default function Home() {
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || sending) return;
+    if (!content || sendingRef.current || conversationLoadingRef.current) return;
+    sendingRef.current = true;
+    setSending(true);
+    setAdoptedPendingTurn(null);
+    const sendEpoch = conversationOpenEpochRef.current;
 
     const reference = replyTo ? {
       role: replyTo.role as "user" | "assistant",
@@ -555,74 +768,78 @@ export default function Home() {
       startLine: codeContextForRequest.startLine,
       endLine: codeContextForRequest.endLine,
     } : undefined;
-    const userMessage: DisplayMessage = { id: crypto.randomUUID(), role: "user", content, replyTo: reference, codeContext };
-    const assistantId = crypto.randomUUID();
-    const nextMessages = [...messages, userMessage];
-    const storedMessages = nextMessages.map(({ role, content: text, replyTo: reply, codeContext: code, artifactIntent, wordArtifact, analysisTrace, retrievalMode, memoryUse, memoryTitles, answerDisposition }) => ({ role, content: text, ...(reply ? { replyTo: reply } : {}), ...(code ? { codeContext: code } : {}), ...(artifactIntent ? { artifactIntent } : {}), ...(wordArtifact ? { wordArtifact } : {}), ...(analysisTrace ? { analysisTrace } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(memoryUse ? { memoryUse } : {}), ...(memoryTitles?.length ? { memoryTitles } : {}), ...(answerDisposition ? { answerDisposition } : {}) }));
+    const turnId = crypto.randomUUID();
+    const pendingTurn = { id: turnId, status: "pending" as const };
+    const turnMessage: ChatMessage = { role: "user", content, ...(reference ? { replyTo: reference } : {}), ...(codeContext ? { codeContext } : {}) };
+    const userMessage: DisplayMessage = { ...turnMessage, id: `${turnId}:user`, turn: pendingTurn };
+    const assistantId = `${turnId}:assistant`;
+    const assistantMessage: DisplayMessage = { id: assistantId, role: "assistant", content: "", source: "local", active: true, turn: pendingTurn };
     let conversationId = activeConversationId;
-    if (!conversationId) {
-      const createResponse = await fetch("/api/conversations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: storedMessages,
-          projectId: activeProjectId,
-          ...(attachedDataset ? { datasetId: attachedDataset.id } : {}),
-        }),
-      });
-      if (createResponse.ok) {
-        const data = (await createResponse.json()) as { conversation: { id: string } };
-        conversationId = data.conversation.id;
-        setActiveConversationId(conversationId);
-        void refreshConversations();
-      }
-    }
-    followLatestRef.current = true;
-    setMessages((current) => [...current, userMessage, {
-      id: assistantId,
-      role: "assistant",
-      content: "",
-      source: "local",
-      active: true,
-    }]);
-    setInput("");
-    setReplyTo(null);
-    setSending(true);
     const abortController = new AbortController();
     abortRef.current = abortController;
-    let generatedContent = "";
-    let finalAssistant: ChatMessage | null = null;
+    let turnStarted = false;
+    let responseFailureCode: string | undefined;
     let responseArtifactIntent: ChatMessage["artifactIntent"];
     let responseWordArtifact: ChatMessage["wordArtifact"];
     let responseMemoryUse: ChatMessage["memoryUse"];
     let responseMemoryTitles: ChatMessage["memoryTitles"];
     let responseAnalysisTrace: ChatMessage["analysisTrace"];
     let responseAnswerDisposition: ChatMessage["answerDisposition"];
+    let responsePackWarnings: ChatMessage["packWarnings"];
+
+    // Release the composer immediately. A failed start restores only fields the
+    // user has not already replaced while the idempotent request was in flight.
+    setInput("");
+    setReplyTo(null);
+    setAttachedCodeContext(null);
 
     try {
+      const startPayload = JSON.stringify({
+          protocolVersion: CONVERSATION_TURN_PROTOCOL_VERSION,
+          turnId,
+          ...(conversationId
+            ? { conversationId }
+            : {
+                projectId: activeProjectId,
+                ...(attachedDataset ? { datasetId: attachedDataset.id } : {}),
+              }),
+          message: turnMessage,
+          options: {
+            mode,
+            ...(codeContextForRequest ? { codeContext: { repositoryId: codeContextForRequest.repositoryId, path: codeContextForRequest.path, line: codeContextForRequest.line } } : {}),
+          },
+      });
+      const startData = await startConversationTurn(startPayload, turnId, abortController.signal);
+      if (!startData.ok || !startData.conversationId) {
+        responseFailureCode = startData.code;
+        throw new Error(startData.error ?? "The local turn could not be started.");
+      }
+      conversationId = startData.conversationId;
+      turnStarted = true;
+      activeTurnRef.current = { conversationId, turnId };
+      if (abortController.signal.aborted) {
+        await requestTurnCancellation({ conversationId, turnId });
+        throw abortController.signal.reason ?? new DOMException("Stopped", "AbortError");
+      }
+      followLatestRef.current = true;
+      setActiveConversationId(conversationId);
+      setMessages((current) => [...current, userMessage, assistantMessage]);
+      void refreshConversations();
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: abortController.signal,
         body: JSON.stringify({
-          mode,
-          ...(conversationId ? { conversationId } : {}),
-          ...(codeContextForRequest ? { codeContext: { repositoryId: codeContextForRequest.repositoryId, path: codeContextForRequest.path, line: codeContextForRequest.line } } : {}),
-          ...(attachedDataset ? { datasetId: attachedDataset.id } : {}),
-          messages: nextMessages.map(({ role, content: text, replyTo: reply, artifactIntent, wordArtifact, analysisTrace }) => ({
-            role,
-            content: reply ? `[Replying to ${reply.role}: “${reply.excerpt}”]\n\n${text}` : text,
-            ...(artifactIntent ? { artifactIntent } : {}),
-            ...(wordArtifact ? { wordArtifact } : {}),
-            ...(analysisTrace ? { analysisTrace } : {}),
-          })),
+          protocolVersion: CONVERSATION_TURN_PROTOCOL_VERSION,
+          conversationId,
+          turnId,
         }),
       });
       if (!response.ok) {
-        const data = (await response.json()) as { error?: string };
-        throw new Error(data.error ?? "Request failed");
+        const data = (await response.json()) as { error?: unknown; code?: unknown };
+        if (typeof data.code === "string") responseFailureCode = data.code;
+        throw new Error(typeof data.error === "string" ? data.error : "Request failed");
       }
-      setAttachedCodeContext(null);
       if (!response.body) throw new Error("The local model returned no response stream.");
       responseArtifactIntent = response.headers.get("X-Rangabot-Artifact-Intent") === "word" ? "word" : undefined;
       const encodedArtifact = response.headers.get("X-Rangabot-Word-Artifact");
@@ -637,11 +854,12 @@ export default function Home() {
       if (encodedAnalysis) {
         responseAnalysisTrace = parseAnalysisTraceHeader(encodedAnalysis) ?? undefined;
       }
-      responseAnswerDisposition = parsePackWarningsHeader(response.headers.get("X-Rangabot-Pack-Warnings")) ?? undefined;
+      responsePackWarnings = parsePackWarningCodesHeader(response.headers.get("X-Rangabot-Pack-Warnings")) ?? undefined;
+      responseAnswerDisposition = responsePackWarnings?.length ? "verified-fallback" : undefined;
       if (!responseAnalysisTrace?.packId) responseAnswerDisposition = undefined;
       if (responseAnalysisTrace) {
         setMessages((current) => current.map((message) => message.id === assistantId
-          ? { ...message, analysisTrace: responseAnalysisTrace, ...(responseAnswerDisposition ? { answerDisposition: responseAnswerDisposition } : {}) }
+          ? { ...message, analysisTrace: responseAnalysisTrace, ...(responseAnswerDisposition ? { answerDisposition: responseAnswerDisposition, packWarnings: responsePackWarnings } : {}) }
           : message));
       }
       if (responseArtifactIntent || responseWordArtifact) {
@@ -677,7 +895,6 @@ export default function Home() {
         const chunk = decoder.decode(value, { stream: true });
         if (!chunk) continue;
         receivedContent = true;
-        generatedContent += chunk;
         setMessages((current) => current.map((message) => (
           message.id === assistantId ? { ...message, content: message.content + chunk, active: true } : message
         )));
@@ -685,66 +902,121 @@ export default function Home() {
       const finalChunk = decoder.decode();
       if (finalChunk) {
         receivedContent = true;
-        generatedContent += finalChunk;
         setMessages((current) => current.map((message) => (
           message.id === assistantId ? { ...message, content: message.content + finalChunk, active: true } : message
         )));
       }
       if (!receivedContent) throw new Error("The local model returned an empty response.");
-      finalAssistant = { role: "assistant", content: generatedContent, ...(responseArtifactIntent ? { artifactIntent: responseArtifactIntent } : {}), ...(responseWordArtifact ? { wordArtifact: responseWordArtifact } : {}), ...(responseAnalysisTrace ? { analysisTrace: responseAnalysisTrace } : {}), ...(responseAnswerDisposition ? { answerDisposition: responseAnswerDisposition } : {}), ...(retrievalMode ? { retrievalMode } : {}), ...(responseMemoryUse ? { memoryUse: responseMemoryUse } : {}), ...(responseMemoryTitles?.length ? { memoryTitles: responseMemoryTitles } : {}) };
+      setMessages((current) => current.map((message) => message.turn?.id === turnId
+        ? { ...message, active: false, turn: { id: turnId, status: "completed" } }
+        : message));
     } catch (error) {
       const stopped = abortController.signal.aborted;
-      finalAssistant = {
-        role: "assistant",
-        content: stopped
-          ? generatedContent || "No response was generated."
-          : error instanceof Error ? error.message : "The request failed.",
-      };
-      setMessages((current) => current.map((message) => {
-        if (message.id !== assistantId) return message;
-        if (stopped) {
-          return {
-            ...message,
-            content: message.content
-              ? message.content
-              : "No response was generated.",
-            active: false,
-            stopped: true,
-          };
+      if (turnStarted) {
+        const cancellationConfirmed = stopped && conversationId
+          ? await requestTurnCancellation({ conversationId, turnId })
+          : true;
+        const terminalStatus = stopped ? "cancelled" as const : "failed" as const;
+        const failureMessage = error instanceof Error ? error.message : "The request failed.";
+        setMessages((current) => current.map((message) => {
+          if (message.turn?.id !== turnId) return message;
+          const turn = { id: turnId, status: terminalStatus, ...(!stopped && responseFailureCode ? { failureCode: responseFailureCode } : {}) };
+          if (message.id !== assistantId) return { ...message, turn };
+          return stopped
+            ? { ...message, content: message.content || "No response was generated.", active: false, stopped: true, turn }
+            : { ...message, content: message.content || failureMessage, error: true, source: undefined, active: false, turn };
+        }));
+        const authoritativeStatus = conversationId
+          ? await reconcileTurnFromServer(conversationId, turnId)
+          : null;
+        const shouldRetainOwnership = authoritativeStatus === "pending"
+          || (authoritativeStatus === null && (!stopped || !cancellationConfirmed));
+        const newerTurnOwnsComposer = activeTurnRef.current && activeTurnRef.current.turnId !== turnId;
+        if (conversationId && shouldRetainOwnership && !newerTurnOwnsComposer
+          && sendEpoch === conversationOpenEpochRef.current && !conversationLoadingRef.current) {
+          if (abortRef.current === abortController) abortRef.current = null;
+          const retainedTurn = { conversationId, turnId };
+          activeTurnRef.current = retainedTurn;
+          setAdoptedPendingTurn(retainedTurn);
+          sendingRef.current = true;
+          setSending(true);
+          if (authoritativeStatus === null) {
+            setMessages((current) => current.map((message) => message.turn?.id === turnId
+              ? { ...message, active: message.role === "assistant", stopped: false, error: false, turn: { id: turnId, status: "pending" } }
+              : message));
+          }
         }
-        return {
-          ...message,
-          content: error instanceof Error ? error.message : "The request failed.",
-          error: true,
-          source: undefined,
-          active: false,
-        };
-      }));
+      } else if (!stopped) {
+        if (responseFailureCode === "not-found") {
+          setActiveConversationId(null);
+          setAttachedDataset(null);
+        }
+        setInput((current) => current || content);
+        if (replyTo) setReplyTo((current) => current ?? replyTo);
+        if (codeContextForRequest) setAttachedCodeContext((current) => current ?? codeContextForRequest);
+        setMessages((current) => [...current,
+          { ...userMessage, turn: undefined },
+          { ...assistantMessage, turn: undefined, active: false, error: true, source: undefined, content: error instanceof Error ? error.message : "The request failed." },
+        ]);
+      }
       if (!stopped) void refreshStatus();
     } finally {
-      setMessages((current) => current.map((message) => (
-        message.id === assistantId ? { ...message, active: false } : message
-      )));
+      const ownsSendingSlot = abortRef.current === abortController;
+      if (ownsSendingSlot) {
+        sendingRef.current = false;
+        setSending(false);
+        abortRef.current = null;
+        if (activeTurnRef.current?.turnId === turnId) activeTurnRef.current = null;
+      }
+      if (turnStarted) void refreshConversations();
+    }
+  }
+
+  async function stopGenerating() {
+    const activeTurn = activeTurnRef.current;
+    const stopEpoch = conversationOpenEpochRef.current;
+    const cancellationConfirmed = await abandonActiveTurn(false, true);
+    if (!activeTurn) {
+      sendingRef.current = false;
       setSending(false);
-      abortRef.current = null;
-      if (conversationId && finalAssistant) {
-        await fetch(`/api/conversations/${conversationId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: [...storedMessages, finalAssistant] }),
-        });
-        void refreshConversations();
+      return;
+    }
+    const authoritativeStatus = await reconcileTurnFromServer(activeTurn.conversationId, activeTurn.turnId);
+    const shouldRetainOwnership = authoritativeStatus === "pending"
+      || (!cancellationConfirmed && authoritativeStatus === null);
+    const newerTurnOwnsComposer = activeTurnRef.current && activeTurnRef.current.turnId !== activeTurn.turnId;
+    if (shouldRetainOwnership && !newerTurnOwnsComposer
+      && stopEpoch === conversationOpenEpochRef.current && !conversationLoadingRef.current) {
+      activeTurnRef.current = activeTurn;
+      setAdoptedPendingTurn(activeTurn);
+      sendingRef.current = true;
+      setSending(true);
+      if (authoritativeStatus === null) {
+        setMessages((current) => current.map((message) => message.turn?.id === activeTurn.turnId
+          ? { ...message, active: message.role === "assistant", stopped: false, error: false, turn: { id: activeTurn.turnId, status: "pending" } }
+          : message));
+      }
+      return;
+    }
+    if (!newerTurnOwnsComposer && stopEpoch === conversationOpenEpochRef.current) {
+      sendingRef.current = false;
+      setSending(false);
+      setAdoptedPendingTurn(null);
+      if (cancellationConfirmed && authoritativeStatus === null) {
+        setMessages((current) => current.map((message) => message.turn?.id === activeTurn.turnId
+          ? { ...message, active: false, stopped: message.role === "assistant", turn: { id: activeTurn.turnId, status: "cancelled" } }
+          : message));
       }
     }
   }
 
-  function stopGenerating() {
-    abortRef.current?.abort();
-  }
-
   function startNewChat(projectId: string | null = activeProjectId) {
-    abortRef.current?.abort();
+    conversationOpenEpochRef.current += 1;
+    conversationLoadingRef.current = false;
+    setConversationLoading(false);
+    if (sendingRef.current) void abandonActiveTurn();
     bookWelcomeRequestRef.current?.abort();
+    setAdoptedPendingTurn(null);
     followLatestRef.current = true;
     setMessages([]);
     setActiveConversationId(null);
@@ -755,6 +1027,15 @@ export default function Home() {
     setAttachedDataset(null);
     setSidebarOpen(false);
     rotateWelcome(welcomePreferences.mode);
+  }
+
+  function copyTurnRequestText(turnId: string) {
+    const request = messages.find((message) => message.turn?.id === turnId && message.role === "user");
+    if (!request) return;
+    setInput(request.content);
+    setReplyTo(null);
+    setAttachedCodeContext(null);
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus());
   }
 
   function rotateWelcome(mode: WelcomeMode) {
@@ -992,7 +1273,8 @@ export default function Home() {
                 {message.stopped && (
                   <div className="stopped-state" role="status"><i aria-hidden="true" /> Stopped</div>
                 )}
-                {!message.active && !message.error && <button type="button" className="reply-button" onClick={() => { setReplyTo(message); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus()); }} aria-label="Reply to this message"><CraftIcon name="reply" size={14} /><span>Reply</span></button>}
+                {!message.active && (!message.turn || message.turn.status === "completed") && !message.error && <button type="button" className="reply-button" onClick={() => { setReplyTo(message); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus()); }} aria-label="Reply to this message"><CraftIcon name="reply" size={14} /><span>Reply</span></button>}
+                {message.role === "assistant" && message.turn && (message.turn.status === "cancelled" || message.turn.status === "failed") && <button type="button" className="reply-button" onClick={() => copyTurnRequestText(message.turn!.id)} aria-label="Copy request text into the composer"><CraftIcon name="arrow" size={14} /><span>Copy request text</span></button>}
               </div>
             </article>
           ))}
@@ -1004,7 +1286,7 @@ export default function Home() {
             <strong>{status?.available ? "Install the configured model" : "Start Ollama to chat"}</strong>
             <span>{status?.available ? `Run: ollama pull ${status.configuredModel}` : "The app is ready and waiting for the local model service."}</span>
           </div>}
-          <form className="composer" onSubmit={sendMessage}>
+          <form className="composer" onSubmit={sendMessage} aria-busy={conversationLoading}>
             {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
             {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
             {attachedDataset && <div className="composer-code-context"><span><strong>Local data available to this chat</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>This attachment is remembered for this chat. Analytical requests may run bounded read-only SQL locally; expand the calculation trace to inspect it.</small></span><button type="button" onClick={() => void attachDatasetToChat(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
@@ -1032,7 +1314,7 @@ export default function Home() {
                 {sending ? (
                   <button className="stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating"><CraftIcon name="stop" /></button>
                 ) : (
-                  <button type="submit" disabled={!input.trim()} aria-label="Send"><CraftIcon name="send" /></button>
+                  <button type="submit" disabled={!input.trim() || conversationLoading} aria-label="Send"><CraftIcon name="send" /></button>
                 )}
               </div>
             </div>

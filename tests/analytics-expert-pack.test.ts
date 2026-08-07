@@ -255,6 +255,21 @@ test("stops before the first dependency when already cancelled", async () => {
   assert.equal(fixture.state.sqlCalls.length, 0);
 });
 
+test("classifies an elapsed absolute deadline as timeout rather than cancellation", async () => {
+  const controller = new AbortController();
+  controller.abort(new DOMException("The operation exceeded its deadline.", "TimeoutError"));
+  const fixture = dependencies();
+  const outcome = await runAnalyticsExpertPack(request(), fixture.value, { signal: controller.signal });
+
+  assert.equal(outcome.result.status, "failure");
+  assert.equal(outcome.result.error?.code, "timeout");
+  assert.equal(outcome.result.error?.retryable, true);
+  assert.equal(fixture.state.identityCalls, 0);
+  assert.equal(fixture.state.schemaCalls, 0);
+  assert.equal(fixture.state.jsonCalls, 0);
+  assert.equal(fixture.state.sqlCalls.length, 0);
+});
+
 test("returns a clarification without running the final query", async () => {
   const fixture = dependencies({ completeJson: async () => JSON.stringify({ action: "clarify", source: "", aggregate: "", metric: "", alias: "", dimensions: [], filters: [], sort: [], limit: 0, decimals: 0, explanation: "Which measure should define that comparison?" }) });
   const outcome = await runAnalyticsExpertPack(request("Which region is best?"), fixture.value);

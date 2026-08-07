@@ -132,15 +132,21 @@ qualified local model, if any, powers each workflow.
 - [x] Establish the Mind & Memory control-plane architecture with shared mode
   precedence, compiled answer contracts, conflict-aware memory, typed provider
   failures, Stop propagation, and narrow conformance repair
+- [x] Add Core Turn Lifecycle v2: request-bound idempotent starts, server-owned
+  bounded context, one pending turn per conversation, atomic completed-history
+  commits, inspectable noncanonical failures/cancellations, reload reconciliation,
+  guarded bindings/deletion, strict additive migration, and portable text-only
+  Markdown. This improves execution integrity for every model; it is not an
+  answer-quality score.
 - [ ] Complete the remaining frozen v1.0.11 release gates. The verified-ledger
-  candidate reached 59/60 overall, 22/22 critical, 5/5 reasoning, and 5.9-second
+  candidate reached 59/60 overall, 22/22 critical, 5/5 reasoning, and 6.5-second
   mean latency with every category at least 4/5. Repeat all critical cases for
   this exact candidate and complete blinded human usefulness review.
-- [ ] Add deterministic provider simulations for missing models, partial and
-  malformed streams, empty output, cancellation, timeout, and persistence
-  integrity before declaring runtime mastery. Provider failure simulations and
-  an absolute no-hidden-retry deadline are complete; duplicate-persistence and
-  route recovery simulations remain
+- [x] Add deterministic provider and lifecycle simulations for missing models,
+  partial/malformed streams, empty output, cancellation, timeout, ambiguous
+  start replay, persistence rollback, duplicate prevention, reload adoption,
+  destructive-mutation races, and migration recovery. Runtime mastery still
+  depends on final release review and cross-platform CI, not this checkbox alone
 - [x] Establish a bounded read-only DuckDB execution kernel with approved-file
   validation, external-access shutdown, resource caps, and receipts
 - [x] Add persistent local dataset approvals plus an exact-query, expiring,
