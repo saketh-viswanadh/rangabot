@@ -17,9 +17,13 @@ local Knowledge Vault; cloud handoff remains disabled.
 
 ### A calm local workspace
 
-Start with a private conversation, choose local or knowledge-assisted routing,
-organize chats into projects, and reach memory, folders, and mastery without
-turning the interface into a control panel.
+Start with a private conversation and a rotating greeting. An optional local
+name or nickname personalizes the welcome; one quiet selector chooses Mix,
+Quotes, Jokes, Thoughts, or My books without turning the page into a settings
+panel. Four compact starters and a one-row composer leave the conversation as
+the visual priority. Sand, sage, and lavender recolor the full workspace in
+light or dark mode. Brief stays one tap away; Memory, Analyze, Mastery, approved
+folders, and appearance settings live in the compact Tools menu.
 
 ![Rangabot fresh conversation workspace with local model status, projects, themes, and conversation starters](docs/media/rangabot-product-home.png)
 
@@ -62,8 +66,8 @@ model server.
 - Streaming local Ollama chat responses
 - Stop generation control
 - Local SQLite conversation history with reopen, search, pin, Markdown backup/restore and delete controls
-- Chat-focused sidebar with a compact top rail for Brief, Memory, Mastery,
-  approved local folders, themes, privacy, and model status
+- Chat-focused sidebar with a compact Brief and Tools header, plus a real
+  keyboard-accessible mobile chat/project drawer
 - Title-first conversation focus stack with readable hover expansion and
   on-demand pin/delete controls
 - Markdown responses, GitHub-style tables, syntax-highlighted code, and copy controls
@@ -82,13 +86,27 @@ model server.
 - Automatic local Knowledge Vault lookup for informational questions in Smart mode
 - Weekly and monthly sourced subject-intelligence briefs
 - Dedicated Knowledge Brief panel with news cards, vault status and app changelog
+- Personalized fresh-chat greeting with an optional browser-local name or
+  nickname and rotating wording
+- Fresh-chat Mix, Quotes, Jokes, Thoughts, and My books filters; book mode shows
+  one locally indexed, cited sentence and an explicit empty state when no safe
+  fact is available
 - Offline welcome library with 100 quotes, 100 jokes and 100 thoughts, plus a 60-item no-repeat window
 - No cloud transmission
 - Interactive **Path to Mastery** at `/mastery`, generated from the same strict
-  capability data used by the public contributor backlog
+  capability data used by the public contributor backlog, with the capability
+  tree promoted above decorative art and keyboard-contained detail dialogs
 
 Conversation data stays in `data/rangabot.db` on this computer. The database and
 its journal files are excluded from Git.
+
+Fresh-chat personalization is deliberately separate from Rangabot memory. The
+optional name or nickname, selected welcome category, and recent welcome item
+identifiers stay in browser-local storage; they are not added to a chat, the
+Memory panel, the Knowledge Vault, or an Ollama prompt. My books reads bounded
+windows from the existing local Knowledge Vault index and returns one cited
+sentence to the browser. The feature does not persist that sentence as welcome
+history; only an opaque identifier is retained to reduce immediate repetition.
 
 Repository approvals stay in the private, Git-ignored
 `data/repositories.json` file. Adding a repository records only its canonical

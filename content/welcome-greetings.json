@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "greetings": [
+    { "withName": "Hi, {name}.", "withoutName": "Hi." },
+    { "withName": "Welcome back, {name}.", "withoutName": "Welcome back." },
+    { "withName": "Hola, {name}.", "withoutName": "Hola." },
+    { "withName": "Good to see you, {name}.", "withoutName": "Good to see you." },
+    { "withName": "Ready when you are, {name}.", "withoutName": "Ready when you are." },
+    { "withName": "Hello again, {name}.", "withoutName": "Hello again." },
+    { "withName": "Namaste, {name}.", "withoutName": "Namaste." },
+    { "withName": "What shall we explore, {name}?", "withoutName": "What shall we explore?" },
+    { "withName": "Let’s make something useful, {name}.", "withoutName": "Let’s make something useful." },
+    { "withName": "A fresh page, {name}.", "withoutName": "A fresh page." }
+  ]
+}

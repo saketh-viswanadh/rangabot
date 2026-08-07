@@ -9,6 +9,52 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Improved
 
+- Corrected the first fresh-chat visual iteration after production-size review.
+  The empty state now has three deliberate layers—one compact personalized
+  greeting, one content card with a single category selector, and four concise
+  starters—instead of seven competing control bands. The resting composer is a
+  one-row, 660 px welcome surface while active conversations retain the wider
+  reading measure.
+- Rebuilt sand, sage, and lavender as structural palettes across the canvas,
+  sidebar, welcome card, composer, controls, and starter tints. Deterministic
+  tests now cover text contrast in all six light/dark combinations and require
+  meaningful perceptual separation between palette surfaces. Light-theme
+  Markdown, status text, and accent-button foregrounds no longer rely on
+  dark-theme-only hard-coded colors.
+- Tightened responsive and accessibility behavior: primary mobile welcome and
+  composer controls meet a 44 px target, the composer respects device safe
+  areas, the mobile drawer prevents background focus and can scroll as its
+  contents grow, and the non-modal Tools disclosure no longer claims modal
+  dialog semantics.
+- Reworked the fresh-chat experience around explicit, local-only preferences.
+  People can optionally save a sanitized name or nickname for rotating greetings
+  and choose Mix, Quotes, Jokes, Thoughts, or My books. These settings remain in
+  browser-local storage and are never inserted into chat history, Local memory,
+  the Knowledge Vault, or a model prompt.
+- Added a local cited-book welcome path that samples bounded windows from the
+  existing Knowledge Vault index, rejects unsuitable or executable-looking
+  sentences, and retains only opaque recent-item identifiers in the browser.
+  The first implementation exposed a roughly 30-second regression on a populated
+  vault because it could scan large text blobs. The root fix added the
+  `(document_id, ordinal)` chunk index and bounded ordinal/row-id lookups. On the
+  inspected local vault, later requests reported roughly 40–90 ms of server
+  application time and one rendered interaction completed in 299 ms. These are
+  local diagnostic observations, not a cross-machine performance benchmark.
+- Simplified the chat chrome into Brief plus a compact Tools menu for Memory,
+  Analyze, Mastery, approved folders, and appearance controls. Small screens now
+  receive an actual chat/project drawer with Escape handling and focus return.
+  Sand, sage, and lavender light/dark palettes use clearer semantic contrast,
+  while decorative butterflies and the multicolour thinking border were removed
+  in favor of restrained motion.
+- Removed the non-functional decorative banner from Path to Mastery so honest
+  readiness, the main node, and capability branches appear earlier. Mastery
+  detail dialogs now receive initial focus, trap keyboard focus, close with
+  Escape or backdrop selection, restore focus, and lock background scrolling.
+- Refreshed the public-safe product captures. Their maintained demo mode now
+  refuses to load local conversations, projects, folder approvals, Knowledge
+  Brief data, or a saved welcome name, preventing private UI state from entering
+  repository screenshots.
+
 - Replaced Analytics' failed free-form result narrator with a model-independent,
   typed narration contract. A diagnostic run on unchanged theatre v5 accepted
   0/11 model drafts: all 11 contained unsupported language, five invented

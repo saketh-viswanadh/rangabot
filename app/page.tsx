@@ -3,12 +3,23 @@
 import dynamic from "next/dynamic";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ProviderStatus } from "@/lib/providers/types";
-import { appendWelcomeHistory, chooseWelcomeIndex, parseWelcomeHistory, welcomeLines } from "@/lib/welcome-content";
+import { appendWelcomeHistory, chooseWelcomeIndex, parseWelcomeHistory, WELCOME_HISTORY_STORAGE_KEY, welcomeLines } from "@/lib/welcome-content";
+import { chooseGreetingIndex, formatWelcomeGreeting } from "@/lib/welcome-greeting";
+import {
+  defaultWelcomePreferences,
+  parseWelcomePreferences,
+  serializeWelcomePreferences,
+  WELCOME_PREFERENCES_STORAGE_KEY,
+  type WelcomeMode,
+  type WelcomePreferences,
+} from "@/lib/welcome-preferences";
+import type { BookWelcomeFact, BookWelcomeResponse } from "@/lib/knowledge-welcome";
 import { isNearMessageBottom } from "@/lib/message-scroll";
 import { parseKnowledgeBrief } from "@/lib/knowledge-brief";
 import { CraftIcon } from "@/app/components/craft-icon";
 import { formatAnswerReceipt } from "@/lib/answer-receipt";
 import { SqlAnalysisPanel } from "@/app/components/sql-analysis-panel";
+import { WelcomePreferencesDialog, welcomeModeOptions } from "@/app/components/welcome-preferences";
 import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
 import { parseAnalysisTraceHeader, parsePackWarningsHeader } from "@/lib/chat-validation";
 
@@ -51,10 +62,30 @@ type KnowledgeSourceState = { name: string; status: "indexed" | "pending" | "inc
 type KnowledgeStatus = { usedBytes: number; budgetBytes: number; documents: number; chunks: number; incompatible: number; pending: number; sources: KnowledgeSourceState[] };
 type KnowledgeUpdates = { week: string; month: string; changelog: string; weekUpdatedAt: string | null };
 type KnowledgeTab = "discover" | "vault" | "updates";
+const BOOK_WELCOME_HISTORY_STORAGE_KEY = "rangabot-book-welcome-history-v1";
+const PUBLIC_DEMO_MODES = new Set(["knowledge", "welcome"]);
+
+function parseBookWelcomeHistory() {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(BOOK_WELCOME_HISTORY_STORAGE_KEY) ?? "[]");
+    if (!Array.isArray(value)) return [];
+    return value.filter((id): id is string => typeof id === "string" && /^wf_[A-Za-z0-9_-]{20}$/.test(id)).slice(-60);
+  } catch {
+    return [];
+  }
+}
 
 export default function Home() {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [welcomeIndex, setWelcomeIndex] = useState(0);
+  const [greetingIndex, setGreetingIndex] = useState(0);
+  const [welcomePreferences, setWelcomePreferences] = useState<WelcomePreferences>({ ...defaultWelcomePreferences });
+  const [welcomePreferencesReady, setWelcomePreferencesReady] = useState(false);
+  const [welcomePreferencesOpen, setWelcomePreferencesOpen] = useState(false);
+  const [bookWelcomeFact, setBookWelcomeFact] = useState<BookWelcomeFact | null>(null);
+  const [bookWelcomeLoading, setBookWelcomeLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("smart");
   const [appearance, setAppearance] = useState<Appearance>("dark");
@@ -96,8 +127,48 @@ export default function Home() {
   const knowledgeCloseRef = useRef<HTMLButtonElement>(null);
   const conversationImportRef = useRef<HTMLInputElement>(null);
   const repositoryCloseRef = useRef<HTMLButtonElement>(null);
+  const sidebarCloseRef = useRef<HTMLButtonElement>(null);
+  const mobileNavigationRef = useRef<HTMLButtonElement>(null);
+  const toolsTriggerRef = useRef<HTMLButtonElement>(null);
+  const toolsPopoverRef = useRef<HTMLDivElement>(null);
+  const preferencesTriggerRef = useRef<HTMLButtonElement>(null);
+  const bookWelcomeRequestRef = useRef<AbortController | null>(null);
   const closeMemoryPanel = useCallback(() => setMemoryPanelOpen(false), []);
   const closeSqlPanel = useCallback(() => setSqlPanelOpen(false), []);
+  const nextWelcomeIndex = useCallback((current: number, welcomeMode: WelcomeMode) => {
+    const history = parseWelcomeHistory(localStorage.getItem(WELCOME_HISTORY_STORAGE_KEY));
+    const next = chooseWelcomeIndex(current, history, Math.random, welcomeMode);
+    localStorage.setItem(WELCOME_HISTORY_STORAGE_KEY, JSON.stringify(appendWelcomeHistory(history, next)));
+    return next;
+  }, []);
+  const refreshBookWelcome = useCallback(async () => {
+    bookWelcomeRequestRef.current?.abort();
+    const controller = new AbortController();
+    bookWelcomeRequestRef.current = controller;
+    setBookWelcomeLoading(true);
+    setBookWelcomeFact(null);
+    const recent = parseBookWelcomeHistory();
+    const parameters = new URLSearchParams();
+    if (recent.length) parameters.set("exclude", recent.join(","));
+    try {
+      const response = await fetch(`/api/knowledge/welcome${parameters.size ? `?${parameters}` : ""}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (!response.ok) return;
+      const result = (await response.json()) as BookWelcomeResponse;
+      if (result.status !== "ready") return;
+      setBookWelcomeFact(result.fact);
+      localStorage.setItem(BOOK_WELCOME_HISTORY_STORAGE_KEY, JSON.stringify([...recent.filter((id) => id !== result.fact.id), result.fact.id].slice(-60)));
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) setBookWelcomeFact(null);
+    } finally {
+      if (bookWelcomeRequestRef.current === controller) {
+        bookWelcomeRequestRef.current = null;
+        setBookWelcomeLoading(false);
+      }
+    }
+  }, []);
 
   async function refreshStatus() {
     try {
@@ -266,6 +337,7 @@ export default function Home() {
     setAttachedCodeContext(null);
     setAttachedDataset(data.attachedDataset);
     setSqlDraft(null);
+    setSidebarOpen(false);
   }
 
   async function attachDatasetToChat(dataset: AttachedDataset | null) {
@@ -322,18 +394,64 @@ export default function Home() {
   }
 
   useEffect(() => {
+    const parameters = new URLSearchParams(window.location.search);
+    const publicDemo = PUBLIC_DEMO_MODES.has(parameters.get("demo") ?? "");
     const savedAppearance = localStorage.getItem("rangabot-appearance") as Appearance | null;
     const savedPalette = localStorage.getItem("rangabot-palette") as Palette | null;
+    const savedWelcomePreferences = publicDemo
+      ? { ...defaultWelcomePreferences }
+      : parseWelcomePreferences(localStorage.getItem(WELCOME_PREFERENCES_STORAGE_KEY));
     if (savedAppearance === "light" || savedAppearance === "dark") setAppearance(savedAppearance);
     if (["sand", "sage", "lavender"].includes(savedPalette ?? "")) setPalette(savedPalette as Palette);
+    setWelcomePreferences(savedWelcomePreferences);
+    setWelcomePreferencesReady(true);
     setReadKnowledgeVersion(localStorage.getItem("rangabot-knowledge-read"));
-    setWelcomeIndex((current) => nextWelcomeIndex(current));
+    setGreetingIndex((current) => chooseGreetingIndex(current));
+    if (savedWelcomePreferences.mode === "books") void refreshBookWelcome();
+    else setWelcomeIndex((current) => nextWelcomeIndex(current, savedWelcomePreferences.mode));
     void refreshStatus();
-    void refreshProjects();
-    void refreshRepositories();
-    void refreshKnowledge();
-  }, []);
+    if (!publicDemo) {
+      void refreshProjects();
+      void refreshRepositories();
+      void refreshKnowledge();
+    }
+  }, [nextWelcomeIndex, refreshBookWelcome]);
   useEffect(() => {
+    if (!sidebarOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setSidebarOpen(false);
+      requestAnimationFrame(() => mobileNavigationRef.current?.focus());
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    requestAnimationFrame(() => sidebarCloseRef.current?.focus());
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [sidebarOpen]);
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setToolsOpen(false);
+      requestAnimationFrame(() => toolsTriggerRef.current?.focus());
+    };
+    const closeOutside = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return;
+      if (toolsTriggerRef.current?.contains(event.target) || toolsPopoverRef.current?.contains(event.target)) return;
+      setToolsOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOutside);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOutside);
+    };
+  }, [toolsOpen]);
+  useEffect(() => () => bookWelcomeRequestRef.current?.abort(), []);
+  useEffect(() => {
+    if (PUBLIC_DEMO_MODES.has(new URLSearchParams(window.location.search).get("demo") ?? "")) {
+      setConversations([]);
+      return;
+    }
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       const parameters = new URLSearchParams();
@@ -378,6 +496,12 @@ export default function Home() {
   }, [knowledgePanelOpen, knowledgeTab, knowledgeUpdates?.weekUpdatedAt]);
   useEffect(() => {
     const parameters = new URLSearchParams(window.location.search);
+    if (parameters.get("demo") === "welcome") {
+      setAppearance(parameters.get("theme") === "dark" ? "dark" : "light");
+      setPalette("sand");
+      setMessages([]);
+      return;
+    }
     if (parameters.get("demo") !== "knowledge") return;
     setAppearance(parameters.get("theme") === "light" ? "light" : "dark");
     setPalette("sage");
@@ -404,7 +528,7 @@ export default function Home() {
     }]);
   }, []);
   useEffect(() => {
-    if (followLatestRef.current) endRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+    if (messages.length > 0 && followLatestRef.current) endRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
   }, [messages]);
 
   async function sendMessage(event: FormEvent) {
@@ -612,6 +736,7 @@ export default function Home() {
 
   function startNewChat(projectId: string | null = activeProjectId) {
     abortRef.current?.abort();
+    bookWelcomeRequestRef.current?.abort();
     followLatestRef.current = true;
     setMessages([]);
     setActiveConversationId(null);
@@ -620,14 +745,40 @@ export default function Home() {
     setReplyTo(null);
     setAttachedCodeContext(null);
     setAttachedDataset(null);
-    setWelcomeIndex((current) => nextWelcomeIndex(current));
+    setSidebarOpen(false);
+    rotateWelcome(welcomePreferences.mode);
   }
 
-  function nextWelcomeIndex(current: number) {
-    const history = parseWelcomeHistory(localStorage.getItem("rangabot-welcome-history"));
-    const next = chooseWelcomeIndex(current, history);
-    localStorage.setItem("rangabot-welcome-history", JSON.stringify(appendWelcomeHistory(history, next)));
-    return next;
+  function rotateWelcome(mode: WelcomeMode) {
+    setGreetingIndex((current) => chooseGreetingIndex(current));
+    if (mode === "books") {
+      void refreshBookWelcome();
+      return;
+    }
+    bookWelcomeRequestRef.current?.abort();
+    setBookWelcomeLoading(false);
+    setBookWelcomeFact(null);
+    setWelcomeIndex((current) => nextWelcomeIndex(current, mode));
+  }
+
+  function selectWelcomeMode(mode: WelcomeMode) {
+    const next = { ...welcomePreferences, mode };
+    setWelcomePreferences(next);
+    localStorage.setItem(WELCOME_PREFERENCES_STORAGE_KEY, serializeWelcomePreferences(next));
+    rotateWelcome(mode);
+  }
+
+  function closeWelcomePreferences() {
+    setWelcomePreferencesOpen(false);
+    requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
+  }
+
+  function saveWelcomePreferences(preferences: WelcomePreferences) {
+    setWelcomePreferences(preferences);
+    localStorage.setItem(WELCOME_PREFERENCES_STORAGE_KEY, serializeWelcomePreferences(preferences));
+    setWelcomePreferencesOpen(false);
+    rotateWelcome(preferences.mode);
+    requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
   }
 
   function chooseStarter(prompt: string) {
@@ -641,6 +792,24 @@ export default function Home() {
   const unreadKnowledge = knowledgeUpdates?.weekUpdatedAt && knowledgeUpdates.weekUpdatedAt !== readKnowledgeVersion
     ? weeklyBrief.length
     : 0;
+  const welcomeLine = welcomeLines[welcomeIndex] ?? welcomeLines[0];
+  const selectedWelcomeMode = welcomeModeOptions.find((option) => option.value === welcomePreferences.mode) ?? welcomeModeOptions[0];
+  const routeDescription = mode === "codex"
+    ? "Cloud handoff is not enabled"
+    : mode === "teach"
+      ? "Strict local-vault teaching with citations"
+      : mode === "smart"
+        ? "Automatically uses relevant local knowledge"
+        : "Stays on this computer";
+  const bookWelcomeCitation = bookWelcomeFact
+    ? [
+        bookWelcomeFact.source.title,
+        bookWelcomeFact.source.heading,
+        bookWelcomeFact.source.pageStart
+          ? `page ${bookWelcomeFact.source.pageStart}${bookWelcomeFact.source.pageEnd && bookWelcomeFact.source.pageEnd !== bookWelcomeFact.source.pageStart ? `–${bookWelcomeFact.source.pageEnd}` : ""}`
+          : null,
+      ].filter(Boolean).join(" · ")
+    : "";
 
   function openKnowledgeBrief(tab: KnowledgeTab = "discover") {
     setKnowledgeTab(tab);
@@ -672,8 +841,8 @@ export default function Home() {
 
   return (
     <main className="app-shell" data-appearance={appearance} data-palette={palette} onPointerMove={followCursor}>
-      <aside className="sidebar">
-        <div className="brand"><span className="brand-mark" aria-hidden="true" /><span>Rangabot</span></div>
+      <aside id="chat-navigation" className={`sidebar ${sidebarOpen ? "open" : ""}`}>
+        <div className="brand"><span className="brand-mark" aria-hidden="true" /><span>Rangabot</span><button ref={sidebarCloseRef} className="sidebar-close" type="button" onClick={() => { setSidebarOpen(false); requestAnimationFrame(() => mobileNavigationRef.current?.focus()); }} aria-label="Close chat navigation"><CraftIcon name="close" /></button></div>
         <button className="new-chat" onClick={() => startNewChat()}><CraftIcon name="add" /> New chat</button>
         <section className="projects" aria-label="Projects">
           <div className="project-heading"><span>Projects</span><span>{projects.length}</span></div>
@@ -710,25 +879,32 @@ export default function Home() {
           ))}
         </nav>
       </aside>
+      {sidebarOpen && <button className="sidebar-backdrop" type="button" onClick={() => setSidebarOpen(false)} aria-label="Dismiss chat navigation" />}
 
-      <section className="chat-panel">
-        <header>
-          <div><h1>Rangabot</h1><p>Code, think, and build privately</p></div>
+      <section className={`chat-panel ${messages.length === 0 ? "fresh-chat" : ""}`} inert={sidebarOpen}>
+        <header className="chat-header">
+          <div className="chat-identity">
+            <button ref={mobileNavigationRef} className="mobile-navigation" type="button" onClick={() => setSidebarOpen(true)} aria-label="Open chats and projects" aria-controls="chat-navigation" aria-expanded={sidebarOpen}><CraftIcon name="menu" /></button>
+            <div><h1>Rangabot</h1><p>Code, think, and build privately</p></div>
+          </div>
           <div className="header-actions">
-            <nav className="utility-rail" aria-label="Rangabot tools">
-              <button type="button" className="utility-button" onClick={() => openKnowledgeBrief()} aria-label={`Open Knowledge Brief${unreadKnowledge ? `, ${unreadKnowledge} new items` : ""}`}>
-                <CraftIcon name="knowledge" size={15} /><span>Brief</span>{unreadKnowledge > 0 && <b>{unreadKnowledge}</b>}
-              </button>
-              <button type="button" className="utility-button" onClick={() => setMemoryPanelOpen(true)} aria-label="Open Local memory"><CraftIcon name="memory" size={15} /><span>Memory</span></button>
-              <button type="button" className="utility-button" onClick={() => setSqlPanelOpen(true)} aria-label="Open private SQL analysis"><CraftIcon name="analysis" size={15} /><span>Analyze</span></button>
-              <a className="utility-button" href="/mastery" aria-label="Open Path to Mastery"><CraftIcon name="mastery" size={15} /><span>Mastery</span></a>
-              <details className="repository-menu">
-                <summary className="utility-button"><CraftIcon name="folder" size={15} /><span>Folders</span>{allowedRepositories.length > 0 && <b>{allowedRepositories.length}</b>}</summary>
-                <section className="repository-popover" aria-label="Allowed local repositories">
-                  <header><div><strong>Local folders</strong><small>Private, explicitly allowed</small></div><CraftIcon name="folder" size={16} /></header>
+            <button type="button" className="utility-button brief-button" onClick={() => openKnowledgeBrief()} aria-label={`Open Knowledge Brief${unreadKnowledge ? `, ${unreadKnowledge} new items` : ""}`}>
+              <CraftIcon name="knowledge" size={15} /><span>Brief</span>{unreadKnowledge > 0 && <b>{unreadKnowledge}</b>}
+            </button>
+            <div className="tools-menu">
+              <button ref={toolsTriggerRef} type="button" className="utility-button" onClick={() => setToolsOpen((open) => !open)} aria-expanded={toolsOpen} aria-controls="rangabot-tools"><CraftIcon name="tune" size={15} /><span>Tools</span></button>
+              {toolsOpen && <div ref={toolsPopoverRef} id="rangabot-tools" className="tools-popover" role="region" aria-label="Rangabot tools">
+                <div className="tools-popover-heading"><div><strong>Local workbench</strong><small>Choose what Rangabot may use</small></div><span className="privacy-indicator"><CraftIcon name="shield" size={14} /> Local</span></div>
+                <nav className="tools-grid" aria-label="Workbench tools">
+                  <button type="button" onClick={() => { setMemoryPanelOpen(true); setToolsOpen(false); }}><CraftIcon name="memory" /><span><strong>Memory</strong><small>Review saved facts</small></span></button>
+                  <button type="button" onClick={() => { setSqlPanelOpen(true); setToolsOpen(false); }}><CraftIcon name="analysis" /><span><strong>Analyze</strong><small>Use approved local data</small></span></button>
+                  <a href="/mastery"><CraftIcon name="mastery" /><span><strong>Mastery</strong><small>Evidence-backed roadmap</small></span></a>
+                </nav>
+                <section className="tools-folders" aria-label="Allowed local folders">
+                  <div className="tools-section-heading"><span><CraftIcon name="folder" size={15} /> Local folders</span><small>{allowedRepositories.length} allowed</small></div>
                   <div className="repository-popover-list">
                     {allowedRepositories.map((repository) => <div className="repository-item" key={repository.id} title={repository.path}>
-                      <button type="button" className="repository-open" onClick={() => openRepositorySearch(repository)} aria-label={`Search ${repository.name}`}><CraftIcon name="search" /><span><strong>{repository.name}</strong><small>{repository.path}</small></span></button>
+                      <button type="button" className="repository-open" onClick={() => { openRepositorySearch(repository); setToolsOpen(false); }} aria-label={`Search ${repository.name}`}><CraftIcon name="search" /><span><strong>{repository.name}</strong><small>{repository.path}</small></span></button>
                       <button type="button" onClick={() => void revokeLocalRepository(repository)} aria-label={`Revoke ${repository.name}`}><CraftIcon name="close" size={14} /></button>
                     </div>)}
                     {!allowedRepositories.length && <p>No folders allowed yet.</p>}
@@ -740,12 +916,12 @@ export default function Home() {
                   <p className="repository-disclosure">Approval is stored locally. Files are read only after you choose a folder and search it.</p>
                   {repositoryMessage && <p className="repository-status" role="status">{repositoryMessage}</p>}
                 </section>
-              </details>
-              <span className="privacy-indicator" title="Private by default · nothing is sent to the cloud"><CraftIcon name="shield" size={15} /><span>Local</span></span>
-            </nav>
-            <div className="theme-picker" aria-label="Theme settings">
-              <button type="button" className="appearance-toggle" onClick={() => changeAppearance(appearance === "dark" ? "light" : "dark")} aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}><CraftIcon name={appearance === "dark" ? "sun" : "moon"} size={15} /></button>
-              {(["sand", "sage", "lavender"] as Palette[]).map((choice) => <button type="button" key={choice} className={`palette-dot ${choice} ${palette === choice ? "selected" : ""}`} onClick={() => changePalette(choice)} aria-label={`Use ${choice} palette`} />)}
+                <div className="tool-theme" aria-label="Theme settings">
+                  <span>Appearance</span>
+                  <button type="button" className="appearance-toggle" onClick={() => changeAppearance(appearance === "dark" ? "light" : "dark")} aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}><CraftIcon name={appearance === "dark" ? "sun" : "moon"} size={15} /> {appearance === "dark" ? "Light" : "Dark"}</button>
+                  {(["sand", "sage", "lavender"] as Palette[]).map((choice) => <button type="button" key={choice} className={`palette-choice ${choice} ${palette === choice ? "selected" : ""}`} onClick={() => changePalette(choice)} aria-label={`Use ${choice} palette`}><i />{choice}</button>)}
+                </div>
+              </div>}
             </div>
             <button className={`status ${ready ? "ready" : "offline"}`} onClick={refreshStatus}>
               <span /> {ready ? `${status.configuredModel} ready` : status?.available ? "Model not installed" : "Ollama offline"}
@@ -764,32 +940,50 @@ export default function Home() {
           }}
         >
           {messages.length === 0 && (
-            <section className="welcome-state" aria-labelledby="welcome-title">
-              <div className="ranga-scene" aria-hidden="true"><span className="butterfly one" /><span className="butterfly two" /><div className="welcome-orbit" /></div>
-              <span className="welcome-kicker">{welcomeLines[welcomeIndex].kind}</span>
-              <h2 id="welcome-title">A fresh conversation</h2>
-              <blockquote>“{welcomeLines[welcomeIndex].text}”</blockquote>
-              <cite>— {welcomeLines[welcomeIndex].credit}</cite>
+            <section className="welcome-state" aria-labelledby="welcome-title" aria-busy={!welcomePreferencesReady}>
+              <div className="welcome-intro">
+                <div className="ranga-scene" aria-hidden="true"><div className="welcome-orbit" /></div>
+                <div className="welcome-heading">
+                  {welcomePreferencesReady ? <div className="welcome-greeting-line">
+                    <h2 id="welcome-title">{formatWelcomeGreeting(greetingIndex, welcomePreferences.preferredName ?? "")}</h2>
+                    <button ref={preferencesTriggerRef} type="button" className="welcome-edit" onClick={() => setWelcomePreferencesOpen(true)} aria-label="Personalize your greeting and fresh-chat content" title="Personalize"><CraftIcon name="tune" size={14} /></button>
+                  </div> : <div className="welcome-loading" role="status">Preparing your private workspace…</div>}
+                </div>
+              </div>
+              {welcomePreferencesReady && <>
+                <div className={`welcome-note ${welcomePreferences.mode === "books" ? "book-fact" : ""}`} aria-live="polite">
+                  <div className="welcome-note-meta">
+                    <label className="welcome-mode-select">
+                      <span>Show</span>
+                      <select value={welcomePreferences.mode} onChange={(event) => selectWelcomeMode(event.target.value as WelcomeMode)} aria-label="Fresh chat content">
+                        {welcomeModeOptions.map((option) => <option key={option.value} value={option.value}>{option.shortLabel}</option>)}
+                      </select>
+                    </label>
+                    <button type="button" onClick={() => rotateWelcome(welcomePreferences.mode)} aria-label={`Show another ${selectedWelcomeMode.shortLabel.toLowerCase()} item`}><CraftIcon name="arrow" size={14} /> Another</button>
+                  </div>
+                  {welcomePreferences.mode === "books" ? (
+                    bookWelcomeLoading ? <p className="welcome-note-loading">Choosing a cited sentence from your local books…</p>
+                      : bookWelcomeFact ? <><blockquote>{bookWelcomeFact.text}</blockquote><cite>{bookWelcomeCitation}</cite></>
+                        : <div className="welcome-book-empty"><strong>No suitable book fact is indexed yet.</strong><span>Add a compatible text-based document to the Knowledge Vault, then ingest it locally.</span><button type="button" onClick={() => openKnowledgeBrief("vault")}>Open Vault status</button></div>
+                  ) : <><blockquote>{welcomeLine.kind === "QUOTE" ? `“${welcomeLine.text}”` : welcomeLine.text}</blockquote><cite>{welcomeLine.kind === "QUOTE" ? `— ${welcomeLine.credit}` : welcomeLine.credit}</cite></>}
+                </div>
+              </>}
               <div className="starter-grid" aria-label="Conversation starters">
-                <button type="button" onClick={() => chooseStarter("Help me think through an idea: ")}>
+                <button type="button" onClick={() => chooseStarter("Help me think through an idea: ")} aria-label="Explore an idea locally" title="Brainstorm an idea locally">
                   <span className="starter-icon idea"><CraftIcon name="spark" /></span>
-                  <span><strong>Explore an idea</strong><small>Brainstorm it locally</small></span>
-                  <CraftIcon name="chevron" size={14} />
+                  <strong>Explore an idea</strong>
                 </button>
-                <button type="button" onClick={() => chooseStarter("Help me with this coding task: ")}>
+                <button type="button" onClick={() => chooseStarter("Help me with this coding task: ")} aria-label="Build something with local coding help" title="Plan or improve code locally">
                   <span className="starter-icon code"><CraftIcon name="code" /></span>
-                  <span><strong>Build something</strong><small>Plan or improve code</small></span>
-                  <CraftIcon name="chevron" size={14} />
+                  <strong>Build something</strong>
                 </button>
-                <button type="button" onClick={() => chooseStarter("Help me write this email. Ask me for the audience, purpose, tone, and key details before drafting: ")}>
+                <button type="button" onClick={() => chooseStarter("Help me write this email. Ask me for the audience, purpose, tone, and key details before drafting: ")} aria-label="Write an email locally" title="Draft an email in the right tone">
                   <span className="starter-icon mail"><CraftIcon name="mail" /></span>
-                  <span><strong>Write an email</strong><small>Draft it locally in the right tone</small></span>
-                  <CraftIcon name="chevron" size={14} />
+                  <strong>Write an email</strong>
                 </button>
-                <button type="button" onClick={() => chooseStarter("I want to create a professional Word document. Please ask me what you need before creating it: ")}>
+                <button type="button" onClick={() => chooseStarter("I want to create a professional Word document. Please ask me what you need before creating it: ")} aria-label="Create a Word document locally" title="Create and preview a Word document">
                   <span className="starter-icon document"><CraftIcon name="document" /></span>
-                  <span><strong>Create a Word document</strong><small>Draft, validate and preview locally</small></span>
-                  <CraftIcon name="chevron" size={14} />
+                  <strong>Create a document</strong>
                 </button>
               </div>
             </section>
@@ -823,7 +1017,7 @@ export default function Home() {
           <div ref={endRef} />
         </div>
 
-        <div className="composer-wrap">
+        <div className={`composer-wrap ${messages.length === 0 ? "empty-chat" : ""}`}>
           {!ready && <div className="setup-hint">
             <strong>{status?.available ? "Install the configured model" : "Start Ollama to chat"}</strong>
             <span>{status?.available ? `Run: ollama pull ${status.configuredModel}` : "The app is ready and waiting for the local model service."}</span>
@@ -832,31 +1026,33 @@ export default function Home() {
             {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
             {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
             {attachedDataset && <div className="composer-code-context"><span><strong>Local data available to this chat</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>This attachment is remembered for this chat. Analytical requests may run bounded read-only SQL locally; expand the calculation trace to inspect it.</small></span><button type="button" onClick={() => void attachDatasetToChat(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
-            <textarea
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
-                }
-              }}
-              placeholder="Ask about code, brainstorm an idea, or plan your next project…"
-              rows={2}
-            />
-            <div className="composer-actions">
-              <select value={mode} onChange={(event) => setMode(event.target.value as Mode)} aria-label="Routing mode">
-                <option value="local">Local only</option>
-                <option value="smart">Smart routing</option>
-                <option value="teach">Teacher mode</option>
-                <option value="codex">Codex</option>
-              </select>
-              <span className="route-note">{mode === "codex" ? "Cloud handoff not enabled" : mode === "teach" ? "Strict vault teaching with citations" : mode === "smart" ? "Automatically uses local knowledge" : "Stays on this computer"}</span>
-              {sending ? (
-                <button className="stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating"><CraftIcon name="stop" /></button>
-              ) : (
-                <button type="submit" disabled={!input.trim()} aria-label="Send"><CraftIcon name="send" /></button>
-              )}
+            <div className="composer-main-row">
+              <textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                placeholder="Message Rangabot…"
+                rows={1}
+              />
+              <div className="composer-actions">
+                <select value={mode} onChange={(event) => setMode(event.target.value as Mode)} aria-label="Routing mode" aria-describedby="route-mode-description" title={routeDescription}>
+                  <option value="local">Local only</option>
+                  <option value="smart">Smart</option>
+                  <option value="teach">Teacher</option>
+                  <option value="codex">Codex</option>
+                </select>
+                <span id="route-mode-description" className="sr-only">{routeDescription}</span>
+                {sending ? (
+                  <button className="stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating"><CraftIcon name="stop" /></button>
+                ) : (
+                  <button type="submit" disabled={!input.trim()} aria-label="Send"><CraftIcon name="send" /></button>
+                )}
+              </div>
             </div>
           </form>
           <small>Local models can make mistakes. Review important code and decisions.</small>
@@ -951,6 +1147,7 @@ export default function Home() {
       )}
       <MemoryPanel open={memoryPanelOpen} onClose={closeMemoryPanel} />
       <SqlAnalysisPanel key={sqlDraft ? `${sqlDraft.datasetId}:${sqlDraft.query}` : "manual"} open={sqlPanelOpen} onClose={closeSqlPanel} onAttach={(dataset) => { void attachDatasetToChat(dataset); setSqlDraft(null); }} initialDraft={sqlDraft} />
+      {welcomePreferencesOpen && <WelcomePreferencesDialog preferences={welcomePreferences} onClose={closeWelcomePreferences} onSave={saveWelcomePreferences} />}
     </main>
   );
 }

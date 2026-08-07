@@ -58,6 +58,7 @@ function getDatabase() {
       embedding TEXT,
       FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
     );
+    CREATE INDEX IF NOT EXISTS chunks_document_ordinal_idx ON chunks(document_id, ordinal);
     CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
       chunk_id UNINDEXED,
       document_id UNINDEXED,
