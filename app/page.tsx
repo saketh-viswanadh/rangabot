@@ -498,7 +498,7 @@ export default function Home() {
     const parameters = new URLSearchParams(window.location.search);
     if (parameters.get("demo") === "welcome") {
       setAppearance(parameters.get("theme") === "dark" ? "dark" : "light");
-      setPalette("lavender");
+      setPalette("sand");
       setMessages([]);
       return;
     }
@@ -794,6 +794,13 @@ export default function Home() {
     : 0;
   const welcomeLine = welcomeLines[welcomeIndex] ?? welcomeLines[0];
   const selectedWelcomeMode = welcomeModeOptions.find((option) => option.value === welcomePreferences.mode) ?? welcomeModeOptions[0];
+  const routeDescription = mode === "codex"
+    ? "Cloud handoff is not enabled"
+    : mode === "teach"
+      ? "Strict local-vault teaching with citations"
+      : mode === "smart"
+        ? "Automatically uses relevant local knowledge"
+        : "Stays on this computer";
   const bookWelcomeCitation = bookWelcomeFact
     ? [
         bookWelcomeFact.source.title,
@@ -874,7 +881,7 @@ export default function Home() {
       </aside>
       {sidebarOpen && <button className="sidebar-backdrop" type="button" onClick={() => setSidebarOpen(false)} aria-label="Dismiss chat navigation" />}
 
-      <section className="chat-panel">
+      <section className={`chat-panel ${messages.length === 0 ? "fresh-chat" : ""}`} inert={sidebarOpen}>
         <header className="chat-header">
           <div className="chat-identity">
             <button ref={mobileNavigationRef} className="mobile-navigation" type="button" onClick={() => setSidebarOpen(true)} aria-label="Open chats and projects" aria-controls="chat-navigation" aria-expanded={sidebarOpen}><CraftIcon name="menu" /></button>
@@ -886,7 +893,7 @@ export default function Home() {
             </button>
             <div className="tools-menu">
               <button ref={toolsTriggerRef} type="button" className="utility-button" onClick={() => setToolsOpen((open) => !open)} aria-expanded={toolsOpen} aria-controls="rangabot-tools"><CraftIcon name="tune" size={15} /><span>Tools</span></button>
-              {toolsOpen && <div ref={toolsPopoverRef} id="rangabot-tools" className="tools-popover" role="dialog" aria-label="Rangabot tools">
+              {toolsOpen && <div ref={toolsPopoverRef} id="rangabot-tools" className="tools-popover" role="region" aria-label="Rangabot tools">
                 <div className="tools-popover-heading"><div><strong>Local workbench</strong><small>Choose what Rangabot may use</small></div><span className="privacy-indicator"><CraftIcon name="shield" size={14} /> Local</span></div>
                 <nav className="tools-grid" aria-label="Workbench tools">
                   <button type="button" onClick={() => { setMemoryPanelOpen(true); setToolsOpen(false); }}><CraftIcon name="memory" /><span><strong>Memory</strong><small>Review saved facts</small></span></button>
@@ -934,46 +941,49 @@ export default function Home() {
         >
           {messages.length === 0 && (
             <section className="welcome-state" aria-labelledby="welcome-title" aria-busy={!welcomePreferencesReady}>
-              <div className="ranga-scene" aria-hidden="true"><div className="welcome-orbit" /></div>
-              {welcomePreferencesReady ? <>
+              <div className="welcome-intro">
+                <div className="ranga-scene" aria-hidden="true"><div className="welcome-orbit" /></div>
                 <div className="welcome-heading">
-                  <span className="welcome-kicker">Private by default</span>
-                  <h2 id="welcome-title">{formatWelcomeGreeting(greetingIndex, welcomePreferences.preferredName ?? "")}</h2>
-                  <p>What would you like to make sense of today?</p>
-                  <button ref={preferencesTriggerRef} type="button" className="personalize-welcome" onClick={() => setWelcomePreferencesOpen(true)}><CraftIcon name="tune" size={14} /> Personalize</button>
+                  {welcomePreferencesReady ? <div className="welcome-greeting-line">
+                    <h2 id="welcome-title">{formatWelcomeGreeting(greetingIndex, welcomePreferences.preferredName ?? "")}</h2>
+                    <button ref={preferencesTriggerRef} type="button" className="welcome-edit" onClick={() => setWelcomePreferencesOpen(true)} aria-label="Personalize your greeting and fresh-chat content" title="Personalize"><CraftIcon name="tune" size={14} /></button>
+                  </div> : <div className="welcome-loading" role="status">Preparing your private workspace…</div>}
                 </div>
-                <nav className="welcome-modes" aria-label="Fresh chat content">
-                  {welcomeModeOptions.map((option) => <button type="button" key={option.value} className={welcomePreferences.mode === option.value ? "selected" : ""} aria-pressed={welcomePreferences.mode === option.value} onClick={() => selectWelcomeMode(option.value)}>{option.shortLabel}</button>)}
-                </nav>
+              </div>
+              {welcomePreferencesReady && <>
                 <div className={`welcome-note ${welcomePreferences.mode === "books" ? "book-fact" : ""}`} aria-live="polite">
-                  <div className="welcome-note-meta"><span>{selectedWelcomeMode.label}</span><button type="button" onClick={() => rotateWelcome(welcomePreferences.mode)} aria-label={`Show another ${selectedWelcomeMode.shortLabel.toLowerCase()} item`}><CraftIcon name="arrow" size={14} /> Another</button></div>
+                  <div className="welcome-note-meta">
+                    <label className="welcome-mode-select">
+                      <span>Show</span>
+                      <select value={welcomePreferences.mode} onChange={(event) => selectWelcomeMode(event.target.value as WelcomeMode)} aria-label="Fresh chat content">
+                        {welcomeModeOptions.map((option) => <option key={option.value} value={option.value}>{option.shortLabel}</option>)}
+                      </select>
+                    </label>
+                    <button type="button" onClick={() => rotateWelcome(welcomePreferences.mode)} aria-label={`Show another ${selectedWelcomeMode.shortLabel.toLowerCase()} item`}><CraftIcon name="arrow" size={14} /> Another</button>
+                  </div>
                   {welcomePreferences.mode === "books" ? (
                     bookWelcomeLoading ? <p className="welcome-note-loading">Choosing a cited sentence from your local books…</p>
                       : bookWelcomeFact ? <><blockquote>{bookWelcomeFact.text}</blockquote><cite>{bookWelcomeCitation}</cite></>
                         : <div className="welcome-book-empty"><strong>No suitable book fact is indexed yet.</strong><span>Add a compatible text-based document to the Knowledge Vault, then ingest it locally.</span><button type="button" onClick={() => openKnowledgeBrief("vault")}>Open Vault status</button></div>
                   ) : <><blockquote>{welcomeLine.kind === "QUOTE" ? `“${welcomeLine.text}”` : welcomeLine.text}</blockquote><cite>{welcomeLine.kind === "QUOTE" ? `— ${welcomeLine.credit}` : welcomeLine.credit}</cite></>}
                 </div>
-              </> : <div className="welcome-loading" role="status">Preparing your private workspace…</div>}
+              </>}
               <div className="starter-grid" aria-label="Conversation starters">
-                <button type="button" onClick={() => chooseStarter("Help me think through an idea: ")}>
+                <button type="button" onClick={() => chooseStarter("Help me think through an idea: ")} aria-label="Explore an idea locally" title="Brainstorm an idea locally">
                   <span className="starter-icon idea"><CraftIcon name="spark" /></span>
-                  <span><strong>Explore an idea</strong><small>Brainstorm it locally</small></span>
-                  <CraftIcon name="chevron" size={14} />
+                  <strong>Explore an idea</strong>
                 </button>
-                <button type="button" onClick={() => chooseStarter("Help me with this coding task: ")}>
+                <button type="button" onClick={() => chooseStarter("Help me with this coding task: ")} aria-label="Build something with local coding help" title="Plan or improve code locally">
                   <span className="starter-icon code"><CraftIcon name="code" /></span>
-                  <span><strong>Build something</strong><small>Plan or improve code</small></span>
-                  <CraftIcon name="chevron" size={14} />
+                  <strong>Build something</strong>
                 </button>
-                <button type="button" onClick={() => chooseStarter("Help me write this email. Ask me for the audience, purpose, tone, and key details before drafting: ")}>
+                <button type="button" onClick={() => chooseStarter("Help me write this email. Ask me for the audience, purpose, tone, and key details before drafting: ")} aria-label="Write an email locally" title="Draft an email in the right tone">
                   <span className="starter-icon mail"><CraftIcon name="mail" /></span>
-                  <span><strong>Write an email</strong><small>Draft it locally in the right tone</small></span>
-                  <CraftIcon name="chevron" size={14} />
+                  <strong>Write an email</strong>
                 </button>
-                <button type="button" onClick={() => chooseStarter("I want to create a professional Word document. Please ask me what you need before creating it: ")}>
+                <button type="button" onClick={() => chooseStarter("I want to create a professional Word document. Please ask me what you need before creating it: ")} aria-label="Create a Word document locally" title="Create and preview a Word document">
                   <span className="starter-icon document"><CraftIcon name="document" /></span>
-                  <span><strong>Create a Word document</strong><small>Draft, validate and preview locally</small></span>
-                  <CraftIcon name="chevron" size={14} />
+                  <strong>Create a document</strong>
                 </button>
               </div>
             </section>
@@ -1007,7 +1017,7 @@ export default function Home() {
           <div ref={endRef} />
         </div>
 
-        <div className="composer-wrap">
+        <div className={`composer-wrap ${messages.length === 0 ? "empty-chat" : ""}`}>
           {!ready && <div className="setup-hint">
             <strong>{status?.available ? "Install the configured model" : "Start Ollama to chat"}</strong>
             <span>{status?.available ? `Run: ollama pull ${status.configuredModel}` : "The app is ready and waiting for the local model service."}</span>
@@ -1016,31 +1026,33 @@ export default function Home() {
             {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
             {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
             {attachedDataset && <div className="composer-code-context"><span><strong>Local data available to this chat</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>This attachment is remembered for this chat. Analytical requests may run bounded read-only SQL locally; expand the calculation trace to inspect it.</small></span><button type="button" onClick={() => void attachDatasetToChat(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
-            <textarea
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
-                }
-              }}
-              placeholder="Ask about code, brainstorm an idea, or plan your next project…"
-              rows={2}
-            />
-            <div className="composer-actions">
-              <select value={mode} onChange={(event) => setMode(event.target.value as Mode)} aria-label="Routing mode">
-                <option value="local">Local only</option>
-                <option value="smart">Smart routing</option>
-                <option value="teach">Teacher mode</option>
-                <option value="codex">Codex</option>
-              </select>
-              <span className="route-note">{mode === "codex" ? "Cloud handoff not enabled" : mode === "teach" ? "Strict vault teaching with citations" : mode === "smart" ? "Automatically uses local knowledge" : "Stays on this computer"}</span>
-              {sending ? (
-                <button className="stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating"><CraftIcon name="stop" /></button>
-              ) : (
-                <button type="submit" disabled={!input.trim()} aria-label="Send"><CraftIcon name="send" /></button>
-              )}
+            <div className="composer-main-row">
+              <textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                placeholder="Message Rangabot…"
+                rows={1}
+              />
+              <div className="composer-actions">
+                <select value={mode} onChange={(event) => setMode(event.target.value as Mode)} aria-label="Routing mode" aria-describedby="route-mode-description" title={routeDescription}>
+                  <option value="local">Local only</option>
+                  <option value="smart">Smart</option>
+                  <option value="teach">Teacher</option>
+                  <option value="codex">Codex</option>
+                </select>
+                <span id="route-mode-description" className="sr-only">{routeDescription}</span>
+                {sending ? (
+                  <button className="stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating"><CraftIcon name="stop" /></button>
+                ) : (
+                  <button type="submit" disabled={!input.trim()} aria-label="Send"><CraftIcon name="send" /></button>
+                )}
+              </div>
             </div>
           </form>
           <small>Local models can make mistakes. Review important code and decisions.</small>

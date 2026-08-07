@@ -6,7 +6,13 @@ const page = readFileSync("app/page.tsx", "utf8");
 const styles = readFileSync("app/globals.css", "utf8");
 const icons = readFileSync("app/components/craft-icon.tsx", "utf8");
 const sidebar = page.slice(page.indexOf('<aside id="chat-navigation"'), page.indexOf('</aside>'));
-const header = page.slice(page.indexOf('<section className="chat-panel">'), page.indexOf('<div\n          className="messages"'));
+const chatPanelStart = page.indexOf("<section className={`chat-panel");
+const messagesStart = page.indexOf('className="messages"', chatPanelStart);
+
+assert.notEqual(chatPanelStart, -1, "Missing chat panel");
+assert.notEqual(messagesStart, -1, "Missing messages region after chat panel");
+
+const header = page.slice(chatPanelStart, messagesStart);
 
 test("keeps the sidebar focused on chats", () => {
   assert.match(sidebar, /Projects/);

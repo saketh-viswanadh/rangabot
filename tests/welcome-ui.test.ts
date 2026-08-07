@@ -45,6 +45,18 @@ function fetchCallsWithin(node: ts.Node) {
   return calls;
 }
 
+function countMatches(source: string, pattern: RegExp) {
+  return [...source.matchAll(pattern)].length;
+}
+
+function sliceBetween(source: string, start: string, end: string) {
+  const startIndex = source.indexOf(start);
+  assert.notEqual(startIndex, -1, `Missing start marker: ${start}`);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  assert.notEqual(endIndex, -1, `Missing end marker after ${start}: ${end}`);
+  return source.slice(startIndex, endIndex);
+}
+
 test("offers optional local personalization and every approved fresh-chat content mode", () => {
   assert.deepEqual([...welcomeModes], ["mixed", "quotes", "jokes", "thoughts", "books"]);
   assert.match(preferences, /Name or nickname/);
@@ -53,7 +65,33 @@ test("offers optional local personalization and every approved fresh-chat conten
   assert.match(preferences, /stays in this browser/);
   assert.match(page, /<WelcomePreferencesDialog/);
   assert.match(page, /formatWelcomeGreeting\(greetingIndex, welcomePreferences\.preferredName/);
-  assert.match(page, /aria-label="Fresh chat content"/);
+});
+
+test("keeps the fresh-chat composition compact and intentional", () => {
+  const welcome = sliceBetween(page, '<section className="welcome-state"', "{messages.map");
+  const starters = sliceBetween(welcome, '<div className="starter-grid"', "</div>");
+
+  assert.equal(countMatches(welcome, /className="welcome-intro"/g), 1, "Fresh chat needs one compact intro");
+  assert.equal(countMatches(welcome, /className=\{`welcome-note/g), 1, "Fresh chat needs one welcome note");
+  assert.doesNotMatch(welcome, /welcome-kicker|personalize-welcome|welcome-modes/);
+  assert.doesNotMatch(styles, /\.welcome-kicker\b|\.personalize-welcome\b|\.welcome-modes\b/);
+
+  assert.match(welcome, /<select[\s\S]*?aria-label="Fresh chat content"[\s\S]*?welcomeModeOptions\.map/);
+  assert.match(welcome, /<button[^>]+onClick=\{\(\) => rotateWelcome\(welcomePreferences\.mode\)\}[^>]*>[\s\S]*?Another[\s\S]*?<\/button>/);
+
+  assert.equal(countMatches(starters, /<button\b/g), 4, "Fresh chat keeps exactly four conversation starters");
+  assert.equal(countMatches(starters, /<strong>/g), 4, "Every starter exposes one concise title");
+  assert.doesNotMatch(starters, /<small>/, "Starter cards must not restore explanatory subtitles");
+  assert.doesNotMatch(starters, /name="chevron"/, "Starter cards must not restore decorative chevrons");
+});
+
+test("keeps the empty-chat composer to one compact row", () => {
+  const composer = sliceBetween(page, '<div className={`composer-wrap', "</form>");
+
+  assert.match(composer, /messages\.length === 0\s*\?\s*"empty-chat"\s*:\s*""/);
+  assert.match(composer, /className="composer-main-row"/);
+  assert.match(composer, /<textarea[\s\S]*?rows=\{1\}/);
+  assert.equal(countMatches(composer, /className="composer-main-row"/g), 1);
 });
 
 test("never places welcome preferences or a preferred name in chat request payloads", () => {
@@ -85,6 +123,14 @@ test("keeps maintained public demo captures isolated from private local UI state
   assert.match(page, /publicDemo\s*\?\s*\{ \.\.\.defaultWelcomePreferences \}/);
   assert.match(page, /if \(!publicDemo\)\s*\{[\s\S]*?void refreshProjects\(\);\s*void refreshRepositories\(\);\s*void refreshKnowledge\(\);/);
   assert.match(page, /PUBLIC_DEMO_MODES\.has\([^)]*get\("demo"\)[^)]*\)[\s\S]*setConversations\(\[\]\);\s*return;/);
+
+  const welcomeDemo = sliceBetween(
+    page,
+    'if (parameters.get("demo") === "welcome")',
+    'if (parameters.get("demo") !== "knowledge")',
+  );
+  assert.match(welcomeDemo, /setPalette\("sand"\)/);
+  assert.doesNotMatch(welcomeDemo, /setPalette\("lavender"\)/);
 });
 
 test("does not pull a fresh empty chat down to the bottom anchor", () => {

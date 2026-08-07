@@ -9,6 +9,23 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Improved
 
+- Corrected the first fresh-chat visual iteration after production-size review.
+  The empty state now has three deliberate layers—one compact personalized
+  greeting, one content card with a single category selector, and four concise
+  starters—instead of seven competing control bands. The resting composer is a
+  one-row, 660 px welcome surface while active conversations retain the wider
+  reading measure.
+- Rebuilt sand, sage, and lavender as structural palettes across the canvas,
+  sidebar, welcome card, composer, controls, and starter tints. Deterministic
+  tests now cover text contrast in all six light/dark combinations and require
+  meaningful perceptual separation between palette surfaces. Light-theme
+  Markdown, status text, and accent-button foregrounds no longer rely on
+  dark-theme-only hard-coded colors.
+- Tightened responsive and accessibility behavior: primary mobile welcome and
+  composer controls meet a 44 px target, the composer respects device safe
+  areas, the mobile drawer prevents background focus and can scroll as its
+  contents grow, and the non-modal Tools disclosure no longer claims modal
+  dialog semantics.
 - Reworked the fresh-chat experience around explicit, local-only preferences.
   People can optionally save a sanitized name or nickname for rotating greetings
   and choose Mix, Quotes, Jokes, Thoughts, or My books. These settings remain in

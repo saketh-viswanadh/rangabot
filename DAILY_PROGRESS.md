@@ -2,6 +2,22 @@
 
 ## 2026-08-07 — Local fresh-chat personalization and strict UI audit
 
+- Rejected the first visual composition after a production-size audit showed
+  that it stacked seven welcome bands and gave the resting composer 119 px of
+  height. Rebuilt it around one greeting, one content card with a compact mode
+  selector, and one row of four starter chips. At 1280×720 the production
+  composer now measures 660×54 px and the complete wrapper 83 px; at 390×844 it
+  remains a single 57 px surface with a 69 px wrapper and no document overflow.
+- Made palette choice visible across the whole workspace rather than only on
+  accents. Sand, sage, and lavender now own separate canvas, sidebar, card,
+  composer, and glow roles in light and dark appearances. Automated checks cover
+  WCAG AA normal-text contrast across all six combinations plus minimum OKLab
+  distance for the major surfaces and accent.
+- Fixed additional audit findings without expanding product scope: replaced
+  light-theme Markdown and accent-control hard-coded colors with theme tokens,
+  raised primary mobile controls to 44 px, added safe-area composer spacing,
+  made the mobile drawer background inert and its content scrollable, and
+  corrected Tools from modal-dialog semantics to a non-modal disclosure region.
 - Rebuilt the empty-chat welcome around rotating, content-driven greetings and
   an optional sanitized name or nickname. The preference is local to the browser
   and is not promoted into chat history, Local memory, the Knowledge Vault, or
@@ -24,8 +40,8 @@
   handling, initial focus, and focus return. Brief and local-model status remain
   immediately visible.
 - Rebalanced sand, sage, and lavender light/dark palettes with semantic surface,
-  text, border, focus, and status colors. All three inspected light user-bubble
-  combinations exceeded the 4.5:1 normal-text contrast target. Removed ambient
+  text, border, focus, and status colors. All six palette/appearance token sets
+  now pass the 4.5:1 normal-text contrast matrix. Removed ambient
   butterflies and the rainbow thinking frame; one restrained activity accent
   remains.
 - Removed Path to Mastery's decorative banner, bringing the honest readiness
