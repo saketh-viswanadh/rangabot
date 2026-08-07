@@ -128,10 +128,19 @@ function modelReceipt(request: ExpertPackRequest, modelId: string, reason: strin
 }
 
 function cancelled(error: unknown, signal?: AbortSignal) {
-  return signal?.aborted
+  const reason = signal?.aborted ? signal.reason : undefined;
+  return (signal?.aborted && !(reason instanceof DOMException && reason.name === "TimeoutError") && failureCode(reason) !== "timeout")
     || error instanceof ProviderError && error.code === "cancelled"
     || error instanceof SqlRuntimeError && error.code === "cancelled"
     || error instanceof DOMException && error.name === "AbortError";
+}
+
+function timedOut(error: unknown, signal?: AbortSignal) {
+  const reason = signal?.aborted ? signal.reason : undefined;
+  return error instanceof DOMException && error.name === "TimeoutError"
+    || reason instanceof DOMException && reason.name === "TimeoutError"
+    || failureCode(error) === "timeout"
+    || failureCode(reason) === "timeout";
 }
 
 function throwIfCancelled(signal?: AbortSignal) {
@@ -170,6 +179,7 @@ function failureCode(error: unknown) {
 }
 
 function mappedFailure(request: ExpertPackRequest, error: unknown, phase: PackPhase, usage: Usage, signal?: AbortSignal) {
+  if (timedOut(error, signal)) return failure(request, "timeout", phase === "planning" || phase === "narration" ? "The local model or analytical grounding timed out." : "The local analytical runtime timed out.", true, usage);
   if (cancelled(error, signal)) return failure(request, "cancelled", "The Analytics request was stopped.", false, usage);
   const code = failureCode(error);
   if (error instanceof ProviderError || ["unavailable", "model-missing", "http", "empty-output", "invalid-stream"].includes(code ?? "")) {
@@ -177,7 +187,6 @@ function mappedFailure(request: ExpertPackRequest, error: unknown, phase: PackPh
     if (code === "unavailable") return failure(request, "provider-unavailable", "The local model provider is unavailable.", true, usage);
     return failure(request, "provider-failure", "The local model could not prepare the analysis.", code === "http" || code === "empty-output", usage);
   }
-  if (code === "timeout") return failure(request, "timeout", phase === "planning" || phase === "narration" ? "The local model or analytical grounding timed out." : "The local analytical runtime timed out.", true, usage);
   if (error instanceof SqlRuntimeError || ["resource-limit", "invalid-query", "dataset-changed", "tool-failure"].includes(code ?? "")) {
     if (code === "resource-limit") return failure(request, "resource-limit", error instanceof Error ? error.message : "The local analytical resource limit was reached.", false, usage);
     if (code === "invalid-query") return failure(request, "invalid-output", "The proposed analysis was not a valid read-only query.", false, usage);
@@ -193,7 +202,7 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
   if (!requestValidation.valid) return invalidRequestOutcome(value, requestValidation.errors);
   const request = value as ExpertPackRequest;
   const usage = emptyUsage();
-  if (options.signal?.aborted) return failure(request, "cancelled", "The Analytics request was stopped.", false, usage);
+  if (options.signal?.aborted) return mappedFailure(request, options.signal.reason, "preflight", usage, options.signal);
 
   const datasetReferences = request.contextReferences.filter((reference) => reference.kind === "dataset");
   if (datasetReferences.length !== 1) return failure(request, "permission-required", "Attach exactly one approved dataset before running Analytics.", false, usage);

@@ -5,6 +5,7 @@ export const DEFAULT_CHAT_MODEL = modelRegistry.models[0].id;
 export const DEFAULT_EMBEDDING_MODEL = modelRegistry.embeddingModels[0].id;
 export const DEFAULT_CHAT_CONTEXT_TOKENS = modelRegistry.models[0].recommendedContextTokens;
 export const DEFAULT_KNOWLEDGE_BUDGET_BYTES = 4 * 1024 ** 3;
+export const DEFAULT_CONVERSATION_TURN_TIMEOUT_MS = 5 * 60 * 1000;
 
 function isLoopbackHostname(hostname: string) {
   if (hostname === "localhost" || hostname === "::1" || hostname === "[::1]") return true;
@@ -48,5 +49,14 @@ export function getConfiguredContextTokens(value = process.env.OLLAMA_NUM_CTX) {
 export function getKnowledgeBudgetBytes(value = process.env.KNOWLEDGE_BUDGET_BYTES) {
   const parsed = value?.trim() ? Number(value) : DEFAULT_KNOWLEDGE_BUDGET_BYTES;
   if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new Error("KNOWLEDGE_BUDGET_BYTES must be a positive integer.");
+  return parsed;
+}
+
+export function getConversationTurnTimeoutMs(value = process.env.RANGABOT_TURN_TIMEOUT_MS) {
+  if (!value?.trim()) return DEFAULT_CONVERSATION_TURN_TIMEOUT_MS;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 10_000 || parsed > 15 * 60 * 1000) {
+    throw new Error("RANGABOT_TURN_TIMEOUT_MS must be an integer from 10000 to 900000 milliseconds.");
+  }
   return parsed;
 }

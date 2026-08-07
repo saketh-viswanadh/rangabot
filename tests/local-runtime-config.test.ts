@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_CHAT_CONTEXT_TOKENS, DEFAULT_CHAT_MODEL, DEFAULT_KNOWLEDGE_BUDGET_BYTES, getConfiguredChatModel, getConfiguredContextTokens, getKnowledgeBudgetBytes, getLocalOllamaBaseUrl } from "../lib/local-runtime-config.ts";
+import { DEFAULT_CHAT_CONTEXT_TOKENS, DEFAULT_CHAT_MODEL, DEFAULT_CONVERSATION_TURN_TIMEOUT_MS, DEFAULT_KNOWLEDGE_BUDGET_BYTES, getConfiguredChatModel, getConfiguredContextTokens, getConversationTurnTimeoutMs, getKnowledgeBudgetBytes, getLocalOllamaBaseUrl } from "../lib/local-runtime-config.ts";
 
 test("uses the lightweight documented chat model by default", () => {
   assert.equal(getConfiguredChatModel(""), DEFAULT_CHAT_MODEL);
@@ -20,6 +20,13 @@ test("validates the configurable local knowledge budget", () => {
   assert.equal(getKnowledgeBudgetBytes("1048576"), 1048576);
   assert.throws(() => getKnowledgeBudgetBytes("not-a-number"), /positive integer/);
   assert.throws(() => getKnowledgeBudgetBytes("-1"), /positive integer/);
+});
+
+test("enforces a bounded absolute conversation-turn deadline", () => {
+  assert.equal(getConversationTurnTimeoutMs(""), DEFAULT_CONVERSATION_TURN_TIMEOUT_MS);
+  assert.equal(getConversationTurnTimeoutMs("45000"), 45_000);
+  assert.throws(() => getConversationTurnTimeoutMs("9999"), /10000 to 900000/);
+  assert.throws(() => getConversationTurnTimeoutMs("900001"), /10000 to 900000/);
 });
 
 test("accepts loopback Ollama URLs and rejects remote or credentialed URLs", () => {

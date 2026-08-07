@@ -131,13 +131,15 @@ export function getKnowledgeVectorIndexStatus() {
   return { available: nativeVectorAvailable, expected: expected.count, indexed: nativeVectorTableExists(db) ? (meta?.chunkCount ?? 0) : 0, dimensions: meta?.dimensions ?? 0, builtAt: meta?.builtAt ?? null };
 }
 
-function ensureNativeVectorIndex(dimensions: number) {
+function hasCurrentNativeVectorIndex(dimensions: number) {
   if (!nativeVectorAvailable) return false;
   const db = getDatabase();
   const expected = db.prepare("SELECT COUNT(*) AS count FROM chunks WHERE embedding IS NOT NULL").get() as { count: number };
   const meta = db.prepare("SELECT model, dimensions, chunk_count AS chunkCount FROM vector_index_meta WHERE id = 1").get() as { model: string; dimensions: number; chunkCount: number } | undefined;
-  if (!nativeVectorTableExists(db) || meta?.model !== embeddingModel || meta.dimensions !== dimensions || meta.chunkCount !== expected.count) rebuildKnowledgeVectorIndex();
-  return nativeVectorTableExists(db);
+  return nativeVectorTableExists(db)
+    && meta?.model === embeddingModel
+    && meta.dimensions === dimensions
+    && meta.chunkCount === expected.count;
 }
 
 export type KnowledgeChunkInput = { id: string; ordinal: number; content: string; embedding?: number[]; heading?: string; sectionPath?: string; pageStart?: number; pageEnd?: number };
@@ -428,7 +430,8 @@ export function diversifyKnowledgeResults(results: KnowledgeResult[], limit: num
   return selected;
 }
 
-export async function searchKnowledgeWithDiagnostics(query: string, limit = 6): Promise<KnowledgeSearchResponse> {
+export async function searchKnowledgeWithDiagnostics(query: string, limit = 6, signal?: AbortSignal): Promise<KnowledgeSearchResponse> {
+  signal?.throwIfAborted();
   const expression = ftsQuery(query);
   if (!expression) return { results: [], mode: "keyword-only" };
   const terms = knowledgeQueryTerms(query);
@@ -441,20 +444,29 @@ export async function searchKnowledgeWithDiagnostics(query: string, limit = 6): 
     ORDER BY rank LIMIT ?
   `).all(expression, Math.max(limit * 6, 24)) as unknown as Array<Omit<KnowledgeResult, "score"> & { rank: number }>;
   const lexical = rows.map(({ rank: _rank, ...row }, index) => ({ ...row, lexicalScore: Math.max(.35, 1 - index / Math.max(rows.length, 1)) }));
-  const queryEmbedding = process.env.KNOWLEDGE_DISABLE_EMBEDDINGS === "1" ? null : await embedQuery(query);
+  const queryEmbedding = process.env.KNOWLEDGE_DISABLE_EMBEDDINGS === "1" ? null : await embedQuery(query, signal);
+  signal?.throwIfAborted();
   if (!queryEmbedding) return {
     results: diversifyKnowledgeResults(filterKnowledgeResultsBySubject(query, lexical.map(({ lexicalScore, ...result }) => ({ ...result, score: lexicalScore }))), limit),
     mode: "keyword-only",
   };
   const semanticLimit = Math.max(limit * 6, 24);
-  const nativeSemantic = nativeSemanticSearch(queryEmbedding, semanticLimit);
+  const nativeSemantic = nativeSemanticSearch(queryEmbedding, semanticLimit, signal);
+  signal?.throwIfAborted();
   const embeddedRows = nativeSemantic ? [] : getDatabase().prepare(`
     SELECT d.title, d.path, c.ordinal AS chunk, c.content, c.heading, c.section_path AS sectionPath, c.page_start AS pageStart, c.page_end AS pageEnd, c.embedding
     FROM chunks c JOIN documents d ON d.id = c.document_id
     WHERE c.embedding IS NOT NULL
   `).all() as unknown as Array<Omit<KnowledgeResult, "score"> & { embedding: string }>;
-  const semantic = nativeSemantic ?? embeddedRows.map(({ embedding, ...row }) => ({ ...row, similarity: cosine(queryEmbedding, JSON.parse(embedding) as number[]) }))
-    .sort((a, b) => b.similarity - a.similarity).slice(0, semanticLimit);
+  const semantic = nativeSemantic ?? (() => {
+    const scored: Array<Omit<KnowledgeResult, "score"> & { similarity: number }> = [];
+    for (let index = 0; index < embeddedRows.length; index += 1) {
+      if (index % 128 === 0) signal?.throwIfAborted();
+      const { embedding, ...row } = embeddedRows[index];
+      scored.push({ ...row, similarity: cosine(queryEmbedding, JSON.parse(embedding) as number[]) });
+    }
+    return scored.sort((a, b) => b.similarity - a.similarity).slice(0, semanticLimit);
+  })();
   const combined = new Map<string, KnowledgeResult & { lexical?: boolean; similarity?: number }>();
   for (const result of lexical) {
     const title = result.title.toLowerCase();
@@ -473,6 +485,7 @@ export async function searchKnowledgeWithDiagnostics(query: string, limit = 6): 
     .filter((result) => result.lexical || (result.similarity ?? 0) >= .46)
     .sort((a, b) => b.score - a.score)
     .map(({ lexical: _lexical, similarity: _similarity, ...result }) => result);
+  signal?.throwIfAborted();
   return { results: diversifyKnowledgeResults(filterKnowledgeResultsBySubject(query, ranked), limit), mode: "hybrid" };
 }
 
@@ -480,29 +493,39 @@ export async function searchKnowledge(query: string, limit = 6): Promise<Knowled
   return (await searchKnowledgeWithDiagnostics(query, limit)).results;
 }
 
-function nativeSemanticSearch(queryEmbedding: number[], limit: number) {
+function nativeSemanticSearch(queryEmbedding: number[], limit: number, signal?: AbortSignal) {
   try {
-    if (!ensureNativeVectorIndex(queryEmbedding.length)) return null;
+    signal?.throwIfAborted();
+    // Index construction belongs to explicit ingestion/maintenance. Rebuilding
+    // tens of thousands of vectors inside a chat request would defeat its
+    // bounded lifecycle and could block cancellation.
+    if (!hasCurrentNativeVectorIndex(queryEmbedding.length)) return null;
     const db = getDatabase();
     const nearest = db.prepare(`SELECT rowid, distance FROM chunk_vectors WHERE embedding MATCH ? AND k = ${Math.max(1, Math.floor(limit))} ORDER BY distance`)
       .all(vectorBlob(queryEmbedding)) as unknown as Array<{ rowid: number; distance: number }>;
     const lookup = db.prepare(`SELECT d.title, d.path, c.ordinal AS chunk, c.content, c.heading, c.section_path AS sectionPath, c.page_start AS pageStart, c.page_end AS pageEnd
       FROM chunks c JOIN documents d ON d.id = c.document_id WHERE c.rowid = ?`);
-    return nearest.flatMap((match) => {
+    return nearest.flatMap((match, index) => {
+      if (index % 32 === 0) signal?.throwIfAborted();
       const row = lookup.get(BigInt(match.rowid)) as Omit<KnowledgeResult, "score"> | undefined;
       return row ? [{ ...row, similarity: 1 - match.distance }] : [];
     });
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason ?? error;
     return null;
   }
 }
 
-async function embedQuery(input: string): Promise<number[] | null> {
+async function embedQuery(input: string, signal?: AbortSignal): Promise<number[] | null> {
   try {
-    const response = await fetch(`${getLocalOllamaBaseUrl()}/api/embed`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: embeddingModel, input }), signal: AbortSignal.timeout(30_000) });
+    const timeout = AbortSignal.timeout(30_000);
+    const response = await fetch(`${getLocalOllamaBaseUrl()}/api/embed`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: embeddingModel, input }), signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
     if (!response.ok) return null;
     return ((await response.json()) as { embeddings?: number[][] }).embeddings?.[0] ?? null;
-  } catch { return null; }
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason ?? error;
+    return null;
+  }
 }
 
 function cosine(left: number[], right: number[]) {

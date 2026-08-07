@@ -1,13 +1,23 @@
 export type ChatRole = "user" | "assistant" | "system";
+export type ConversationTurnStatus = "pending" | "completed" | "cancelled" | "failed";
 
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  /** Internal persistence receipt. Client-authored chat payloads may not set it. */
+  turn?: {
+    id: string;
+    status: ConversationTurnStatus;
+    failureCode?: string;
+  };
+  knowledgeUsed?: boolean;
   artifactIntent?: "word";
   retrievalMode?: "hybrid" | "keyword-only";
   memoryUse?: "context" | "direct";
   memoryTitles?: string[];
   answerDisposition?: "verified-fallback";
+  /** Exact, allowlisted expert-pack warning provenance for faithful replay. */
+  packWarnings?: Array<"model-narration-unavailable" | "narration-grounding-rejected">;
   wordArtifact?: {
     id: string;
     title: string;

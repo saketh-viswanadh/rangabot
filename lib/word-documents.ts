@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import {
   AlignmentType,
@@ -268,11 +268,13 @@ function contentParagraph(text: string) {
   return new Paragraph({ children: [new TextRun({ text, size: 22, color: "273444" })], spacing: { after: 180, line: 300 } });
 }
 
-export async function createWordArtifact(brief: WordDocumentBrief, draft: WordDraft): Promise<WordArtifact> {
+export async function createWordArtifact(brief: WordDocumentBrief, draft: WordDraft, options: { signal?: AbortSignal } = {}): Promise<WordArtifact> {
   validateWordDraftForBrief(brief, draft);
   const id = randomUUID();
   const directory = resolve(artifactsRoot, id);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
+  try {
+  options.signal?.throwIfAborted();
   const children: Array<Paragraph | Table> = [
     new Paragraph({ children: [new TextRun({ text: brief.title, bold: true, size: 42, color: "173B2D" })], spacing: { after: 100 } }),
     new Paragraph({ children: [new TextRun({ text: draft.subtitle || `${brief.documentType.replaceAll("-", " ")} for ${brief.audience}`, size: 22, color: "6B756F" })], spacing: { after: 360 } }),
@@ -304,6 +306,7 @@ export async function createWordArtifact(brief: WordDocumentBrief, draft: WordDr
     sections: [{ properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: "Rangabot · Local document · ", size: 16, color: "78827D" }), new TextRun({ children: [PageNumber.CURRENT], size: 16, color: "78827D" })] })] }) }, children }],
   });
   const buffer = await Packer.toBuffer(document);
+  options.signal?.throwIfAborted();
   const filename = `${brief.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70) || "rangabot-document"}.docx`;
   const documentPath = resolve(directory, filename);
   writeFileSync(documentPath, buffer, { mode: 0o600 });
@@ -314,24 +317,74 @@ export async function createWordArtifact(brief: WordDocumentBrief, draft: WordDr
     { id: "deterministic-render", label: "Deterministic DOCX", status: "passed", detail: "Styles, margins, table widths, numbering and footer were applied by the renderer." },
     { id: "format-validation", label: "DOCX format", status: buffer.subarray(0, 2).toString() === "PK" && buffer.length > 5_000 ? "passed" : "warning", detail: `${Math.round(buffer.length / 1024)} KB Office Open XML package created.` },
   ];
-  const previewPages = renderPreview(documentPath, directory, checks);
+  const previewPages = await renderPreview(documentPath, directory, checks, options.signal);
+  options.signal?.throwIfAborted();
   checks.push({ id: "user-preview", label: "User review", status: "warning", detail: "Review every rendered page and confirm factual accuracy before final use." });
   const artifact = { id, title: brief.title, filename, previewPages, checks };
   writeFileSync(resolve(directory, "artifact.json"), JSON.stringify({ artifact, brief, draft }, null, 2), { encoding: "utf8", mode: 0o600 });
   return artifact;
+  } catch (error) {
+    rmSync(directory, { recursive: true, force: true });
+    throw error;
+  }
 }
 
-function renderPreview(documentPath: string, directory: string, checks: QualityCheck[]) {
+export async function runPreviewCommand(command: string, args: string[], signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  return new Promise<number | null>((resolveResult, reject) => {
+    const child = spawn(command, args, { stdio: "ignore" });
+    let settled = false;
+    let abortReason: unknown;
+    let timedOut = false;
+    let forceTimer: ReturnType<typeof setTimeout> | undefined;
+    let hardStopTimer: ReturnType<typeof setTimeout> | undefined;
+    const clearTerminationTimers = () => {
+      if (forceTimer) clearTimeout(forceTimer);
+      if (hardStopTimer) clearTimeout(hardStopTimer);
+    };
+    const finish = (result: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTerminationTimers();
+      signal?.removeEventListener("abort", abort);
+      if (abortReason !== undefined) reject(abortReason);
+      else resolveResult(timedOut ? null : result);
+    };
+    const terminate = () => {
+      child.kill("SIGTERM");
+      forceTimer = setTimeout(() => child.kill("SIGKILL"), 1_500);
+      hardStopTimer = setTimeout(() => finish(null), 3_500);
+    };
+    const abort = () => {
+      if (settled) return;
+      clearTimeout(timer);
+      abortReason = signal?.reason ?? new DOMException("Stopped", "AbortError");
+      terminate();
+    };
+    const timer = setTimeout(() => {
+      if (settled) return;
+      timedOut = true;
+      terminate();
+    }, 60_000);
+    signal?.addEventListener("abort", abort, { once: true });
+    child.once("error", () => finish(null));
+    child.once("close", (code) => finish(code));
+    if (signal?.aborted) abort();
+  });
+}
+
+async function renderPreview(documentPath: string, directory: string, checks: QualityCheck[], signal?: AbortSignal) {
   const renderHome = resolve(directory, "render-home");
   mkdirSync(renderHome, { recursive: true });
-  const office = spawnSync("soffice", [`-env:UserInstallation=${pathToFileURL(renderHome).href}`, "--headless", "--convert-to", "pdf", "--outdir", directory, documentPath], { encoding: "utf8", timeout: 60_000 });
+  const officeStatus = await runPreviewCommand("soffice", [`-env:UserInstallation=${pathToFileURL(renderHome).href}`, "--headless", "--convert-to", "pdf", "--outdir", directory, documentPath], signal);
   const pdfPath = resolve(directory, `${basename(documentPath, ".docx")}.pdf`);
-  if (office.status !== 0 || !existsSync(/* turbopackIgnore: true */ pdfPath)) {
+  if (officeStatus !== 0 || !existsSync(/* turbopackIgnore: true */ pdfPath)) {
     checks.push({ id: "visual-review", label: "Visual preview", status: "warning", detail: "LibreOffice rendering is unavailable; inspect the DOCX in Word before final use." });
     return 0;
   }
-  const raster = spawnSync("pdftoppm", ["-png", "-r", "110", pdfPath, resolve(directory, "preview")], { encoding: "utf8", timeout: 60_000 });
-  if (raster.status !== 0) {
+  const rasterStatus = await runPreviewCommand("pdftoppm", ["-png", "-r", "110", pdfPath, resolve(directory, "preview")], signal);
+  if (rasterStatus !== 0) {
     checks.push({ id: "visual-review", label: "Visual preview", status: "warning", detail: "The PDF rendered, but page images could not be created." });
     return 0;
   }
@@ -339,6 +392,14 @@ function renderPreview(documentPath: string, directory: string, checks: QualityC
   while (existsSync(/* turbopackIgnore: true */ resolve(directory, `preview-${pages + 1}.png`))) pages += 1;
   checks.push({ id: "visual-review", label: "Rendered preview", status: pages ? "passed" : "warning", detail: pages ? `${pages} page${pages === 1 ? "" : "s"} rendered locally for review.` : "No preview pages were produced." });
   return pages;
+}
+
+export function removeWordArtifact(id: string) {
+  if (!safeId.test(id)) return false;
+  const directory = resolve(artifactsRoot, id);
+  if (!existsSync(/* turbopackIgnore: true */ directory)) return false;
+  rmSync(directory, { recursive: true, force: true });
+  return true;
 }
 
 export function resolveArtifactFile(id: string, filename: string) {
