@@ -1,12 +1,13 @@
+import { createHash } from "node:crypto";
 import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "./advanced-analytical-plan.ts";
 import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan, resolveAnalyticalBoundary } from "./analytical-plan.ts";
 import { compileGroundedAdvancedAnalyticalPlan, compileResolvedAdvancedAnalyticalPlan } from "./analytical-filter-grounding.ts";
-import { analysisNarrationIsGrounded, buildAnalysisNarrationMessages, formatVerifiedAnalysisFallback } from "./conversational-analysis.ts";
+import { auditVerifiedAnalyticalNarration, compileVerifiedAnalyticalNarration, type ResolvedAnalyticalPlan, type VerifiedAnalyticalNarration, type VerifiedAnalyticalNarrationAudit } from "./analytical-narration.ts";
 import { getApprovedDataset, type ApprovedDataset } from "./datasets.ts";
 import { getExpertPackManifest } from "./expert-pack-registry.ts";
 import { type ExpertPackFailureCode, type ExpertPackManifest, type ExpertPackModelResolution, type ExpertPackPermission, type ExpertPackRequest, type ExpertPackResult, type ExpertPackWarningCode, validateExpertPackRequest, validateExpertPackResult } from "./expert-packs.ts";
 import { getConfiguredChatModel } from "./local-runtime-config.ts";
-import { completeJsonWithOllama, completeTextWithOllama } from "./providers/ollama.ts";
+import { completeJsonWithOllama } from "./providers/ollama.ts";
 import { ProviderError, type ChatMessage, type GenerationOptions } from "./providers/types.ts";
 import type { SqlProposal } from "./sql-proposals.ts";
 import { executeReadOnlySql, inspectDatasetIdentity, inspectDatasetSchema, SqlRuntimeError, type DatasetColumn, type SqlExecutionResult } from "./sql-runtime.ts";
@@ -24,7 +25,6 @@ export type AnalyticsPackDependencies = {
   inspectIdentity(path: string, options?: { signal?: AbortSignal }): ReturnType<typeof inspectDatasetIdentity>;
   inspectSchema(path: string, options?: { signal?: AbortSignal }): Promise<DatasetColumn[]>;
   completeJson(messages: ChatMessage[], options?: GenerationOptions): Promise<string>;
-  completeText(messages: ChatMessage[], options?: GenerationOptions): Promise<string>;
   executeSql(input: { approvedDatasetPath: string; query: string; expectedInputSha256?: string; signal?: AbortSignal }): Promise<SqlExecutionResult>;
   configuredModel(): string;
 };
@@ -34,7 +34,6 @@ const defaultDependencies: AnalyticsPackDependencies = {
   inspectIdentity: inspectDatasetIdentity,
   inspectSchema: inspectDatasetSchema,
   completeJson: completeJsonWithOllama,
-  completeText: completeTextWithOllama,
   executeSql: executeReadOnlySql,
   configuredModel: getConfiguredChatModel,
 };
@@ -43,7 +42,16 @@ export type AnalyticsPackOutcome = {
   result: ExpertPackResult;
   trace?: NonNullable<ChatMessage["analysisTrace"]>;
   /** Private evaluator seam; never serialized by the chat route. */
-  diagnostics?: { plan: Record<string, unknown>; proposal: SqlProposal; execution?: SqlExecutionResult };
+  diagnostics?: {
+    plan: Record<string, unknown>;
+    proposal: SqlProposal;
+    execution?: SqlExecutionResult;
+    narration?: {
+      disposition: "trusted-renderer";
+      narrative: VerifiedAnalyticalNarration;
+      audit: VerifiedAnalyticalNarrationAudit;
+    };
+  };
 };
 
 type Usage = {
@@ -126,6 +134,37 @@ function cancelled(error: unknown, signal?: AbortSignal) {
     || error instanceof DOMException && error.name === "AbortError";
 }
 
+function throwIfCancelled(signal?: AbortSignal) {
+  if (!signal?.aborted) return;
+  throw signal.reason instanceof Error ? signal.reason : new DOMException("The Analytics request was stopped.", "AbortError");
+}
+
+function queryDigest(query: string) {
+  return createHash("sha256").update(query.trim().replace(/;\s*$/, "")).digest("hex");
+}
+
+function validateExecutionReceipt(
+  result: SqlExecutionResult,
+  identity: { filename: string; sha256: string; sizeBytes: number },
+  query: string,
+) {
+  const receipt = result?.receipt;
+  const valid = result && Array.isArray(result.columns) && result.columns.every((column) => typeof column === "string")
+    && Array.isArray(result.rows) && result.rows.every((row) => Array.isArray(row))
+    && receipt?.engine === "duckdb"
+    && receipt.input?.filename === identity.filename
+    && receipt.input?.sha256 === identity.sha256
+    && receipt.input?.sizeBytes === identity.sizeBytes
+    && receipt.querySha256 === queryDigest(query)
+    && receipt.readOnly === true
+    && receipt.externalAccess === false
+    && Number.isInteger(receipt.rowLimit) && receipt.rowLimit > 0 && receipt.rowLimit <= 200
+    && Number.isInteger(receipt.returnedRows) && receipt.returnedRows === result.rows.length && receipt.returnedRows <= receipt.rowLimit
+    && typeof receipt.truncated === "boolean" && (!receipt.truncated || receipt.returnedRows === receipt.rowLimit)
+    && Number.isFinite(receipt.durationMs) && receipt.durationMs >= 0;
+  if (!valid) throw new SqlRuntimeError("tool-failure", "The local analytical runtime returned evidence that did not match the approved dataset and query.");
+}
+
 function failureCode(error: unknown) {
   return error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : null;
 }
@@ -180,22 +219,31 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
     usage.grantIds.add(datasetGrant.id);
     phase = "identity";
     const identity = await dependencies.inspectIdentity(dataset.path, { signal: options.signal });
+    throwIfCancelled(options.signal);
 
     usage.permissions.add("local-runtime:execute");
     usage.grantIds.add(runtimeGrant.id);
     usage.tools.add("duckdb-readonly");
     phase = "schema";
     const columns = await dependencies.inspectSchema(dataset.path, { signal: options.signal });
-    const executeGrounding = (query: string) => dependencies.executeSql({ approvedDatasetPath: dataset.path, query, expectedInputSha256: identity.sha256, signal: options.signal });
+    throwIfCancelled(options.signal);
+    const executeGrounding = async (query: string) => {
+      const grounded = await dependencies.executeSql({ approvedDatasetPath: dataset.path, query, expectedInputSha256: identity.sha256, signal: options.signal });
+      throwIfCancelled(options.signal);
+      validateExecutionReceipt(grounded, identity, query);
+      return grounded;
+    };
 
     phase = "planning";
     const advanced = shouldUseAdvancedAnalyticalPlan(request.currentRequest);
     const resolved = advanced ? await compileResolvedAdvancedAnalyticalPlan(request.currentRequest, columns, dataset.path, executeGrounding) : null;
     let proposal: SqlProposal;
     let semanticPlan: Record<string, unknown>;
+    let resolvedPlan: ResolvedAnalyticalPlan | undefined;
     if (advanced) {
       if (resolved?.proposal) {
         proposal = resolved.proposal;
+        resolvedPlan = { kind: "advanced", plan: resolved.plan };
         semanticPlan = resolved.plan as unknown as Record<string, unknown>;
       }
       else {
@@ -205,12 +253,14 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
           request.currentRequest, columns, dataset.path, executeGrounding,
         );
         proposal = compiled.proposal;
+        resolvedPlan = { kind: "advanced", plan: compiled.plan };
         semanticPlan = compiled.plan as unknown as Record<string, unknown>;
       }
     } else {
       const boundary = resolveAnalyticalBoundary(request.currentRequest);
       if (boundary) {
         semanticPlan = boundary as unknown as Record<string, unknown>;
+        resolvedPlan = { kind: "basic", plan: boundary };
         proposal = compileAnalyticalPlan(boundary, columns);
       }
       else {
@@ -220,10 +270,12 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
           { signal: options.signal, modelId: configuredModel, jsonSchema: buildAnalyticalPlanSchema(request.conversation, dataset, columns), numPredict: 700 },
         )), request.currentRequest, columns);
         semanticPlan = plan as unknown as Record<string, unknown>;
+        resolvedPlan = { kind: "basic", plan };
         proposal = compileAnalyticalPlan(plan, columns);
       }
     }
 
+    throwIfCancelled(options.signal);
     if (proposal.action !== "query") {
       return checkedOutcome(request, {
         requestId: request.requestId,
@@ -239,24 +291,18 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
       }, undefined, { plan: semanticPlan, proposal });
     }
 
+    if (!resolvedPlan) throw new Error("The Analytics Pack lost its typed analytical plan.");
     phase = "execution";
     const result = await dependencies.executeSql({ approvedDatasetPath: dataset.path, query: proposal.query, expectedInputSha256: identity.sha256, signal: options.signal });
-    let answer: string;
+    throwIfCancelled(options.signal);
+    validateExecutionReceipt(result, identity, proposal.query);
     phase = "narration";
-    usage.model = model;
+    const narrative = compileVerifiedAnalyticalNarration(resolvedPlan, result);
+    const narrativeAudit = auditVerifiedAnalyticalNarration(narrative, resolvedPlan, result);
+    if (!narrativeAudit.valid) throw new Error(`The trusted analytical renderer failed closed: ${narrativeAudit.failures.join(", ")}`);
+    const answer = narrative.answer;
     const warnings: Array<{ code: ExpertPackWarningCode; message: string }> = [];
-    try {
-      const narrated = await dependencies.completeText(buildAnalysisNarrationMessages(request.currentRequest, proposal, result), { signal: options.signal, modelId: configuredModel, numPredict: 700 });
-      if (analysisNarrationIsGrounded(narrated, result, { query: proposal.query })) answer = narrated;
-      else {
-        answer = formatVerifiedAnalysisFallback(result);
-        warnings.push({ code: "narration-grounding-rejected", message: "The model narration failed the result-grounding audit, so Rangabot used a deterministic verified fallback." });
-      }
-    } catch (error) {
-      if (cancelled(error, options.signal)) throw error;
-      answer = formatVerifiedAnalysisFallback(result);
-      warnings.push({ code: "model-narration-unavailable", message: "The model narration was unavailable, so Rangabot used a deterministic verified fallback." });
-    }
+    throwIfCancelled(options.signal);
 
     const trace: NonNullable<ChatMessage["analysisTrace"]> = {
       engine: "duckdb",
@@ -269,8 +315,7 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
       querySha256: result.receipt.querySha256,
       packId: manifest.id,
       packVersion: manifest.version,
-      modelMode: request.modelAssignment.mode,
-      modelId: configuredModel,
+      ...(usage.model ? { modelMode: request.modelAssignment.mode, modelId: configuredModel } : {}),
     };
     return checkedOutcome(request, {
       requestId: request.requestId,
@@ -283,14 +328,14 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
         kind: "table",
         source: "local-execution",
         locator: `duckdb:${result.receipt.input.sha256}:${result.receipt.querySha256}`,
-        claims: [`Returned ${result.receipt.returnedRows} verified row${result.receipt.returnedRows === 1 ? "" : "s"}${result.receipt.truncated ? " within the runtime row limit" : ""}.`],
+        claims: narrative.claims,
         localExecution: {
           engine: "duckdb",
           resourceId: datasetId,
           inputSha256: result.receipt.input.sha256,
           querySha256: result.receipt.querySha256,
-          readOnly: true,
-          externalAccess: false,
+          readOnly: result.receipt.readOnly,
+          externalAccess: result.receipt.externalAccess,
           rowLimit: result.receipt.rowLimit,
           returnedRows: result.receipt.returnedRows,
           truncated: result.receipt.truncated,
@@ -300,7 +345,7 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
       modelBackgroundClaims: [],
       warnings,
       receipt: receipt(usage),
-    }, trace, { plan: semanticPlan, proposal, execution: result });
+    }, trace, { plan: semanticPlan, proposal, execution: result, narration: { disposition: "trusted-renderer", narrative, audit: narrativeAudit } });
   } catch (error) {
     return mappedFailure(request, error, phase, usage, options.signal);
   }

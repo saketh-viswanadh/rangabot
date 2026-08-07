@@ -9,6 +9,36 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Improved
 
+- Replaced Analytics' failed free-form result narrator with a model-independent,
+  typed narration contract. A diagnostic run on unchanged theatre v5 accepted
+  0/11 model drafts: all 11 contained unsupported language, five invented
+  limitations, and six introduced unsupported numbers. The new path retains the
+  validated semantic plan, binds exact result cells and operation-defined units,
+  renders through trusted code, and performs no second model call.
+- Closed the issues found by two independent hostile reviews before merge.
+  Analytics now renders every verified filter or explicitly discloses a display
+  bound; separates base, denominator and numerator scopes; enforces exact output
+  aliases, cardinality and row shape; bounds rows, columns, filters and long
+  cells visibly; disambiguates qualified headers; expresses period bounds as
+  half-open; and neutralizes Markdown images, links, code and email autolinks
+  from local data. A real ReactMarkdown render test confirms hostile cell content
+  creates neither an anchor nor an image.
+- Bound every grounding and final SQL receipt to the preflight dataset identity
+  and exact compiled-query hash inside the pack. Read-only and external-access
+  flags are copied only after validation. Abort is rechecked after every awaited
+  boundary, so a dependency that returns after Stop cannot turn cancellation
+  into success.
+- Added frozen zero-model-call narration evaluation: 44/44 independent canonical
+  expectations pass and 222/222 forged narrations or invalid output shapes are
+  rejected. The complete deterministic project suite is 270/270. These results
+  prove bounded renderer integrity, not broad analytical planning, statistical
+  interpretation, cross-model planning quality or blind human usefulness.
+- On clean implementation commit `45d3ff1`, unchanged astronomy v4 and theatre
+  v5 regressions each pass 12/12 with zero evaluator errors and 11/11 valid
+  trusted narrations. Theatre v5 mean/median/P95 latency fell from
+  5,014.8/5,023.5/8,018 ms on the preserved free-form baseline to
+  210.1/221/237 ms, with no second narration model call. This is regression and
+  latency evidence, not a new independent transfer result.
 - Repaired the two remaining Analytics semantic failures without adding domain,
   question, value or model-specific production rules. Distinct populations now
   choose their qualifying relation only after local categorical grounding, using
@@ -38,6 +68,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Architectural decisions
 
+- Advanced the experimental Analytics reference to `0.2.0`. Models may still
+  resolve a typed plan when deterministic semantics are insufficient, but no
+  model—regardless of size—is trusted to author calculated facts, units,
+  limitations or execution provenance. Future richer interpretation may select
+  from existing fact IDs only and requires a separate frozen qualification gate.
 - Advanced the Expert Pack Contract to v1.3 and added Analytics `0.1.0` as the
   first experimental runtime reference. Mind & Memory—not the pack—verifies the
   saved conversation's exact dataset attachment, constructs bounded canonical
@@ -57,10 +92,10 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   now covers hashing, import, preparation and execution, so Stop and timeout do
   not depend on a native interrupt promise settling. In-flight cancellation and
   timeout tests exercise a query only after execution begins.
-- Preserved the previous deterministic analytical intent gate and route order.
-  Successful answers retain the numeric narration audit and verified-table
-  fallback while adding pack/version/model provenance to backward-compatible
-  execution traces. Synthetic dispatch tests lock deterministic answer, approved
+- Preserved the previous deterministic analytical intent gate and route order in
+  the initial `0.1.0` adapter. That historical version used the numeric narration
+  audit and verified-table fallback; `0.2.0` supersedes only its answer-rendering
+  authority while retaining pack/version/model provenance. Synthetic dispatch tests lock deterministic answer, approved
   memory, code-allowlist and Analytics precedence. The HTTP and client seams
   validate traces, and mismatched evidence/trace provenance fails closed.
   Analytics remains experimental: the separately frozen isomorphic v5 check

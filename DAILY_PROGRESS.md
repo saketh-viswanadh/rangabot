@@ -1,5 +1,43 @@
 # Daily progress
 
+## 2026-08-07 — Trusted analytical narration and execution binding
+
+- Captured the actual v5 failure baseline before changing production behavior.
+  The unchanged pack attempted 11 free-form narrations and accepted none: 11
+  unsupported-language, five false-limitation and six unsupported-number
+  failures. The visible fallback kept answers safe but did not prove useful
+  narration.
+- Removed unrestricted result prose from Analytics `0.2.0`. The pack now keeps
+  the basic/advanced plan typed through execution, derives exact output grain,
+  aliases, cells, units and scope in trusted code, and structurally audits the
+  canonical answer. A local model is still available for unresolved typed
+  planning; it cannot author calculated facts or limitations.
+- Red-teamed the first renderer draft before accepting it. Fixed silent
+  fourth-filter loss, ambiguous conditional populations, silent cell shortening,
+  unbounded columns, active Markdown/image/email injection, wrong-column units,
+  generic-null wording, acronym/colliding headers, half-open period wording,
+  implementation-enum leakage, unexpected aliases/cardinality and late-cancel
+  races.
+- Added pack-level receipt binding. Grounding and final executions must match the
+  preflight input fingerprint and the exact compiled-query hash; unsafe or
+  inconsistent receipts fail without evidence. Cancellation is terminal even if
+  an injected dependency ignores Abort and returns.
+- Froze 44 public-safe canonical narration cases covering all nine advanced
+  operations and all five basic aggregates, plus scope, bounding, Unicode and
+  Markdown safety. All 44 pass. The audit rejects 222/222 forged outputs and six
+  invalid result shapes without a model call. ReactMarkdown rendering confirms a
+  hostile local cell creates no link or image.
+- The full deterministic suite passes 270/270. On clean implementation commit
+  `45d3ff1`, astronomy v4 and theatre v5 each remain 12/12 with zero evaluator
+  errors, 11/11 structurally valid trusted narrations and zero model-authored
+  narration attempts. V5 mean/median/P95 latency is 210.1/221/237 ms, compared
+  with 5,014.8/5,023.5/8,018 ms on the preserved free-form baseline at
+  `b8a3938`—a 95.8% mean-latency reduction on the same frozen suite. These later
+  runs are regression evidence, not new transfer qualification.
+- Honest boundary: this improves exact presentation, provenance and latency. It
+  does not prove broad planning transfer, causal/statistical interpretation,
+  cross-model planning quality, critical repetitions or blind human usefulness.
+
 ## 2026-08-07 — Model-independent analytical semantic repair
 
 - Froze the theatre v5 transfer definition at commit `f877d77` before changing

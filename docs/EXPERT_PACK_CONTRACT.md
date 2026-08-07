@@ -84,7 +84,7 @@ Automatic selection follows this order:
 No automatic choice may download a model, bypass a memory-fit guard or weaken a
 qualification threshold.
 
-The Analytics `0.1.0` reference implements the contract surface but does not yet
+The Analytics `0.2.0` reference implements the contract surface but does not yet
 implement saved per-pack selection or model switching. `General` explicitly
 passes the configured local model to the provider. `Automatic` currently reuses
 that same model and remains experimental. `Custom` fails before dataset or model
@@ -133,9 +133,9 @@ execution evidence additionally binds the approved dataset id, input hash,
 query hash, read-only and no-external-access flags, row limit, returned row count,
 truncation and duration. Model background is kept separate from evidence and
 requires an inspectable model receipt. A successful result must contain
-evidence. Typed warnings reveal when model narration was unavailable or rejected
-by the grounding audit instead of silently presenting deterministic fallback as
-model prose. Receipts disclose exact grant ids, permissions, tools, resolved
+evidence. Typed warnings remain available for packs with a declared fallback;
+the Analytics `0.2.0` reference instead authorizes only its trusted renderer and
+emits no model-narration disposition. Receipts disclose exact grant ids, permissions, tools, resolved
 model and model switches. Stable errors distinguish
 permission, capability, qualification, resource, timeout, cancellation, tool
 and output failures.
@@ -186,7 +186,7 @@ The first reference conversion must prove that the pack boundary does not
 duplicate memory, loosen dataset permissions, trust model-authored SQL or reduce
 the unchanged analytical benchmark.
 
-## Analytics reference implementation 0.1.0
+## Analytics reference implementation 0.2.0
 
 The bundled Analytics manifest is immutable, local-only and honestly marked
 `experimental`. The deterministic chat intent gate and route precedence are
@@ -200,7 +200,8 @@ the scoped request. The adapter then:
 4. routes final and categorical-grounding queries through one injected,
    cancellable DuckDB adapter with the pinned input hash;
 5. accepts only trusted-code compiled read-only SQL;
-6. numerically audits narration and falls back to the verified result table; and
+6. compiles typed narrative facts and renders them through the audited trusted
+   narration contract; and
 7. returns a validated result, evidence receipt and backward-compatible trace.
 
 DuckDB runs behind an isolated child-process boundary. Its absolute deadline
@@ -212,9 +213,10 @@ model identity match the validated result before exposing provenance to the UI.
 The client applies the same bounded trace validator before saving it.
 
 The chat route accepts the validated proposal as the response without a second
-model synthesis step. This preserves the established analytical answer behavior
-and latency while keeping authority in the control plane. It is a deliberately
-narrow v0.1 behavior-preserving adapter, not autonomous pack collaboration.
+free-form model synthesis step. Version 0.2 retains typed plan semantics through
+answer rendering, derives units only from trusted operations, and makes result
+claims match the execution evidence. It is a deliberately narrow adapter, not
+autonomous pack collaboration.
 
 The sealed astronomy transfer suite was rerun through the complete pack adapter
 without changing its 12 cases, expected semantic plans or gold results. A final
@@ -253,9 +255,22 @@ audits, all 11 executed-result comparisons and zero evaluator errors; latency wa
 profile. Because v5 is structurally isomorphic to v4, this meets only the
 manifest's 90% single-run overall-score threshold on a precommitted domain-and-
 name transfer check. All 11 executed answers still required the visible verified
-fallback after narration rejection. Broad transfer, critical repetitions, cross-
-model evidence, human usefulness and narration quality therefore remain open,
-and Analytics `0.1.0` stays experimental.
+fallback after narration rejection. A later diagnostic baseline preserved the
+same 0/11 free-form acceptance and classified the failures before that authoring
+path was retired. Analytics `0.2.0` now uses the trusted narration contract;
+its frozen renderer suite passes 44/44 canonical cases and rejects 222/222
+adversarial mutations and invalid shapes without a model call. The pack also
+binds final and grounding receipts to the approved input and exact query, and a
+late cancellation cannot become success. Broad planning transfer, critical
+repetitions, cross-model planning evidence, and blind human usefulness remain
+open, so Analytics stays experimental.
+
+On clean implementation commit `45d3ff1`, unchanged v4 and v5 regressions each
+pass 12/12 with zero evaluator errors and 11/11 structurally valid trusted
+narrations. V5 mean/median/P95 latency is 210.1/221/237 ms, versus
+5,014.8/5,023.5/8,018 ms on the preserved free-form baseline at `b8a3938`.
+This later same-suite evidence demonstrates non-regression and the cost removed
+with the second narration model call; it is not a new transfer qualification.
 
 ## Deliberately deferred
 

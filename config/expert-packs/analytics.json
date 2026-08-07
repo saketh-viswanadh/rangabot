@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "analytics",
   "name": "Analytics",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "summary": "Analyse explicitly attached local data with bounded read-only execution and inspectable evidence.",
   "maturity": "experimental",
   "capabilities": [
@@ -42,7 +42,7 @@
   },
   "qualification": {
     "suiteId": "analytics-pack",
-    "suiteVersion": "0.1.0",
+    "suiteVersion": "0.2.0",
     "minimumOverallPassRate": 0.9,
     "minimumCategoryPassRate": 0.8,
     "requiredCriticalPassRate": 1,

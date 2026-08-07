@@ -43,7 +43,7 @@ function dependencies(overrides: Partial<AnalyticsChatDependencies> = {}) {
       state.ran += 1;
       return {
         result: successfulResult(request),
-        trace: { engine: "duckdb", dataset: "sample.duckdb", query: sql, returnedRows: 2, truncated: false, durationMs: 10, inputSha256: "a".repeat(64), querySha256, packId: "analytics", packVersion: "0.1.0", modelMode: "general", modelId: "local:3b" },
+        trace: { engine: "duckdb", dataset: "sample.duckdb", query: sql, returnedRows: 2, truncated: false, durationMs: 10, inputSha256: "a".repeat(64), querySha256, packId: request.packId, packVersion: request.packVersion, modelMode: "general", modelId: "local:3b" },
       };
     },
     ...overrides,
@@ -87,7 +87,7 @@ test("propagates the validated response, trace, and typed fallback disposition",
     result.warnings = [{ code: "narration-grounding-rejected", message: "Fallback used." }];
     return {
       result,
-      trace: { engine: "duckdb", dataset: "sample.duckdb", query: sql, returnedRows: 2, truncated: false, durationMs: 10, inputSha256: "a".repeat(64), querySha256, packId: "analytics", packVersion: "0.1.0", modelMode: "general", modelId: "local:3b" },
+      trace: { engine: "duckdb", dataset: "sample.duckdb", query: sql, returnedRows: 2, truncated: false, durationMs: 10, inputSha256: "a".repeat(64), querySha256, packId: request.packId, packVersion: request.packVersion, modelMode: "general", modelId: "local:3b" },
     } satisfies AnalyticsPackOutcome;
   } });
   const response = await handleAnalyticsChat({ messages, datasetId: "dataset-a", conversationId: "conversation-a" }, fixture.value);
@@ -99,10 +99,26 @@ test("propagates the validated response, trace, and typed fallback disposition",
   assert.equal(trace.modelId, "local:3b");
 });
 
+test("accepts exact execution provenance when no generative model was invoked", async () => {
+  const fixture = dependencies({ runPack: async (request) => {
+    const result = successfulResult(request);
+    delete result.receipt.model;
+    return {
+      result,
+      trace: { engine: "duckdb", dataset: "sample.duckdb", query: sql, returnedRows: 2, truncated: false, durationMs: 10, inputSha256: "a".repeat(64), querySha256, packId: request.packId, packVersion: request.packVersion },
+    } satisfies AnalyticsPackOutcome;
+  } });
+  const response = await handleAnalyticsChat({ messages, datasetId: "dataset-a", conversationId: "conversation-a" }, fixture.value);
+  assert.equal(response?.status, 200);
+  const trace = JSON.parse(decodeURIComponent(response?.headers.get("X-Rangabot-Analysis") ?? ""));
+  assert.equal(trace.modelId, undefined);
+  assert.equal(trace.modelMode, undefined);
+});
+
 test("fails closed instead of emitting a trace inconsistent with verified evidence", async () => {
   const fixture = dependencies({ runPack: async (request) => ({
     result: successfulResult(request),
-    trace: { engine: "duckdb", dataset: "sample.duckdb", query: sql, returnedRows: 1, truncated: false, durationMs: 10, inputSha256: "a".repeat(64), querySha256, packId: "analytics", packVersion: "0.1.0", modelMode: "general", modelId: "local:3b" },
+    trace: { engine: "duckdb", dataset: "sample.duckdb", query: sql, returnedRows: 1, truncated: false, durationMs: 10, inputSha256: "a".repeat(64), querySha256, packId: request.packId, packVersion: request.packVersion, modelMode: "general", modelId: "local:3b" },
   }) });
   const response = await handleAnalyticsChat({ messages, datasetId: "dataset-a", conversationId: "conversation-a" }, fixture.value);
   assert.equal(response?.status, 500);

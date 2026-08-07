@@ -37,11 +37,13 @@ export function analyticsTraceMatchesOutcome(outcome: AnalyticsPackOutcome) {
   const trace = outcome.trace;
   const execution = outcome.result.evidence.find((item) => item.source === "local-execution")?.localExecution;
   const model = outcome.result.receipt.model;
-  if (!isValidAnalysisTrace(trace) || !execution || !model) return false;
+  if (!isValidAnalysisTrace(trace) || !execution) return false;
+  const modelMatches = model
+    ? trace.modelMode === model.requested.mode && trace.modelId === model.resolvedModelId
+    : trace.modelMode === undefined && trace.modelId === undefined;
   return trace.packId === outcome.result.packId
     && trace.packVersion === outcome.result.packVersion
-    && trace.modelMode === model.requested.mode
-    && trace.modelId === model.resolvedModelId
+    && modelMatches
     && trace.inputSha256 === execution.inputSha256
     && trace.querySha256 === execution.querySha256
     && createHash("sha256").update(trace.query).digest("hex") === trace.querySha256

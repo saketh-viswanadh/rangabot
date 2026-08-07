@@ -13,9 +13,8 @@ import type { ApprovedDataset } from "../lib/datasets.ts";
 import { getExpertPackManifest } from "../lib/expert-pack-registry.ts";
 import { validateExpertPackResult } from "../lib/expert-packs.ts";
 import { getConfiguredChatModel, getConfiguredContextTokens, getLocalOllamaBaseUrl } from "../lib/local-runtime-config.ts";
-import { completeJsonWithOllama, completeTextWithOllama } from "../lib/providers/ollama.ts";
+import { completeJsonWithOllama } from "../lib/providers/ollama.ts";
 import type { ChatMessage } from "../lib/providers/types.ts";
-import { analysisNarrationIsGrounded, formatVerifiedAnalysisFallback } from "../lib/conversational-analysis.ts";
 import type { SqlProposal } from "../lib/sql-proposals.ts";
 import { executeReadOnlySql, inspectDatasetIdentity, inspectDatasetSchema, type SqlExecutionResult } from "../lib/sql-runtime.ts";
 
@@ -116,12 +115,12 @@ function packExecutionAudit(input: {
   const expectedPermissions = ["approved-dataset:read", "local-runtime:execute"];
   const response = input.outcome.result.responseProposal ?? "";
   const warnings = input.outcome.result.warnings;
-  const fallbackWarning = warnings.length === 1 && ["model-narration-unavailable", "narration-grounding-rejected"].includes(warnings[0].code);
+  const narration = input.outcome.diagnostics?.narration;
   const answerPass = input.candidate
-    ? fallbackWarning
-      ? response === formatVerifiedAnalysisFallback(input.candidate)
-      : warnings.length === 0
-        && analysisNarrationIsGrounded(response, input.candidate, { query: input.proposal?.query })
+    ? warnings.length === 0
+      && narration?.disposition === "trusted-renderer"
+      && narration.audit.valid
+      && response === narration.narrative.answer
     : input.outcome.result.status === "clarification"
       && response === input.outcome.result.clarification;
   const terminalAnswerPass = input.outcome.result.status === "failure" || input.outcome.result.status === "cancelled"
@@ -140,12 +139,17 @@ function packExecutionAudit(input: {
       && evidence.durationMs === input.candidate.receipt.durationMs
       && evidence.readOnly === true
       && evidence.externalAccess === false
+      && narration?.disposition === "trusted-renderer"
+      && JSON.stringify(input.outcome.result.evidence[0].claims) === JSON.stringify(narration.narrative.claims)
     : input.outcome.result.evidence.length === 0;
+  const model = input.outcome.result.receipt.model;
+  const trace = input.outcome.trace;
   const receiptPass = exactStringSet(input.outcome.result.receipt.permissionsUsed, expectedPermissions)
     && exactStringSet(input.outcome.result.receipt.grantIdsUsed, expectedGrants)
     && exactStringSet(input.outcome.result.receipt.toolsUsed, ["duckdb-readonly"])
     && input.outcome.result.receipt.modelSwitches === 0
-    && (!input.candidate || input.outcome.result.receipt.model?.resolvedModelId === getConfiguredChatModel());
+    && (!model || model.resolvedModelId === getConfiguredChatModel())
+    && (model ? trace?.modelId === model.resolvedModelId && trace.modelMode === model.requested.mode : trace?.modelId === undefined && trace?.modelMode === undefined);
   return {
     envelopePass: envelope.valid,
     envelopeErrors: envelope.errors,
@@ -155,10 +159,11 @@ function packExecutionAudit(input: {
     responseMode: input.outcome.result.status === "failure" || input.outcome.result.status === "cancelled"
       ? `terminal-${input.outcome.result.status}`
       : input.outcome.result.status === "clarification" ? "clarification"
-      : warnings.length === 0 ? "model-grounded" : warnings[0].code,
+      : narration?.disposition ?? (warnings[0]?.code || "missing-narration"),
     warnings,
     resultStatus: input.outcome.result.status,
     resolvedModelId: input.outcome.result.receipt.model?.resolvedModelId ?? null,
+    narration: input.outcome.diagnostics?.narration ?? null,
   };
 }
 
@@ -229,7 +234,6 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
           inspectIdentity: (path, inspectionOptions) => inspectDatasetIdentity(path, inspectionOptions),
           inspectSchema: (path, inspectionOptions) => inspectDatasetSchema(path, inspectionOptions),
           completeJson: (input, generationOptions) => completeJsonWithOllama(input, { ...generationOptions, timeoutMs: 180_000 }),
-          completeText: (input, generationOptions) => completeTextWithOllama(input, { ...generationOptions, timeoutMs: 180_000 }),
           executeSql: executeReadOnlySql,
           configuredModel: getConfiguredChatModel,
         });
@@ -291,6 +295,18 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
     failed: results.filter((item) => !item.passed).length,
     executionErrors: results.filter((item) => item.action === "error").length,
     latency: latencySummary(latencies),
+    narration: (() => {
+      const narrations = results.flatMap((item) => "packAudit" in item && item.packAudit?.narration ? [item.packAudit.narration] : []);
+      const failureCounts: Record<string, number> = {};
+      for (const narration of narrations) for (const failure of narration.audit.failures) failureCounts[failure] = (failureCounts[failure] ?? 0) + 1;
+      return {
+        contract: "trusted-renderer",
+        rendered: narrations.length,
+        structurallyValid: narrations.filter((item) => item.audit.valid).length,
+        modelAuthoredAttempts: 0,
+        failureCounts,
+      };
+    })(),
   };
   writeFileSync(outputPath, JSON.stringify({ schemaVersion: 3, suite: definition.suite, frozenAt: definition.frozenAt, mode, startedAt, completedAt, provenance, summary, cases: results }, null, 2));
   const passed = summary.passed;

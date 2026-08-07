@@ -10,8 +10,10 @@ import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalytic
 import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
 import { ANALYTICAL_EVALUATION_TOLERANCE, compareSqlResults } from "../lib/analytical-result-comparison.ts";
 import { compileGroundedAdvancedAnalyticalPlan, compileResolvedAdvancedAnalyticalPlan } from "../lib/analytical-filter-grounding.ts";
-import { analysisNarrationIsGrounded, buildAnalysisNarrationMessages, formatVerifiedAnalysisFallback, shouldRunSqlAnalysis } from "../lib/conversational-analysis.ts";
+import { auditVerifiedAnalyticalNarration, compileVerifiedAnalyticalNarration, type ResolvedAnalyticalPlan } from "../lib/analytical-narration.ts";
+import { shouldRunSqlAnalysis } from "../lib/conversational-analysis.ts";
 import { buildConversationMessages } from "../lib/conversation-orchestration.ts";
+import type { SqlProposal } from "../lib/sql-proposals.ts";
 
 type Evaluation = {
   id: string;
@@ -148,13 +150,23 @@ async function runCase(testCase: ConversationalSqlCase, dataset: ApprovedDataset
   const messages: ChatMessage[] = [{ role: "user", content: testCase.question }];
   let sql: string | null = null;
   let candidateResult: SqlExecutionResult | null = null;
+  let narrationVerified = false;
   try {
     let answer: string;
     if (shouldRunSqlAnalysis(messages)) {
-      const resolved = shouldUseAdvancedAnalyticalPlan(testCase.question) ? await compileResolvedAdvancedAnalyticalPlan(testCase.question, schema, databasePath) : null;
-      const proposal = shouldUseAdvancedAnalyticalPlan(testCase.question)
-        ? resolved?.proposal ?? (await compileGroundedAdvancedAnalyticalPlan(await completeJsonWithOllama(buildAdvancedAnalyticalMessages(messages, dataset, schema), { jsonSchema: buildAdvancedAnalyticalSchema(messages, dataset, schema), numPredict: 900, timeoutMs: 180_000 }), testCase.question, schema, databasePath)).proposal
-        : compileAnalyticalPlan(resolveAnalyticalBoundary(testCase.question) ?? normalizeAnalyticalPlan(parseAnalyticalPlan(await completeJsonWithOllama(buildAnalyticalPlanMessages(messages, dataset, schema), { jsonSchema: buildAnalyticalPlanSchema(messages, dataset, schema), numPredict: 700, timeoutMs: 180_000 })), testCase.question, schema), schema);
+      let resolvedPlan: ResolvedAnalyticalPlan;
+      let proposal: SqlProposal;
+      if (shouldUseAdvancedAnalyticalPlan(testCase.question)) {
+        const compiled = await compileResolvedAdvancedAnalyticalPlan(testCase.question, schema, databasePath)
+          ?? await compileGroundedAdvancedAnalyticalPlan(await completeJsonWithOllama(buildAdvancedAnalyticalMessages(messages, dataset, schema), { jsonSchema: buildAdvancedAnalyticalSchema(messages, dataset, schema), numPredict: 900, timeoutMs: 180_000 }), testCase.question, schema, databasePath);
+        proposal = compiled.proposal;
+        resolvedPlan = { kind: "advanced", plan: compiled.plan };
+      } else {
+        const plan = resolveAnalyticalBoundary(testCase.question)
+          ?? normalizeAnalyticalPlan(parseAnalyticalPlan(await completeJsonWithOllama(buildAnalyticalPlanMessages(messages, dataset, schema), { jsonSchema: buildAnalyticalPlanSchema(messages, dataset, schema), numPredict: 700, timeoutMs: 180_000 })), testCase.question, schema);
+        proposal = compileAnalyticalPlan(plan, schema);
+        resolvedPlan = { kind: "basic", plan };
+      }
       if (proposal.action !== "query") {
         answer = proposal.explanation;
         const interpretationCorrect = testCase.expectation !== "execute" && boundaryAnswerCorrect(testCase, answer);
@@ -162,8 +174,11 @@ async function runCase(testCase: ConversationalSqlCase, dataset: ApprovedDataset
       }
       sql = proposal.query;
       candidateResult = await executeReadOnlySql({ approvedDatasetPath: databasePath, query: sql });
-      const narrated = await completeTextWithOllama(buildAnalysisNarrationMessages(testCase.question, proposal, candidateResult), { numPredict: 700, timeoutMs: 180_000 });
-      answer = analysisNarrationIsGrounded(narrated, candidateResult, { query: proposal.query }) ? narrated : formatVerifiedAnalysisFallback(candidateResult);
+      const narration = compileVerifiedAnalyticalNarration(resolvedPlan, candidateResult);
+      const narrationAudit = auditVerifiedAnalyticalNarration(narration, resolvedPlan, candidateResult);
+      if (!narrationAudit.valid) throw new Error(`The trusted analytical renderer failed: ${narrationAudit.failures.join(", ")}`);
+      answer = narration.answer;
+      narrationVerified = narrationAudit.valid;
     } else {
       answer = await completeTextWithOllama(buildConversationMessages(messages).messages, { numPredict: 500, timeoutMs: 180_000 });
     }
@@ -176,9 +191,7 @@ async function runCase(testCase: ConversationalSqlCase, dataset: ApprovedDataset
     if (!testCase.goldSql) throw new Error("Executable fixture has no gold SQL.");
     const gold = await executeReadOnlySql({ approvedDatasetPath: databasePath, query: testCase.goldSql });
     const resultCorrect = Boolean(candidateResult && compareSqlResults(candidateResult, gold, { candidateSql: sql!, referenceSql: testCase.goldSql, ...ANALYTICAL_EVALUATION_TOLERANCE }).passed);
-    const interpretationCorrect = Boolean(candidateResult && resultCorrect
-      && (answer === formatVerifiedAnalysisFallback(candidateResult) || analysisNarrationIsGrounded(answer, candidateResult, { query: sql ?? undefined }))
-      && answer.trim());
+    const interpretationCorrect = Boolean(candidateResult && resultCorrect && narrationVerified);
     return { id: testCase.id, difficulty: testCase.difficulty, context: testCase.context, expectation: testCase.expectation, question: testCase.question, expectedAnswer: resultTable(gold), rangabotAnswer: answer, sql, resultCorrect, interpretationCorrect, passed: resultCorrect && interpretationCorrect, latencyMs: Date.now() - started };
   } catch (error) {
     let expectedAnswer = testCase.expectedAnswer ?? "";
@@ -203,7 +216,7 @@ function markdownReport(results: Evaluation[]) {
     "",
     `**Overall:** ${passed}/${results.length} (${(100 * passed / results.length).toFixed(1)}%)`,
     "",
-    "This report uses a deterministic synthetic DuckDB database. A pass requires the generated SQL result to match an independently executed gold query and the answer to remain numerically grounded. Clarification and unavailable-context cases must state the appropriate boundary.",
+    "This report uses a deterministic synthetic DuckDB database. A pass requires the generated SQL result to match an independently executed gold query and the answer to pass the trusted narration contract. The separate frozen narration suite independently checks labels, units, scope, result shape, completeness and Markdown safety. Clarification and unavailable-context cases must state the appropriate boundary.",
     "",
     "## Summary",
     "",

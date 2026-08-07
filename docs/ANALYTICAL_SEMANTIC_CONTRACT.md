@@ -112,9 +112,13 @@ were preflighted without a model. Its first clean Expert Pack run at commit
 zero evaluator errors. V5 is structurally isomorphic to v4, so this meets the
 manifest's 90% single-run overall-score threshold on a precommitted domain-and-
 name transfer check, not broad independent generalization. It does not establish
-complete Analytics Pack qualification: every generated query narration was
-rejected, required critical repetitions were not run, cross-model evidence is
-absent and human usefulness is unmeasured.
+complete Analytics Pack qualification: every free-form query narration was
+rejected, required critical repetitions were not run, cross-model planning
+evidence is absent and human usefulness is unmeasured. Analytics `0.2.0`
+therefore retired free-form result prose. The separately frozen trusted-renderer
+suite now checks operation labels, exact aliases/cardinality, units, scope,
+display bounds and Markdown safety without a model call; it does not change this
+suite's planning/generalization limits.
 
 Scope preservation is an invariant, not a best effort. If trusted auditing
 cannot verify every denominator filter, the plan must clarify; it may not remove
@@ -129,3 +133,7 @@ as regression checks, with all pack audits and executed-result comparisons
 passing and zero evaluator errors. All 11 executed narrations in each suite were
 again rejected. These later runs verify non-regression only; they do not replace
 v5's first retained precommitted result or broaden the qualification claim.
+The free-form authoring path was then retired. Clean Analytics `0.2.0`
+implementation commit `45d3ff1` retains 12/12 on both unchanged regressions,
+with 11/11 structurally valid trusted narrations and zero evaluator errors in
+each. This remains regression evidence rather than a new transfer result.

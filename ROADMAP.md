@@ -75,18 +75,25 @@ qualified local model, if any, powers each workflow.
   grants, explicit provider model ids, stable HTTP failures and typed evidence
   receipts are implemented. Routing decision records, saved model assignment,
   resource lifecycle and qualification-result storage remain before completion.
-- [ ] **Reference pack: Analytics** — `0.1.0` now wraps the existing
+- [ ] **Reference pack: Analytics** — the `0.2.0` candidate wraps the existing
   conversation-triggered read-only SQL path behind Mind-issued conversation and
   dataset grants. Identity pinning, schema inspection, categorical grounding,
-  final SQL, cancellation, verified narration fallback and trace provenance use
+  final SQL, cancellation, trusted typed narration and trace provenance use
   the same injected boundary. Native SQL now has a hard-kill process boundary;
-  route precedence and evidence-to-trace consistency have synthetic integration
-  tests. The first clean theatre-v5 transfer run at commit `23f5e2c` passed 12/12,
+  every runtime receipt is bound to the approved input and exact query, and late
+  cancellation wins. Route precedence and evidence-to-trace consistency have
+  synthetic integration tests. The frozen narration suite passes 44/44 canonical
+  expectations and rejects 222/222 adversarial/invalid cases without a model
+  call. Clean implementation commit `45d3ff1` retains 12/12 on unchanged v4 and
+  v5 regressions, with 11/11 valid trusted narrations in each, zero evaluator
+  errors and 210.1 ms v5 mean latency. The first clean theatre-v5 transfer run
+  at commit `23f5e2c` passed 12/12,
   all 12 pack audits and all 11 result comparisons with zero evaluator errors,
   after the structurally isomorphic suite was frozen separately at `f877d77`.
   This meets the manifest's 90% single-run overall-score threshold on that check,
-  but all 11 generated query narrations required visible verified fallback.
-  Broad transfer, required repetitions, cross-model behavior, human usefulness,
+  but all 11 historical free-form narrations required visible verified fallback;
+  the current candidate retires that authoring path. Broad planning transfer,
+  richer statistical interpretation, required repetitions, cross-model planning behavior, human usefulness,
   saved model choice, qualification storage and sandboxed Python remain blocked.
 - [ ] **Scholar pack** — adapt Knowledge Vault retrieval, citation audit,
   cross-source synthesis and Teacher Mode to the same pack boundary. Embedding
@@ -183,16 +190,20 @@ qualified local model, if any, powers each workflow.
 - [x] Fail closed when a denominator filter is removed, Boolean polarity is
   mixed, or a distinct population has no evidenced qualifying relation; retain
   sanitized state in every clarification
-- [ ] Improve evidence-grounded analytical narration. V5 semantic execution is
-  12/12, but 0/11 generated query narrations passed the strict audit; direct
-  verified fallback remains the safe user-visible behavior
+- [x] Replace evidence-grounded analytical narration after preserving the 0/11
+  free-form baseline. Analytics `0.2.0` uses typed facts, exact operation output
+  contracts and trusted rendering; 44/44 canonical cases pass and 222/222
+  adversarial or invalid-shape cases are rejected without a narration model
+- [ ] Qualify richer analytical interpretation separately. Any model contribution
+  may select existing fact IDs only; causal, statistical, recommendation and
+  human-usefulness claims remain outside the current renderer contract
 - [x] Preflight every analytical holdout reference before the first model call;
   invalid evaluator cases must never be counted as Rangabot failures
 - [ ] Add hard-tier windows, cohorts, percentiles, correlations, retention and
   multi-stage analytical plans. Current hard score is 1/20 and extreme 0/5;
   no broad autonomous multi-table reliability claim is permitted
-- [ ] Enforce provider wall-clock timeout independently of a stalled Ollama
-  request; the compiler candidate recorded one 1,544.1-second timeout outlier
+- [x] Enforce one provider wall-clock deadline independently of a stalled Ollama
+  request, without retry after timeout or cancellation
 - [ ] Add the same policy contract for sandboxed Python statistics, modelling,
   and visualisation; do not permit network, package installation, or file writes
 - [ ] Offer verified analytical findings as provenance-bound memory candidates;
