@@ -21,6 +21,10 @@ async function fixture() {
       INSERT INTO topics VALUES (1, 'Robotics', 'Applied'), (2, 'Shared', 'Theory');
       CREATE TABLE sessions(session_id INTEGER, opened_at TIMESTAMP, closed_at TIMESTAMP);
       INSERT INTO sessions VALUES (1, TIMESTAMP '2026-01-01 09:00:00', TIMESTAMP '2026-01-01 10:00:00');
+      CREATE TABLE entries(entry_id INTEGER, outcome VARCHAR);
+      INSERT INTO entries VALUES (1, 'Complete'), (2, 'Pending'), (3, 'Complete');
+      CREATE TABLE entry_logs(log_id INTEGER, entry_id INTEGER, detail VARCHAR);
+      INSERT INTO entry_logs VALUES (1, 1, 'Complete');
     `);
   } finally { connection.closeSync(); instance.closeSync(); }
   return inspectDatasetSchema(databasePath);
@@ -64,6 +68,20 @@ test("compiles fully resolved requests without a model plan", async () => {
   assert.match(resolved?.proposal.query ?? "", /DATE_DIFF\('minute', "sessions"\."opened_at", "sessions"\."closed_at"\)/);
   const ambiguous = await compileResolvedAdvancedAnalyticalPlan("What is the average duration?", columns, databasePath);
   assert.equal(ambiguous, null);
+
+  const rate = await compileResolvedAdvancedAnalyticalPlan("What percentage of entries have Complete outcome?", columns, databasePath);
+  assert.equal(rate?.plan.operation, "conditional_rate");
+  assert.equal(rate?.plan.source, "entries");
+  assert.deepEqual(rate?.plan.numeratorFilters, [{ column: "entries.outcome", operator: "eq", value: "Complete" }]);
+  assert.deepEqual(rate?.plan.denominatorFilters, []);
+  assert.match(rate?.proposal.query ?? "", /COUNT\(\*\) FILTER \(WHERE "entries"\."outcome" = 'Complete'\)/);
+
+  const crossRelation = await compileResolvedAdvancedAnalyticalPlan("What percentage of entries have Robotics outcome?", columns, databasePath);
+  assert.equal(crossRelation?.plan.action, "clarify");
+  assert.equal(crossRelation?.proposal.query, "");
+
+  const scoped = await compileResolvedAdvancedAnalyticalPlan("What percentage of non Complete entries have Pending outcome?", columns, databasePath);
+  assert.equal(scoped, null);
   rmSync(databasePath, { force: true });
 });
 
@@ -81,4 +99,21 @@ test("routes every categorical grounding read through the authorized executor", 
   });
   assert.ok(queries.length >= 1);
   assert.equal(grounded.plan.filters[0]?.column, "topics.label");
+});
+
+test("conditional-rate grounding fails closed when one value matches multiple source fields", async () => {
+  const columns = [
+    { table: "records", name: "record_id", type: "INTEGER" },
+    { table: "records", name: "status", type: "VARCHAR" },
+    { table: "records", name: "phase", type: "VARCHAR" },
+  ];
+  const rate: AdvancedAnalyticalPlan = {
+    ...plan("Complete"), operation: "conditional_rate", source: "records", entity: "", filters: [], numeratorFilters: [], decimals: 2,
+  };
+  const grounded = await groundAdvancedAnalyticalFilters(rate, "What percentage of records have Complete status?", columns, "/must-not-be-opened.duckdb", async () => {
+    const rows = [["records.status", "Complete"], ["records.phase", "Complete"]];
+    return { columns: [], rows, receipt: { engine: "duckdb", input: { filename: "approved.duckdb", sha256: "a".repeat(64), sizeBytes: 1 }, querySha256: "b".repeat(64), readOnly: true, externalAccess: false, rowLimit: 200, returnedRows: rows.length, truncated: false, durationMs: 1 } };
+  });
+  assert.equal(grounded.plan.action, "clarify");
+  assert.match(grounded.plan.explanation, /multiple fields/i);
 });

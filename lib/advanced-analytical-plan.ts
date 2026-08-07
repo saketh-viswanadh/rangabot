@@ -126,6 +126,7 @@ function words(value: string) {
     if (word.length > 4 && word.endsWith("ied")) return `${word.slice(0, -3)}y`;
     if (word.length > 5 && word.endsWith("ing")) return word.slice(0, -3);
     if (word.length > 4 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+    if (word.length > 4 && word.endsWith("ed")) return word.slice(0, -2);
     if (word.length > 4 && word.endsWith("s")) return word.slice(0, -1);
     return word;
   }) ?? [];
@@ -154,19 +155,36 @@ function inferRequestedIdentifier(request: string, columns: DatasetColumn[], exc
   return candidates[0].field;
 }
 
+function containsWordSequence(haystack: string[], needle: string[]) {
+  return needle.length > 0 && haystack.some((_, index) => needle.every((word, offset) => haystack[index + offset] === word));
+}
+
+function relationNamedInRequest(table: string, request: string) {
+  return containsWordSequence(words(request), words(table));
+}
+
+function relationDistance(graph: ReturnType<typeof relationGraph>, source: string, target: string) {
+  if (source === target) return 0;
+  try { return path(graph, source, target).length; }
+  catch { return Number.POSITIVE_INFINITY; }
+}
+
 function inferObservationSource(plan: AdvancedAnalyticalPlan, request: string, entity: DatasetColumn, columns: DatasetColumn[]) {
-  const supportingFields = [plan.metric, plan.secondaryMetric, plan.groupField, plan.startField, plan.endField, plan.dateField, plan.relatedField].filter(Boolean);
+  const filterTables = [...new Set(plan.filters.flatMap((filter) => filter.column.split(".")[0] || []))];
+  const graph = relationGraph(columns);
   const candidates = [...new Set(columns.filter((column) => column.table && column.name === entity.name).map((column) => column.table!))].map((table) => {
-    const requestScore = fieldEvidence(table, request) * 3;
-    const modelScore = Math.min(2, supportingFields.filter((field) => field.startsWith(`${table}.`)).length);
-    const metricScore = plan.metric.startsWith(`${table}.`) ? 2 : 0;
-    return { table, requestScore, score: requestScore + modelScore + metricScore };
+    // The counted entity is expected to be named in the request, so its
+    // canonical table is not treated as evidence for the qualifying relation.
+    const qualifyingMention = table !== entity.table && relationNamedInRequest(table, request) ? 12 : 0;
+    const filterProximity = filterTables.reduce((score, filterTable) => {
+      const distance = relationDistance(graph, table, filterTable);
+      return score + (distance === 0 ? 8 : distance === 1 ? 5 : distance === 2 ? 2 : 0);
+    }, 0);
+    const entityFallback = table === entity.table ? 1 : 0;
+    return { table, score: qualifyingMention + filterProximity + entityFallback };
   }).sort((left, right) => right.score - left.score || left.table.localeCompare(right.table));
-  const entityRequestScore = candidates.find((candidate) => candidate.table === entity.table)?.requestScore ?? 0;
-  const observed = candidates.filter((candidate) => candidate.table !== entity.table && candidate.requestScore > 0)
-    .sort((left, right) => right.requestScore - left.requestScore || left.table.localeCompare(right.table));
-  if (observed[0] && observed[0].requestScore >= entityRequestScore && observed[0].requestScore > (observed[1]?.requestScore ?? -1)) return observed[0].table;
-  return candidates[0]?.score && candidates[0].score > (candidates[1]?.score ?? -1) ? candidates[0].table : entity.table!;
+  if (!candidates[0] || candidates[0].score === candidates[1]?.score) return null;
+  return candidates[0].table;
 }
 
 function sharedRoleSource(fields: string[], columns: DatasetColumn[]) {
@@ -196,6 +214,31 @@ function requestContainsLiteral(request: string, value: string) {
   const normalizedRequest = ` ${words(request).join(" ")} `;
   const normalizedValue = words(value).join(" ");
   return Boolean(normalizedValue) && normalizedRequest.includes(` ${normalizedValue} `);
+}
+
+function requestNegatesLiteral(request: string, value: string) {
+  const requestTokens = words(request);
+  const valueTokens = words(value);
+  if (!valueTokens.length) return false;
+  const index = requestTokens.findIndex((_, offset) => valueTokens.every((word, inner) => requestTokens[offset + inner] === word));
+  if (index < 0) return false;
+  return requestTokens.slice(Math.max(0, index - 3), index).some((word) => ["not", "no", "without", "exclude", "except", "non"].includes(word));
+}
+
+function namesWholePopulationForRate(request: string, relation: string) {
+  if (!/\b(?:percent|percentage|share)\b/i.test(request)
+    || /\b(?:growth|change|increase|decrease|ratio|divided by)\b/i.test(request)
+    || /\b(?:not|without|excluding|except|non[-\s])\b/i.test(request)) return false;
+  const requestTokens = words(request);
+  const relationTokens = words(relation);
+  const relationIndex = requestTokens.findIndex((_, index) => relationTokens.every((word, offset) => requestTokens[index + offset] === word));
+  const rateIndex = requestTokens.findLastIndex((word, index) => index < relationIndex && ["percent", "percentage", "share"].includes(word));
+  if (relationIndex < 0 || rateIndex < 0) return false;
+  const populationScope = requestTokens.slice(rateIndex + 1, relationIndex);
+  if (!populationScope.every((word) => ["of", "the", "all"].includes(word))) return false;
+  const predicate = requestTokens[relationIndex + relationTokens.length];
+  const next = predicate === "that" ? requestTokens[relationIndex + relationTokens.length + 1] : predicate;
+  return ["have", "has", "with", "are", "is", "were", "was"].includes(next ?? "");
 }
 
 function requestedBoolean(field: string, request: string) {
@@ -247,7 +290,8 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
     // a schema-bound text filter chosen by the model. Numeric filters retain the
     // stricter field-name requirement so a threshold cannot become an ID filter.
     const categorical = /CHAR|TEXT|STRING|ENUM/i.test(column.type);
-    const supported = boolean !== undefined || (literalIsExplicit && (categorical || fieldEvidence(filter.column, request) > 0));
+    const supported = !requestNegatesLiteral(request, filter.value)
+      && (boolean !== undefined || (literalIsExplicit && (categorical || fieldEvidence(filter.column, request) > 0)));
     if (!supported) decisions.push({ field, action: "removed", reason: "Filter field and value were not both supported by the current request." });
     else if (boolean !== undefined && filter.value.toLowerCase() !== boolean) {
       decisions.push({ field, action: "replaced", reason: "Boolean value was aligned with the current request." }); filter.value = boolean;
@@ -401,7 +445,8 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
   if (normalized.operation === "distinct_count") {
     const entity = columnFor(normalized.entity, columns);
     if (entity) {
-      const source = inferObservationSource(plan, request, entity, columns);
+      const source = inferObservationSource(normalized, request, entity, columns);
+      if (!source) return clarify("Which approved relation defines the distinct population after applying the requested conditions?");
       if (normalized.source !== source) decisions.push({ field: "source", action: "replaced", reason: "The source was aligned with the schema relation named by the request and model-selected fields." });
       normalized.source = source;
       normalized.entity = fieldOnSource(normalized.entity, source, columns);
@@ -461,6 +506,10 @@ export function recoverAdvancedAnalyticalPlan(request: string, columns: DatasetC
   if (/\bgrowth\b/i.test(request) && roles.measure.confidence === "high") {
     return { ...base, operation: "period_growth", source: roles.measure.value!.split(".")[0], metric: roles.measure.value!, dateField: roles.dateField.confidence === "high" ? roles.dateField.value! : "" };
   }
+  if (roles.populationRelation.confidence === "high"
+    && namesWholePopulationForRate(request, roles.populationRelation.value!)) {
+    return { ...base, operation: "conditional_rate", source: roles.populationRelation.value! };
+  }
   if (/\b(?:distinct|unique)\b/i.test(request) && roles.countTarget.confidence === "high") {
     const entity = columnFor(roles.countTarget.value!, columns);
     return entity ? { ...base, operation: "distinct_count", source: entity.table!, entity: roles.countTarget.value! } : null;
@@ -504,6 +553,7 @@ function where(filters: Filter[], columns: DatasetColumn[]) {
 
 export function compileAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, columns: DatasetColumn[]): SqlProposal {
   if (plan.action !== "query") return { action: plan.action, query: "", explanation: plan.explanation };
+  if (plan.operation === "conditional_rate" && !plan.numeratorFilters.length) throw new Error("A conditional rate requires one explicit numerator condition.");
   const operationValues: Record<Operation, string[]> = {
     ratio: [plan.metric, plan.secondaryMetric],
     conditional_rate: [...plan.numeratorFilters.map((filter) => filter.column), ...plan.denominatorFilters.map((filter) => filter.column)],
@@ -519,7 +569,7 @@ export function compileAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, colu
   const refs = usedValues.map((field) => reference(field, columns)); const relation = fromClause(plan.source, refs, columns); const baseWhere = where(plan.filters, columns); const suffix = baseWhere.length ? `\nWHERE ${baseWhere.join(" AND ")}` : ""; const round = (value: string) => plan.decimals ? `ROUND(${value}, ${plan.decimals})` : value;
   let query: string;
   if (plan.operation === "ratio") { const a = reference(plan.metric, columns); const denominator = plan.secondaryMetric === "*" ? "COUNT(*)" : `SUM(${reference(plan.secondaryMetric, columns).sql})`; query = `SELECT ${round(`SUM(${a.sql}) / NULLIF(${denominator}, 0)`)} AS ${quote("ratio")}\n${relation}${suffix}`; }
-  else if (plan.operation === "conditional_rate") { const numerator = where(plan.numeratorFilters, columns); const denominator = where(plan.denominatorFilters, columns); query = `SELECT ${round(`100.0 * COUNT(*) FILTER (WHERE ${numerator.join(" AND ") || "TRUE"}) / NULLIF(COUNT(*) FILTER (WHERE ${denominator.join(" AND ") || "TRUE"}), 0)`)} AS ${quote("rate_pct")}\n${relation}${suffix}`; }
+  else if (plan.operation === "conditional_rate") { const denominator = where(plan.denominatorFilters, columns); const numerator = where([...plan.denominatorFilters, ...plan.numeratorFilters], columns); query = `SELECT ${round(`100.0 * COUNT(*) FILTER (WHERE ${numerator.join(" AND ")}) / NULLIF(COUNT(*) FILTER (WHERE ${denominator.join(" AND ") || "TRUE"}), 0)`)} AS ${quote("rate_pct")}\n${relation}${suffix}`; }
   else if (plan.operation === "distinct_count") { const entity = reference(plan.entity, columns); query = `SELECT COUNT(DISTINCT ${entity.sql}) AS ${quote("distinct_count")}\n${relation}${suffix}`; }
   else if (plan.operation === "duration_average") { const start = reference(plan.startField, columns); const end = reference(plan.endField, columns); query = `SELECT ${round(`AVG(DATE_DIFF('minute', ${start.sql}, ${end.sql})) / 60.0`)} AS ${quote("average_duration_hours")}\n${relation}${suffix}`; }
   else if (plan.operation === "threshold_count") { const entity = reference(plan.entity, columns); query = `SELECT COUNT(*) AS ${quote("matching_entities")} FROM (SELECT ${entity.sql}\n${relation}${suffix}\nGROUP BY ${entity.sql}\nHAVING COUNT(*) >= ${plan.threshold}) AS ${quote("qualified")}`; }
