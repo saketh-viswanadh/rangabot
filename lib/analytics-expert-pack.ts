@@ -1,7 +1,7 @@
 import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "./advanced-analytical-plan.ts";
 import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan, resolveAnalyticalBoundary } from "./analytical-plan.ts";
 import { compileGroundedAdvancedAnalyticalPlan, compileResolvedAdvancedAnalyticalPlan } from "./analytical-filter-grounding.ts";
-import { analysisNarrationIsGrounded, buildAnalysisNarrationMessages, formatVerifiedAnalysisFallback } from "./conversational-analysis.ts";
+import { auditAnalysisNarration, buildAnalysisNarrationMessages, formatVerifiedAnalysisFallback, type AnalysisGroundingAudit } from "./conversational-analysis.ts";
 import { getApprovedDataset, type ApprovedDataset } from "./datasets.ts";
 import { getExpertPackManifest } from "./expert-pack-registry.ts";
 import { type ExpertPackFailureCode, type ExpertPackManifest, type ExpertPackModelResolution, type ExpertPackPermission, type ExpertPackRequest, type ExpertPackResult, type ExpertPackWarningCode, validateExpertPackRequest, validateExpertPackResult } from "./expert-packs.ts";
@@ -43,7 +43,17 @@ export type AnalyticsPackOutcome = {
   result: ExpertPackResult;
   trace?: NonNullable<ChatMessage["analysisTrace"]>;
   /** Private evaluator seam; never serialized by the chat route. */
-  diagnostics?: { plan: Record<string, unknown>; proposal: SqlProposal; execution?: SqlExecutionResult };
+  diagnostics?: {
+    plan: Record<string, unknown>;
+    proposal: SqlProposal;
+    execution?: SqlExecutionResult;
+    narration?: {
+      disposition: "accepted" | "rejected" | "unavailable";
+      draft?: string;
+      audit?: AnalysisGroundingAudit;
+      errorCode?: string;
+    };
+  };
 };
 
 type Usage = {
@@ -242,18 +252,22 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
     phase = "execution";
     const result = await dependencies.executeSql({ approvedDatasetPath: dataset.path, query: proposal.query, expectedInputSha256: identity.sha256, signal: options.signal });
     let answer: string;
+    let narrationDiagnostics: NonNullable<NonNullable<AnalyticsPackOutcome["diagnostics"]>["narration"]>;
     phase = "narration";
     usage.model = model;
     const warnings: Array<{ code: ExpertPackWarningCode; message: string }> = [];
     try {
       const narrated = await dependencies.completeText(buildAnalysisNarrationMessages(request.currentRequest, proposal, result), { signal: options.signal, modelId: configuredModel, numPredict: 700 });
-      if (analysisNarrationIsGrounded(narrated, result, { query: proposal.query })) answer = narrated;
+      const audit = auditAnalysisNarration(narrated, result, { query: proposal.query });
+      narrationDiagnostics = { disposition: audit.grounded ? "accepted" : "rejected", draft: narrated, audit };
+      if (audit.grounded) answer = narrated;
       else {
         answer = formatVerifiedAnalysisFallback(result);
         warnings.push({ code: "narration-grounding-rejected", message: "The model narration failed the result-grounding audit, so Rangabot used a deterministic verified fallback." });
       }
     } catch (error) {
       if (cancelled(error, options.signal)) throw error;
+      narrationDiagnostics = { disposition: "unavailable", errorCode: failureCode(error) ?? "unknown" };
       answer = formatVerifiedAnalysisFallback(result);
       warnings.push({ code: "model-narration-unavailable", message: "The model narration was unavailable, so Rangabot used a deterministic verified fallback." });
     }
@@ -300,7 +314,7 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
       modelBackgroundClaims: [],
       warnings,
       receipt: receipt(usage),
-    }, trace, { plan: semanticPlan, proposal, execution: result });
+    }, trace, { plan: semanticPlan, proposal, execution: result, narration: narrationDiagnostics });
   } catch (error) {
     return mappedFailure(request, error, phase, usage, options.signal);
   }

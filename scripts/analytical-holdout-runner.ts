@@ -159,6 +159,7 @@ function packExecutionAudit(input: {
     warnings,
     resultStatus: input.outcome.result.status,
     resolvedModelId: input.outcome.result.receipt.model?.resolvedModelId ?? null,
+    narration: input.outcome.diagnostics?.narration ?? null,
   };
 }
 
@@ -291,6 +292,18 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
     failed: results.filter((item) => !item.passed).length,
     executionErrors: results.filter((item) => item.action === "error").length,
     latency: latencySummary(latencies),
+    narration: (() => {
+      const narrations = results.flatMap((item) => item.packAudit?.narration ? [item.packAudit.narration] : []);
+      const failureCounts: Record<string, number> = {};
+      for (const narration of narrations) for (const failure of narration.audit?.failures ?? []) failureCounts[failure] = (failureCounts[failure] ?? 0) + 1;
+      return {
+        attempted: narrations.filter((item) => item.disposition === "accepted" || item.disposition === "rejected").length,
+        accepted: narrations.filter((item) => item.disposition === "accepted").length,
+        rejected: narrations.filter((item) => item.disposition === "rejected").length,
+        unavailable: narrations.filter((item) => item.disposition === "unavailable").length,
+        failureCounts,
+      };
+    })(),
   };
   writeFileSync(outputPath, JSON.stringify({ schemaVersion: 3, suite: definition.suite, frozenAt: definition.frozenAt, mode, startedAt, completedAt, provenance, summary, cases: results }, null, 2));
   const passed = summary.passed;
