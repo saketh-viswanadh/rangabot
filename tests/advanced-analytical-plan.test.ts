@@ -153,6 +153,109 @@ test("distinct counts use the schema relation that represents the requested obse
   assert.match(compileAdvancedAnalyticalPlan(normalized, schema).query, /FROM "shifts"/);
 });
 
+test("distinct source resolution uses exact qualifying relations and grounded filters", () => {
+  const columns = [
+    { table: "members", name: "member_id", type: "INTEGER" },
+    { table: "events", name: "event_id", type: "INTEGER" },
+    { table: "events", name: "member_id", type: "INTEGER" },
+    { table: "events", name: "category_id", type: "INTEGER" },
+    { table: "event_runs", name: "run_id", type: "INTEGER" },
+    { table: "event_runs", name: "member_id", type: "INTEGER" },
+    { table: "categories", name: "category_id", type: "INTEGER" },
+    { table: "categories", name: "type", type: "VARCHAR" },
+  ];
+  const normalized = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "distinct_count", source: "members", entity: "members.member_id", metric: "", secondaryMetric: "",
+    filters: [{ column: "categories.type", operator: "eq", value: "Public" }],
+  }), "How many distinct members attended Public events?", columns);
+  assert.equal(normalized.source, "events");
+  assert.equal(normalized.entity, "events.member_id");
+  const reordered = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "distinct_count", source: "members", entity: "members.member_id", metric: "", secondaryMetric: "",
+    filters: [{ column: "categories.type", operator: "eq", value: "Public" }],
+  }), "How many distinct members attended Public events?", [...columns].reverse());
+  assert.equal(reordered.source, "events");
+});
+
+test("distinct source resolution clarifies equal qualifying relations", () => {
+  const columns = [
+    { table: "members", name: "member_id", type: "INTEGER" },
+    { table: "sessions", name: "session_id", type: "INTEGER" },
+    { table: "sessions", name: "member_id", type: "INTEGER" },
+    { table: "workshops", name: "workshop_id", type: "INTEGER" },
+    { table: "workshops", name: "member_id", type: "INTEGER" },
+  ];
+  const normalized = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "distinct_count", source: "members", entity: "members.member_id", metric: "", secondaryMetric: "",
+  }), "How many distinct members joined sessions and workshops?", columns);
+  assert.equal(normalized.action, "clarify");
+  assert.match(normalized.explanation, /relation defines/i);
+});
+
+test("distinct source resolution never defaults to the entity relation without qualifying evidence", () => {
+  const columns = [
+    { table: "people", name: "person_id", type: "INTEGER" },
+    { table: "attendances", name: "attendance_id", type: "INTEGER" },
+    { table: "attendances", name: "person_id", type: "INTEGER" },
+  ];
+  const normalized = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "distinct_count", source: "attendances", entity: "people.person_id", metric: "", secondaryMetric: "",
+  }), "How many distinct people attended at least once?", columns);
+  assert.equal(normalized.action, "clarify");
+  assert.match(normalized.explanation, /relation defines/i);
+
+  const missingObservation = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "distinct_count", source: "people", entity: "people.person_id", metric: "", secondaryMetric: "",
+  }), "How many distinct people attended at least once?", [columns[0]]);
+  assert.equal(missingObservation.action, "clarify");
+
+  const barePopulation = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "distinct_count", source: "people", entity: "people.person_id", metric: "", secondaryMetric: "",
+  }), "How many distinct people are there?", [columns[0]]);
+  assert.equal(barePopulation.action, "query");
+  assert.equal(barePopulation.source, "people");
+});
+
+test("conditional-rate compilation applies denominator scope to the numerator", () => {
+  const rate = plan({
+    operation: "conditional_rate", source: "staff", metric: "", secondaryMetric: "",
+    numeratorFilters: [{ column: "staff.team", operator: "eq", value: "North" }],
+    denominatorFilters: [{ column: "staff.active", operator: "eq", value: "true" }],
+  });
+  const query = compileAdvancedAnalyticalPlan(rate, schema).query;
+  assert.match(query, /FILTER \(WHERE "staff"\."active" = TRUE AND "staff"\."team" = 'North'\)/);
+  assert.match(query, /NULLIF\(COUNT\(\*\) FILTER \(WHERE "staff"\."active" = TRUE\), 0\)/);
+});
+
+test("preserves an explicit negated denominator instead of widening the population", () => {
+  const normalized = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "conditional_rate", source: "staff", metric: "", secondaryMetric: "",
+    numeratorFilters: [{ column: "staff.active", operator: "eq", value: "true" }],
+    denominatorFilters: [{ column: "staff.team", operator: "neq", value: "North" }],
+  }), "Among staff excluding North, what percentage are active?", schema);
+  assert.equal(normalized.action, "query");
+  assert.deepEqual(normalized.denominatorFilters, [{ column: "staff.team", operator: "neq", value: "North" }]);
+  const query = compileAdvancedAnalyticalPlan(normalized, schema).query;
+  assert.match(query, /FILTER \(WHERE "staff"\."team" <> 'North' AND "staff"\."active" = TRUE\)/);
+  assert.match(query, /NULLIF\(COUNT\(\*\) FILTER \(WHERE "staff"\."team" <> 'North'\), 0\)/);
+
+  const synonymous = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "conditional_rate", source: "staff", metric: "", secondaryMetric: "",
+    numeratorFilters: [{ column: "staff.active", operator: "eq", value: "true" }],
+    denominatorFilters: [{ column: "staff.team", operator: "neq", value: "North" }],
+  }), "Among staff other than North, what percentage are active?", schema);
+  assert.equal(synonymous.action, "query");
+  assert.deepEqual(synonymous.denominatorFilters, [{ column: "staff.team", operator: "neq", value: "North" }]);
+
+  const unverified = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "conditional_rate", source: "staff", metric: "", secondaryMetric: "",
+    numeratorFilters: [{ column: "staff.active", operator: "eq", value: "true" }],
+    denominatorFilters: [{ column: "staff.team", operator: "neq", value: "North" }],
+  }), "Leaving out North staff, what percentage are active?", schema);
+  assert.equal(unverified.action, "clarify");
+  assert.match(unverified.explanation, /denominator scope/i);
+});
+
 test("builds its grammar only from the supplied unseen schema", () => {
   const dataset = { id: "h", name: "workforce.duckdb", path: "/private/workforce.duckdb", format: "duckdb" as const, sizeBytes: 1, addedAt: "now" };
   const messages = [{ role: "user" as const, content: "Average hours per staff member" }];
@@ -163,7 +266,7 @@ test("builds its grammar only from the supplied unseen schema", () => {
 test("production analytical planners contain no benchmark schema names", () => {
   const source = ["advanced-analytical-plan.ts", "analytical-semantic-roles.ts", "analytical-plan.ts", "sql-proposals.ts"]
     .map((name) => readFileSync(new URL(`../lib/${name}`, import.meta.url), "utf8")).join("\n");
-  for (const term of ["campaigns", "payments", "support_tickets", "order_items", "products", "customers", "orders", "staff", "shifts", "incidents", "machines", "runs", "authors", "articles", "members", "loans"]) {
+  for (const term of ["campaigns", "payments", "support_tickets", "order_items", "products", "customers", "orders", "staff", "shifts", "incidents", "machines", "runs", "authors", "articles", "members", "loans", "telescopes", "targets", "observations", "calibrations", "observation_runs", "Galaxy", "High", "venues", "productions", "performances", "inspections", "performance_windows", "Musical", "Full"]) {
     assert.doesNotMatch(source, new RegExp(`["']${term}["']|\\b${term}\\.`));
   }
   assert.equal(shouldUseAdvancedAnalyticalPlan("Average hours per staff member"), true);

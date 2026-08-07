@@ -1,5 +1,47 @@
 # Daily progress
 
+## 2026-08-07 — Model-independent analytical semantic repair
+
+- Froze the theatre v5 transfer definition at commit `f877d77` before changing
+  production behavior. Its database and 11 reference queries passed preflight
+  without invoking the model. The suite is a separately frozen isomorphic
+  domain-and-name transfer check, not broad independent generalization evidence.
+- Replaced distinct-count source guessing with a post-grounding resolver. It uses
+  only operation-relevant fields, complete relation-name evidence and approved
+  join distance; prefix-sharing distractors no longer tie with an exact relation,
+  schema order cannot change the answer, and equal evidence becomes a focused
+  clarification.
+- Added deterministic whole-population percentage recovery. It requires an
+  explicitly named population, safe unqualified denominator grammar and exactly
+  one categorical value found in one field on that population relation. Negation,
+  multiple values, cross-relation values and ambiguous fields remain non-
+  executable. Fully resolved rates bypass model planning.
+- Fixed conditional-rate algebra so denominator predicates also constrain the
+  numerator. Added integration, metamorphic, ambiguity, local-value, provider-
+  bypass and production hardcoding tests across unrelated schemas.
+- A hostile follow-up audit found additional fail-open edges beyond the two
+  frozen failures. Rangabot now clarifies when a denominator condition cannot be
+  verified, when Boolean polarity is mixed, or when no evidence identifies an
+  observation relation. Verified negative scopes, bare populations and explicit
+  Boolean rates remain executable. Clarification plans retain only sanitized
+  filters.
+- Astronomy v4 moved from 10/12 to 12/12 as regression evidence. The first clean
+  theatre v5 Expert Pack run at commit `23f5e2c` passed 12/12, all 12 pack audits,
+  all 11 result comparisons and zero evaluator errors. Mean/median/P95 latency
+  was 4.8/5.2/6.7 seconds on the recorded warm Llama 3.2 3B / Apple M1 profile.
+- All 11 executed v5 narrations failed the strict evidence audit and used the
+  visible verified fallback. The run met the manifest's 90% single-run overall-
+  score threshold on this isomorphic check, but broad transfer, narration,
+  required repetitions, cross-model behavior and human usefulness remain open;
+  Analytics stays experimental. The deterministic suite passes 262/262.
+- On final clean production commit `d0077fd`, astronomy v4 and theatre v5 each
+  remained 12/12 as regression checks with 12/12 pack audits, 11/11 result
+  comparisons and zero evaluator errors. V4 mean/median/P95 latency was
+  5.4/5.2/9.7 seconds; v5 was 5.3/5.7/7.5 seconds. Both again rejected all 11
+  generated query narrations, confirming that verified fallback remains the
+  current explanation path. These reruns do not replace v5's first retained
+  precommitted result or create new qualification evidence.
+
 ## 2026-08-07 — Analytics Expert Pack 0.1 reference
 
 - Moved grant issuance out of the pack and into Mind & Memory's trusted control
@@ -46,9 +88,10 @@
   rejected every generated query narration, so all 10 query answers used a
   disclosed, persisted and visibly labelled verified fallback. No case, expected
   plan or gold result was removed or weakened.
-- The full deterministic project suite now passes 253/253 alongside the 60-case
-  fixture validator, 15/15 memory precision and recall, lint, typecheck and the
-  production build. Analytics remains experimental below its 90% gate.
+- At this checkpoint the deterministic project suite passed 253/253 alongside
+  the 60-case fixture validator, 15/15 memory precision and recall, lint,
+  typecheck and the production build. The later semantic-repair section above
+  records the superseding 262/262 tests and v5 transfer result.
 
 ## 2026-08-07 — Expert Pack Contract v1 foundation
 

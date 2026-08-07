@@ -53,6 +53,21 @@ test("resolves same-relation duration endpoints", () => {
   assert.equal(roles.endTime.value, "appointments.finished_at");
 });
 
+test("resolves an explicitly named population relation over prefix distractors", () => {
+  const columns = [
+    { table: "visits", name: "visit_id", type: "INTEGER" },
+    { table: "visits", name: "outcome", type: "VARCHAR" },
+    { table: "visit_logs", name: "log_id", type: "INTEGER" },
+    { table: "visit_logs", name: "visit_id", type: "INTEGER" },
+  ];
+  const exact = resolveAnalyticalSemanticRoles("What percentage of visits have Complete outcome?", columns);
+  assert.equal(exact.populationRelation.value, "visits");
+  assert.equal(exact.populationRelation.confidence, "high");
+
+  const absent = resolveAnalyticalSemanticRoles("What percentage have Complete outcome?", columns);
+  assert.equal(absent.populationRelation.value, null);
+});
+
 test("fails closed when a requested role is absent or ambiguous", () => {
   const absent = resolveAnalyticalSemanticRoles("What is the average rainfall per patient?", clinic);
   assert.equal(absent.measure.value, null);

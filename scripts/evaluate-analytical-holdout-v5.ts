@@ -1,0 +1,32 @@
+import { runAnalyticalHoldout, type AnalyticalHoldoutDefinition } from "./analytical-holdout-runner.ts";
+
+// Frozen before the semantic-source and conditional-rate production fixes.
+// This theatre domain must never be imported by production planning code.
+const definition: AnalyticalHoldoutDefinition = {
+  suite: "analytical-holdout-v5",
+  frozenAt: "2026-08-07",
+  databaseName: "analytical-holdout-v5.duckdb",
+  setupSql: `
+    CREATE TABLE venues AS SELECT i::INTEGER AS venue_id, CASE i % 3 WHEN 0 THEN 'Central' WHEN 1 THEN 'North' ELSE 'Riverside' END AS district, (i % 5 <> 0) AS active FROM range(1, 9) t(i);
+    CREATE TABLE productions AS SELECT i::INTEGER AS production_id, CASE i % 4 WHEN 0 THEN 'Musical' WHEN 1 THEN 'Drama' WHEN 2 THEN 'Comedy' ELSE 'Dance' END AS genre, (70 + i * 5)::INTEGER AS planned_minutes FROM range(1, 17) t(i);
+    CREATE TABLE performances AS SELECT i::INTEGER AS performance_id, ((i * 5) % 8 + 1)::INTEGER AS venue_id, ((i * 7) % 16 + 1)::INTEGER AS production_id, DATE '2026-01-01' + ((i * 3) % 59)::INTEGER AS performed_on, (40 + i % 180)::INTEGER AS tickets_sold, (500 + i * 37)::DOUBLE AS gross_revenue, CASE i % 3 WHEN 0 THEN 'Full' WHEN 1 THEN 'Moderate' ELSE 'Light' END AS attendance_status FROM range(1, 97) t(i);
+    CREATE TABLE inspections AS SELECT i::INTEGER AS inspection_id, ((i * 3) % 7 + 1)::INTEGER AS venue_id, TIMESTAMP '2026-01-02 09:00:00' + i * INTERVAL '3 days' AS inspected_at FROM range(1, 21) t(i);
+    CREATE TABLE performance_windows AS SELECT i::INTEGER AS window_id, ((i * 5) % 8 + 1)::INTEGER AS venue_id, TIMESTAMP '2026-01-01 17:00:00' + i * INTERVAL '19 hours' AS opened_at, TIMESTAMP '2026-01-01 17:00:00' + i * INTERVAL '19 hours' + (45 + i % 90) * INTERVAL '1 minute' AS closed_at FROM range(1, 37) t(i);
+  `,
+  cases: [
+    { id: "stage-01", question: "What is the average number of performances per venue?", goldSql: "SELECT AVG(metric_value) FROM (SELECT venue_id, COUNT(DISTINCT performance_id) AS metric_value FROM performances GROUP BY venue_id) q", expectedPlan: { operation: "aggregate_over_groups", source: "performances", metric: "performances.performance_id", groupField: "performances.venue_id", innerAggregate: "count", outerAggregate: "avg", distinct: true } },
+    { id: "stage-02", question: "What is the average total tickets sold per production?", goldSql: "SELECT AVG(metric_value) FROM (SELECT production_id, SUM(tickets_sold) AS metric_value FROM performances GROUP BY production_id) q", expectedPlan: { operation: "per_entity_average", source: "performances", metric: "performances.tickets_sold", entity: "performances.production_id" } },
+    { id: "stage-03", question: "How many distinct venues hosted Musical performances?", goldSql: "SELECT COUNT(DISTINCT venue_id) FROM performances JOIN productions USING (production_id) WHERE genre = 'Musical'", expectedPlan: { operation: "distinct_count", source: "performances", entity: "performances.venue_id", filters: [{ column: "productions.genre", operator: "eq", value: "Musical" }] } },
+    { id: "stage-04", question: "What is the average duration between opened at and closed at in hours?", goldSql: "SELECT AVG(DATE_DIFF('minute', opened_at, closed_at)) / 60.0 FROM performance_windows", expectedPlan: { operation: "duration_average", source: "performance_windows", startField: "performance_windows.opened_at", endField: "performance_windows.closed_at" } },
+    { id: "stage-05", question: "What is the ratio of total gross revenue divided by total performances?", goldSql: "SELECT SUM(gross_revenue) / NULLIF(COUNT(*), 0) FROM performances", expectedPlan: { operation: "ratio", source: "performances", metric: "performances.gross_revenue", secondaryMetric: "*" } },
+    { id: "stage-06", question: "How many venues have at least 6 performances?", goldSql: "SELECT COUNT(*) FROM (SELECT venue_id FROM performances GROUP BY venue_id HAVING COUNT(*) >= 6) q", expectedPlan: { operation: "threshold_count", source: "performances", entity: "performances.venue_id", threshold: 6 } },
+    { id: "stage-07", question: "Which venues were never linked to inspections?", goldSql: "SELECT venue_id FROM venues LEFT JOIN inspections USING (venue_id) WHERE inspection_id IS NULL ORDER BY venue_id", expectedPlan: { operation: "anti_join", source: "venues", entity: "venues.venue_id", relatedField: "inspections.inspection_id" } },
+    { id: "stage-08", question: "What was the growth in total tickets sold using performed on from January 2026 to February 2026?", goldSql: "WITH p AS (SELECT SUM(tickets_sold) FILTER (WHERE performed_on >= DATE '2026-01-01' AND performed_on < DATE '2026-02-01') a, SUM(tickets_sold) FILTER (WHERE performed_on >= DATE '2026-02-01' AND performed_on < DATE '2026-03-01') b FROM performances) SELECT 100.0 * (b-a) / NULLIF(a,0) FROM p", expectedPlan: { operation: "period_growth", source: "performances", metric: "performances.tickets_sold", dateField: "performances.performed_on", firstStart: "2026-01-01", firstEnd: "2026-02-01", secondStart: "2026-02-01", secondEnd: "2026-03-01" } },
+    { id: "stage-09", question: "What is the average number of distinct productions per venue?", goldSql: "SELECT AVG(metric_value) FROM (SELECT venue_id, COUNT(DISTINCT production_id) AS metric_value FROM performances GROUP BY venue_id) q", expectedPlan: { operation: "aggregate_over_groups", source: "performances", metric: "performances.production_id", groupField: "performances.venue_id", innerAggregate: "count", outerAggregate: "avg", distinct: true } },
+    { id: "stage-10", question: "What is the ratio of total gross revenue divided by total tickets sold?", goldSql: "SELECT SUM(gross_revenue) / NULLIF(SUM(tickets_sold), 0) FROM performances", expectedPlan: { operation: "ratio", source: "performances", metric: "performances.gross_revenue", secondaryMetric: "performances.tickets_sold" } },
+    { id: "stage-11", question: "What percentage of performances have Full attendance status?", goldSql: "SELECT 100.0 * COUNT(*) FILTER (WHERE attendance_status = 'Full') / NULLIF(COUNT(*), 0) FROM performances", expectedPlan: { operation: "conditional_rate", source: "performances", numeratorFilters: [{ column: "performances.attendance_status", operator: "eq", value: "Full" }], denominatorFilters: [] } },
+    { id: "stage-12", question: "Which venue is best?", boundary: "clarify" },
+  ],
+};
+
+await runAnalyticalHoldout(definition, { mode: process.argv.includes("--expert-pack") ? "expert-pack" : "legacy" });

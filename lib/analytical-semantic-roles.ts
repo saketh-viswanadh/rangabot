@@ -20,6 +20,7 @@ export type AnalyticalSemanticRoles = {
   startTime: ResolvedSemanticRole;
   endTime: ResolvedSemanticRole;
   dateField: ResolvedSemanticRole;
+  populationRelation: ResolvedSemanticRole;
   denominatorRelation: ResolvedSemanticRole;
   thresholdEntity: ResolvedSemanticRole;
   thresholdRelation: ResolvedSemanticRole;
@@ -163,6 +164,7 @@ export function resolveAnalyticalSemanticRoles(request: string, columns: Dataset
     startTime: rank(phrases.startTime, request, columns, "time"),
     endTime: rank(phrases.endTime, request, columns, "time"),
     dateField: rank(request, request, columns, "time"),
+    populationRelation: rankRelation(request, columns),
     denominatorRelation: rankRelation(phrases.denominatorRelation, columns),
     thresholdEntity: rank(phrases.thresholdEntity, request, columns, "identifier"),
     thresholdRelation: rankRelation(phrases.thresholdRelation, columns),

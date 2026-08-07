@@ -7,6 +7,35 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+### Improved
+
+- Repaired the two remaining Analytics semantic failures without adding domain,
+  question, value or model-specific production rules. Distinct populations now
+  choose their qualifying relation only after local categorical grounding, using
+  exact relation mentions, join proximity and deterministic tie clarification.
+  Simple whole-population percentages resolve one unique local categorical
+  condition before model planning; negated, qualified, absent or ambiguous
+  conditions still fail closed. Denominator scope now also constrains the
+  numerator when a future supported rate includes denominator filters. A removed
+  denominator now forces clarification instead of silently widening the
+  population; mixed Boolean polarity and zero-evidence distinct sources also
+  clarify, while explicit Boolean rates and verified negative scopes execute.
+- Froze the structurally isomorphic theatre transfer suite v5 in commit
+  `f877d77` before the production fix, preflighted all 11 reference queries
+  without a model, then recorded its first clean run on commit `23f5e2c`. It
+  passed 12/12 with all 12 pack audits, all 11
+  executed-result comparisons and zero evaluator errors; mean/median/P95 latency
+  was 4.8/5.2/6.7 seconds. Astronomy v4 also reached 12/12 when rerun strictly as
+  regression evidence. All 11 executed v5 answers still used the visible verified
+  fallback, so narration, critical repetitions, cross-model evidence, human
+  usefulness and broad generalization remain unqualified. The deterministic
+  suite is now 262/262.
+- After the hostile boundary audit, clean production commit `d0077fd` retained
+  12/12 on both astronomy v4 and theatre v5 as regression checks, with 12/12
+  pack audits, 11/11 executed-result comparisons and zero evaluator errors in
+  each. V5 mean/median/P95 latency was 5.3/5.7/7.5 seconds. These reruns are
+  regression evidence only; all 11 generated narrations in each were rejected.
+
 ### Architectural decisions
 
 - Advanced the Expert Pack Contract to v1.3 and added Analytics `0.1.0` as the
@@ -34,8 +63,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   execution traces. Synthetic dispatch tests lock deterministic answer, approved
   memory, code-allowlist and Analytics precedence. The HTTP and client seams
   validate traces, and mismatched evidence/trace provenance fails closed.
-  Analytics remains experimental at the sealed 10/12 transfer
-  baseline, below its 90% gate; no model download, pack installation manager,
+  Analytics remains experimental: the separately frozen isomorphic v5 check
+  scored 12/12, while broad transfer, narration and the remaining pack-level
+  qualification gates remain open. No model download, pack installation manager,
   Python runtime or other pack was enabled.
 - Added an optional Expert Pack mode to the sealed astronomy evaluator without
   changing its cases, expected semantic plans, gold SQL or legacy default. A

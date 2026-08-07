@@ -113,6 +113,35 @@ test("records when an ungrounded narration is rejected in favour of verified out
   }]);
 });
 
+test("executes a fully grounded conditional rate without asking the model to plan", async () => {
+  const fixture = dependencies({
+    inspectSchema: async () => [
+      { table: "entries", name: "entry_id", type: "INTEGER" },
+      { table: "entries", name: "outcome", type: "VARCHAR" },
+      { table: "entry_logs", name: "log_id", type: "INTEGER" },
+      { table: "entry_logs", name: "entry_id", type: "INTEGER" },
+    ],
+    completeJson: async () => { throw new Error("The deterministic resolver should avoid model planning."); },
+    completeText: async () => { throw new ProviderError("unavailable", "offline"); },
+    executeSql: async (input) => {
+      fixture.state.sqlCalls.push(input);
+      if (input.query.includes('AS "value"')) {
+        const rows = [["entries.outcome", "Complete"]];
+        return { columns: ["field", "value"], rows, receipt: { ...execution().receipt, returnedRows: 1 } };
+      }
+      const rows = [[66.67]];
+      return { columns: ["rate_pct"], rows, receipt: { ...execution().receipt, returnedRows: 1 } };
+    },
+  });
+  const outcome = await runAnalyticsExpertPack(request("What percentage of entries have Complete outcome?"), fixture.value);
+  assert.equal(outcome.result.status, "success");
+  assert.equal(fixture.state.jsonCalls, 0);
+  assert.equal(outcome.diagnostics?.plan.operation, "conditional_rate");
+  assert.equal(outcome.diagnostics?.plan.source, "entries");
+  assert.deepEqual(outcome.diagnostics?.plan.numeratorFilters, [{ column: "entries.outcome", operator: "eq", value: "Complete" }]);
+  assert.match(outcome.diagnostics?.proposal.query ?? "", /COUNT\(\*\) FILTER \(WHERE "entries"\."outcome" = 'Complete'\)/);
+});
+
 test("maps planning, schema, and cancellation failures into terminal typed outcomes", async () => {
   const planning = dependencies({ completeJson: async () => { throw new ProviderError("unavailable", "offline"); } });
   const planningOutcome = await runAnalyticsExpertPack(request(), planning.value);

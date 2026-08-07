@@ -96,9 +96,36 @@ correctness and latency depend on model size, JSON compliance or provider
 availability. Model planning remains the fallback for unresolved interpretation;
 result execution and numeric narration grounding remain deterministic.
 
-The first and only astronomy v4 transfer run passed 10/12 (83.3%) in 27.7
+The first retained astronomy v4 transfer result passed 10/12 (83.3%) in 27.7
 seconds. One query returned the correct distinct population through an
 equivalent shared key but failed the frozen exact-field expectation; it remains
 a failure rather than a retroactive scorer change. The conditional-rate case
 genuinely failed because the fallback model emitted an unsafe plan. V4 is sealed
 and below the 90% gate.
+
+Those two failures subsequently became explicit development targets. V4 may now
+be rerun only as regression evidence; the repaired implementation reached 12/12
+without changing its cases, expected plans or gold SQL. Before production code
+changed, theatre v5 was frozen at commit `f877d77` and all 11 reference queries
+were preflighted without a model. Its first clean Expert Pack run at commit
+`23f5e2c` passed 12/12 with all 12 pack audits, all 11 result comparisons and
+zero evaluator errors. V5 is structurally isomorphic to v4, so this meets the
+manifest's 90% single-run overall-score threshold on a precommitted domain-and-
+name transfer check, not broad independent generalization. It does not establish
+complete Analytics Pack qualification: every generated query narration was
+rejected, required critical repetitions were not run, cross-model evidence is
+absent and human usefulness is unmeasured.
+
+Scope preservation is an invariant, not a best effort. If trusted auditing
+cannot verify every denominator filter, the plan must clarify; it may not remove
+that filter and execute against a wider population. Mixed Boolean polarity and a
+distinct count with no evidenced qualifying relation also clarify. A bare
+distinct population, one explicit Boolean condition, and an explicitly negated
+categorical scope may execute only when each maps uniquely to the approved
+schema.
+
+Clean production commit `d0077fd` subsequently retained 12/12 on both v4 and v5
+as regression checks, with all pack audits and executed-result comparisons
+passing and zero evaluator errors. All 11 executed narrations in each suite were
+again rejected. These later runs verify non-regression only; they do not replace
+v5's first retained precommitted result or broaden the qualification claim.
