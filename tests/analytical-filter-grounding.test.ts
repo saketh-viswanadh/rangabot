@@ -25,6 +25,8 @@ async function fixture() {
       INSERT INTO entries VALUES (1, 'Complete'), (2, 'Pending'), (3, 'Complete');
       CREATE TABLE entry_logs(log_id INTEGER, entry_id INTEGER, detail VARCHAR);
       INSERT INTO entry_logs VALUES (1, 1, 'Complete');
+      CREATE TABLE members(member_id INTEGER, tier VARCHAR, status VARCHAR, active BOOLEAN);
+      INSERT INTO members VALUES (1, 'Gold', 'Complete', TRUE), (2, 'Gold', 'Pending', FALSE), (3, 'Silver', 'Complete', TRUE);
     `);
   } finally { connection.closeSync(); instance.closeSync(); }
   return inspectDatasetSchema(databasePath);
@@ -76,12 +78,41 @@ test("compiles fully resolved requests without a model plan", async () => {
   assert.deepEqual(rate?.plan.denominatorFilters, []);
   assert.match(rate?.proposal.query ?? "", /COUNT\(\*\) FILTER \(WHERE "entries"\."outcome" = 'Complete'\)/);
 
+  const booleanRate = await compileResolvedAdvancedAnalyticalPlan("What percentage of members are active?", columns, databasePath);
+  assert.equal(booleanRate?.plan.operation, "conditional_rate");
+  assert.deepEqual(booleanRate?.plan.numeratorFilters, [{ column: "members.active", operator: "eq", value: "true" }]);
+  assert.match(booleanRate?.proposal.query ?? "", /COUNT\(\*\) FILTER \(WHERE "members"\."active" = TRUE\)/);
+
+  for (const request of [
+    "What percentage of members are active or inactive?",
+    "What percentage of members are active and inactive?",
+    "What percentage of members are active/inactive?",
+  ]) {
+    const booleanAlternative = await compileResolvedAdvancedAnalyticalPlan(request, columns, databasePath);
+    assert.equal(booleanAlternative?.plan.action, "clarify");
+    assert.equal(booleanAlternative?.proposal.query, "");
+  }
+
   const crossRelation = await compileResolvedAdvancedAnalyticalPlan("What percentage of entries have Robotics outcome?", columns, databasePath);
   assert.equal(crossRelation?.plan.action, "clarify");
   assert.equal(crossRelation?.proposal.query, "");
 
   const scoped = await compileResolvedAdvancedAnalyticalPlan("What percentage of non Complete entries have Pending outcome?", columns, databasePath);
   assert.equal(scoped, null);
+  rmSync(databasePath, { force: true });
+});
+
+test("does not reinterpret already assigned numerator and denominator values", async () => {
+  const columns = await fixture();
+  const rate: AdvancedAnalyticalPlan = {
+    ...plan(""), operation: "conditional_rate", source: "members", entity: "", filters: [],
+    numeratorFilters: [{ column: "members.status", operator: "eq", value: "Complete" }],
+    denominatorFilters: [{ column: "members.tier", operator: "eq", value: "Gold" }], decimals: 2,
+  };
+  const grounded = await groundAdvancedAnalyticalFilters(rate, "Among Gold members, what percentage have Complete status?", columns, databasePath);
+  assert.equal(grounded.plan.action, "query");
+  assert.deepEqual(grounded.plan.numeratorFilters, rate.numeratorFilters);
+  assert.deepEqual(grounded.plan.denominatorFilters, rate.denominatorFilters);
   rmSync(databasePath, { force: true });
 });
 

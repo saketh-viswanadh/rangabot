@@ -244,6 +244,19 @@ called qualified or unlock mastery. Saved model assignment, automatic selection,
 custom switching, lifecycle management, qualification storage, installation and
 Python execution remain incomplete.
 
+The two v4 failures then became development cases, so its later 12/12 rerun is
+regression evidence only. Theatre v5 was frozen separately at commit `f877d77`
+before the generic source and conditional-rate changes. Its first clean warm run
+at `23f5e2c74b03f559628a472b28ff7e36c825a386` passed 12/12 with all 12 pack
+audits, all 11 executed-result comparisons and zero evaluator errors; latency was
+4.8-second mean, 5.2-second median and 6.7-second P95 on the same recorded local
+profile. Because v5 is structurally isomorphic to v4, this meets only the
+manifest's 90% single-run overall-score threshold on a precommitted domain-and-
+name transfer check. All 11 executed answers still required the visible verified
+fallback after narration rejection. Broad transfer, critical repetitions, cross-
+model evidence, human usefulness and narration quality therefore remain open,
+and Analytics `0.1.0` stays experimental.
+
 ## Deliberately deferred
 
 - third-party pack signing, trust roots and revocation;

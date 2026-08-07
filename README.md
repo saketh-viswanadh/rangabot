@@ -138,17 +138,33 @@ For supported requests whose population, grain, measure and relationships are
 all uniquely resolved from the approved schema, Rangabot now compiles the plan
 without waiting for a model planner. Ambiguous requests still use the typed
 local-model fallback or ask a focused question. The 9-case development suite
-passes 9/9 in 196 ms total. The subsequently frozen astronomy v4 transfer suite
-passed 10/12 (83.3%) on its first and only run. One mathematically correct query
-failed the exact-role rubric and one model-dependent conditional-rate plan was
-malformed; both remain failures. This substantially improves on strict ecology
-3/13 but remains below the 90% release target.
+passes 9/9 in 196 ms total. Astronomy v4 initially passed 10/12 (83.3%); its two
+failures exposed relation-grain ambiguity and a model-dependent conditional-rate
+clarification. Generic post-grounding source resolution and whole-population
+rate recovery repaired v4 to 12/12 as regression evidence. The separately
+frozen, structurally isomorphic theatre v5 suite then passed 12/12 on its first
+retained clean run at commit `23f5e2c`, with all 12 pack audits, all 11 result
+comparisons and zero evaluator errors. This meets the manifest's 90% single-run
+overall-score threshold on that precommitted domain-and-name transfer check; it
+does not establish broad generalization or complete pack qualification.
 
 `npm run conversation:evaluate:sql:holdout` runs the separate frozen logistics
 transfer suite. Once run, that version is evidence only and must not become a
 tuning set; subsequent improvements require a newly frozen unseen holdout.
 Holdout runners preflight every reference query before invoking the model so an
 evaluator defect cannot be counted as a Rangabot failure.
+`npm run conversation:evaluate:sql:pack` retains astronomy v4 as a regression
+suite. Theatre v5 is available through
+`npm run conversation:evaluate:sql:holdout:v5 -- --expert-pack`, but its retained
+first result—not later reruns—is the precommitted isomorphic transfer check. The
+runner does not enforce an immutable one-run lock, so later runs must be reported
+only as regression evidence.
+
+The trusted audit also fails closed on semantic scope: an unsupported denominator
+cannot be dropped, mixed Boolean polarity cannot become a one-sided percentage,
+and a distinct count cannot default to an entity table when no observation
+relation is evidenced. These cases produce a focused clarification rather than a
+plausible but population-changing query.
 
 Every answer exposes an optional **How this was calculated** trace with the
 query, dataset name, row count, timing, and input/query fingerprints. A strict
@@ -385,19 +401,22 @@ read-only adapter, the configured local model is explicit, and the result carrie
 validated evidence, typed fallback warnings and execution receipts. DuckDB runs
 inside a hard-kill process boundary so Stop and absolute timeouts cannot strand a
 native query. The route and client reject execution traces that do not match the
-validated evidence. Run its unchanged sealed transfer path
-with `npm run conversation:evaluate:sql:pack`.
+validated evidence. Run the retained astronomy regression path with
+`npm run conversation:evaluate:sql:pack`; run the separately frozen v5 check with
+`npm run conversation:evaluate:sql:holdout:v5 -- --expert-pack`.
 
-This is not a pack manager or a qualification claim. The unchanged sealed suite
-scored 10/12 through runner 2.1.2 and result comparator 1.0.0 at clean commit
-`8725d47` (83.3%, 5.3-second mean, 4.5-second median, 18.1-second P95, zero
-evaluator execution errors), below its 90% gate. All 12 terminal/evidence/receipt
-audits and all 10 executed-result comparisons passed. The stricter audit rejected
-all 10 generated query narrations and used a direct verified fallback, now
-disclosed visibly in chat; that is useful protection and evidence that narration
-quality remains unsolved. Saved per-pack model choices, automatic/custom
-switching, install/update/remove flows, resource lifecycle and the other packs
-are still roadmap work. No mode downloads a model or enables the internet.
+This is not a pack manager or a complete qualification claim. Runner 2.1.2 and
+result comparator 1.0.0 recorded a clean first theatre-v5 transfer run of 12/12
+at commit `23f5e2c` (4.8-second mean, 5.2-second median, 6.7-second P95, zero
+evaluator errors), with all 12 terminal/evidence/receipt audits and all 11
+executed-result comparisons passing. The stricter audit rejected all 11 query
+narrations and used the visibly disclosed direct verified fallback. Semantic
+execution therefore met the manifest's single-run overall-score threshold on
+this isomorphic check, while broad transfer, explanation quality, required
+critical repetitions, cross-model evidence and human usefulness remain
+unqualified. Saved per-pack model choices, automatic/custom switching,
+install/update/remove flows, resource lifecycle and the other packs are still
+roadmap work. No mode downloads a model or enables the internet.
 
 Teacher Mode generation can be compared explicitly with
 `npm run knowledge:evaluate:answers -- --model=qwen2.5:7b --num-ctx=4096 --sample=5`.

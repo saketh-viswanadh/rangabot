@@ -192,6 +192,30 @@ test("distinct source resolution clarifies equal qualifying relations", () => {
   assert.match(normalized.explanation, /relation defines/i);
 });
 
+test("distinct source resolution never defaults to the entity relation without qualifying evidence", () => {
+  const columns = [
+    { table: "people", name: "person_id", type: "INTEGER" },
+    { table: "attendances", name: "attendance_id", type: "INTEGER" },
+    { table: "attendances", name: "person_id", type: "INTEGER" },
+  ];
+  const normalized = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "distinct_count", source: "attendances", entity: "people.person_id", metric: "", secondaryMetric: "",
+  }), "How many distinct people attended at least once?", columns);
+  assert.equal(normalized.action, "clarify");
+  assert.match(normalized.explanation, /relation defines/i);
+
+  const missingObservation = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "distinct_count", source: "people", entity: "people.person_id", metric: "", secondaryMetric: "",
+  }), "How many distinct people attended at least once?", [columns[0]]);
+  assert.equal(missingObservation.action, "clarify");
+
+  const barePopulation = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "distinct_count", source: "people", entity: "people.person_id", metric: "", secondaryMetric: "",
+  }), "How many distinct people are there?", [columns[0]]);
+  assert.equal(barePopulation.action, "query");
+  assert.equal(barePopulation.source, "people");
+});
+
 test("conditional-rate compilation applies denominator scope to the numerator", () => {
   const rate = plan({
     operation: "conditional_rate", source: "staff", metric: "", secondaryMetric: "",
@@ -201,6 +225,35 @@ test("conditional-rate compilation applies denominator scope to the numerator", 
   const query = compileAdvancedAnalyticalPlan(rate, schema).query;
   assert.match(query, /FILTER \(WHERE "staff"\."active" = TRUE AND "staff"\."team" = 'North'\)/);
   assert.match(query, /NULLIF\(COUNT\(\*\) FILTER \(WHERE "staff"\."active" = TRUE\), 0\)/);
+});
+
+test("preserves an explicit negated denominator instead of widening the population", () => {
+  const normalized = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "conditional_rate", source: "staff", metric: "", secondaryMetric: "",
+    numeratorFilters: [{ column: "staff.active", operator: "eq", value: "true" }],
+    denominatorFilters: [{ column: "staff.team", operator: "neq", value: "North" }],
+  }), "Among staff excluding North, what percentage are active?", schema);
+  assert.equal(normalized.action, "query");
+  assert.deepEqual(normalized.denominatorFilters, [{ column: "staff.team", operator: "neq", value: "North" }]);
+  const query = compileAdvancedAnalyticalPlan(normalized, schema).query;
+  assert.match(query, /FILTER \(WHERE "staff"\."team" <> 'North' AND "staff"\."active" = TRUE\)/);
+  assert.match(query, /NULLIF\(COUNT\(\*\) FILTER \(WHERE "staff"\."team" <> 'North'\), 0\)/);
+
+  const synonymous = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "conditional_rate", source: "staff", metric: "", secondaryMetric: "",
+    numeratorFilters: [{ column: "staff.active", operator: "eq", value: "true" }],
+    denominatorFilters: [{ column: "staff.team", operator: "neq", value: "North" }],
+  }), "Among staff other than North, what percentage are active?", schema);
+  assert.equal(synonymous.action, "query");
+  assert.deepEqual(synonymous.denominatorFilters, [{ column: "staff.team", operator: "neq", value: "North" }]);
+
+  const unverified = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "conditional_rate", source: "staff", metric: "", secondaryMetric: "",
+    numeratorFilters: [{ column: "staff.active", operator: "eq", value: "true" }],
+    denominatorFilters: [{ column: "staff.team", operator: "neq", value: "North" }],
+  }), "Leaving out North staff, what percentage are active?", schema);
+  assert.equal(unverified.action, "clarify");
+  assert.match(unverified.explanation, /denominator scope/i);
 });
 
 test("builds its grammar only from the supplied unseen schema", () => {

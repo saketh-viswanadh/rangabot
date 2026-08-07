@@ -163,6 +163,14 @@ function relationNamedInRequest(table: string, request: string) {
   return containsWordSequence(words(request), words(table));
 }
 
+function namesBareDistinctPopulation(table: string, request: string) {
+  const tableWords = new Set(words(table));
+  const allowed = new Set(["how", "many", "number", "count", "of", "distinct", "unique", "the", "there", "are", "is", "exist", "in", "total"]);
+  const requestWords = words(request);
+  return relationNamedInRequest(table, request)
+    && requestWords.every((word) => tableWords.has(word) || allowed.has(word));
+}
+
 function relationDistance(graph: ReturnType<typeof relationGraph>, source: string, target: string) {
   if (source === target) return 0;
   try { return path(graph, source, target).length; }
@@ -180,10 +188,14 @@ function inferObservationSource(plan: AdvancedAnalyticalPlan, request: string, e
       const distance = relationDistance(graph, table, filterTable);
       return score + (distance === 0 ? 8 : distance === 1 ? 5 : distance === 2 ? 2 : 0);
     }, 0);
-    const entityFallback = table === entity.table ? 1 : 0;
-    return { table, score: qualifyingMention + filterProximity + entityFallback };
+    const barePopulationMention = table === entity.table && namesBareDistinctPopulation(table, request) ? 4 : 0;
+    return { table, score: qualifyingMention + filterProximity + barePopulationMention };
   }).sort((left, right) => right.score - left.score || left.table.localeCompare(right.table));
-  if (!candidates[0] || candidates[0].score === candidates[1]?.score) return null;
+  // When the identifier exists on both an entity relation and one or more fact
+  // relations, absence of qualifying evidence is genuine ambiguity. Counting
+  // the canonical entity relation would silently include entities with no
+  // qualifying observation.
+  if (!candidates[0] || candidates[0].score <= 0 || candidates[0].score === candidates[1]?.score) return null;
   return candidates[0].table;
 }
 
@@ -222,7 +234,13 @@ function requestNegatesLiteral(request: string, value: string) {
   if (!valueTokens.length) return false;
   const index = requestTokens.findIndex((_, offset) => valueTokens.every((word, inner) => requestTokens[offset + inner] === word));
   if (index < 0) return false;
-  return requestTokens.slice(Math.max(0, index - 3), index).some((word) => ["not", "no", "without", "exclude", "except", "non"].includes(word));
+  return negatedBefore(requestTokens, index);
+}
+
+function negatedBefore(requestTokens: string[], index: number) {
+  const preceding = requestTokens.slice(Math.max(0, index - 3), index);
+  return preceding.some((word) => ["not", "no", "without", "exclude", "exclud", "except", "non"].includes(word))
+    || preceding.some((word, offset) => word === "other" && preceding[offset + 1] === "than");
 }
 
 function namesWholePopulationForRate(request: string, relation: string) {
@@ -243,9 +261,30 @@ function namesWholePopulationForRate(request: string, relation: string) {
 
 function requestedBoolean(field: string, request: string) {
   const label = field.split(".").at(-1)?.replace(/^(?:is|has)_/, "").replaceAll("_", " ") ?? "";
-  if (!label || !requestContainsLiteral(request, label)) return undefined;
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`\\b(?:not|non|inactive|without|no)\\s+(?:\\w+\\s+){0,2}${escaped}\\b`, "i").test(request) ? "false" : "true";
+  const labelTokens = words(label);
+  if (!labelTokens.length) return undefined;
+  const requestTokens = words(request);
+  let positive = false;
+  let negative = false;
+  for (let index = 0; index < requestTokens.length; index += 1) {
+    if (labelTokens.every((word, offset) => requestTokens[index + offset] === word)) {
+      if (negatedBefore(requestTokens, index)) negative = true;
+      else positive = true;
+    }
+  }
+  if (labelTokens.length === 1) {
+    negative ||= requestTokens.some((word) => ["in", "un", "non"].some((prefix) => word === `${prefix}${labelTokens[0]}`));
+  }
+  if (positive === negative) return undefined;
+  return negative ? "false" : "true";
+}
+
+function explicitBooleanRateCondition(request: string, relation: string, columns: DatasetColumn[]): Filter | null {
+  const matches = columns.filter((column) => column.table === relation && /BOOL/i.test(column.type)).flatMap((column) => {
+    const value = requestedBoolean(`${relation}.${column.name}`, request);
+    return value === undefined ? [] : [{ column: `${relation}.${column.name}`, operator: "eq" as const, value }];
+  });
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function validDate(value: string) {
@@ -272,10 +311,6 @@ function monthRanges(request: string) {
 export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, request: string, columns: DatasetColumn[]): AnalyticalPlanAudit {
   const decisions: AnalyticalPlanAudit["decisions"] = [];
   if (plan.action !== "query") return { plan, decisions };
-  const clarify = (reason: string): AnalyticalPlanAudit => {
-    decisions.push({ field: "action", action: "clarified", reason });
-    return { plan: { ...plan, action: "clarify", explanation: reason }, decisions };
-  };
   const cleanFilters = (filters: Filter[], field: string) => filters.filter((filter) => {
     const column = columnFor(filter.column, columns);
     if (!column) { decisions.push({ field, action: "removed", reason: `Unavailable field ${filter.column}.` }); return false; }
@@ -290,8 +325,13 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
     // a schema-bound text filter chosen by the model. Numeric filters retain the
     // stricter field-name requirement so a threshold cannot become an ID filter.
     const categorical = /CHAR|TEXT|STRING|ENUM/i.test(column.type);
-    const supported = !requestNegatesLiteral(request, filter.value)
-      && (boolean !== undefined || (literalIsExplicit && (categorical || fieldEvidence(filter.column, request) > 0)));
+    const negatedLiteral = requestNegatesLiteral(request, filter.value);
+    const categoricalOperatorMatches = categorical && literalIsExplicit
+      && ((negatedLiteral && filter.operator === "neq") || (!negatedLiteral && filter.operator === "eq"));
+    const booleanMatches = boolean !== undefined && filter.operator === "eq";
+    const scalarMatches = !categorical && !/BOOL/i.test(column.type) && !negatedLiteral
+      && literalIsExplicit && fieldEvidence(filter.column, request) > 0;
+    const supported = booleanMatches || categoricalOperatorMatches || scalarMatches;
     if (!supported) decisions.push({ field, action: "removed", reason: "Filter field and value were not both supported by the current request." });
     else if (boolean !== undefined && filter.value.toLowerCase() !== boolean) {
       decisions.push({ field, action: "replaced", reason: "Boolean value was aligned with the current request." }); filter.value = boolean;
@@ -306,6 +346,13 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
     numeratorFilters: cleanFilters(plan.numeratorFilters.map((filter) => ({ ...filter })), "numeratorFilters"),
     denominatorFilters: cleanFilters(plan.denominatorFilters.map((filter) => ({ ...filter })), "denominatorFilters"),
   };
+  const clarify = (reason: string): AnalyticalPlanAudit => {
+    decisions.push({ field: "action", action: "clarified", reason });
+    return { plan: { ...normalized, action: "clarify", explanation: reason }, decisions };
+  };
+  if (plan.operation === "conditional_rate" && normalized.denominatorFilters.length !== plan.denominatorFilters.length) {
+    return clarify("The requested denominator scope could not be verified against the approved schema and current request.");
+  }
   if (plan.dimensions.length) decisions.push({ field: "dimensions", action: "removed", reason: "This operation has a fixed output grain and does not accept model-added dimensions." });
 
   const roles = resolveAnalyticalSemanticRoles(request, columns);
@@ -508,7 +555,9 @@ export function recoverAdvancedAnalyticalPlan(request: string, columns: DatasetC
   }
   if (roles.populationRelation.confidence === "high"
     && namesWholePopulationForRate(request, roles.populationRelation.value!)) {
-    return { ...base, operation: "conditional_rate", source: roles.populationRelation.value! };
+    const source = roles.populationRelation.value!;
+    const booleanCondition = explicitBooleanRateCondition(request, source, columns);
+    return { ...base, operation: "conditional_rate", source, numeratorFilters: booleanCondition ? [booleanCondition] : [] };
   }
   if (/\b(?:distinct|unique)\b/i.test(request) && roles.countTarget.confidence === "high") {
     const entity = columnFor(roles.countTarget.value!, columns);

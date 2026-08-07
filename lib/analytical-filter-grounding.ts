@@ -97,12 +97,12 @@ export async function groundAdvancedAnalyticalFilters(plan: AdvancedAnalyticalPl
   const longest = discovered.filter((candidate) => !discovered.some((other) => other.value.length > candidate.value.length && valueAppearsInRequest(other.value, candidate.value)));
   const byValue = new Map<string, Array<{ field: string; value: string }>>();
   for (const candidate of longest) byValue.set(candidate.value.toLocaleLowerCase(), [...(byValue.get(candidate.value.toLocaleLowerCase()) ?? []), candidate]);
-  if (grounded.operation === "conditional_rate" && byValue.size > 1) {
-    decisions.push({ value: [...byValue.values()].map((matches) => matches[0].value).join(", "), action: "clarified", reason: "More than one explicit categorical value could define the rate numerator." });
+  const unassignedValues = [...byValue.entries()].filter(([value]) => !existingValues.has(value));
+  if (grounded.operation === "conditional_rate" && unassignedValues.length > 1) {
+    decisions.push({ value: unassignedValues.map(([, matches]) => matches[0].value).join(", "), action: "clarified", reason: "More than one unassigned categorical value could define the rate numerator." });
     return { plan: { ...grounded, action: "clarify" as const, explanation: "Which one explicit condition should define the percentage numerator?" }, decisions };
   }
-  for (const matches of [...byValue.values()].slice(0, 4)) {
-    if (existingValues.has(matches[0].value.toLocaleLowerCase())) continue;
+  for (const [, matches] of unassignedValues.slice(0, 4)) {
     const fields = [...new Set(matches.map((match) => match.field))];
     if (fields.length > 1) {
       decisions.push({ value: matches[0].value, action: "clarified", reason: "An explicit categorical value appears in multiple approved fields." });

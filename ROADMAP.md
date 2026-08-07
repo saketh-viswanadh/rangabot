@@ -81,14 +81,13 @@ qualified local model, if any, powers each workflow.
   final SQL, cancellation, verified narration fallback and trace provenance use
   the same injected boundary. Native SQL now has a hard-kill process boundary;
   route precedence and evidence-to-trace consistency have synthetic integration
-  tests. The unchanged runner-2.1.2 sealed run at clean commit `8725d47` remained
-  10/12 (83.3%; 5.3-second mean, 4.5-second median, 18.1-second P95), with all
-  12 pack audits, all 10 result comparisons and zero evaluator errors. One
-  source-semantics miss and one clarification instead of conditional-rate
-  execution keep it below the 90% gate. The stricter grounding audit accepted no
-  generated query narration; verified fallback is safe and visible, but narration
-  reliability is not qualified. Saved model choice, qualification and sandboxed
-  Python are still blocked.
+  tests. The first clean theatre-v5 transfer run at commit `23f5e2c` passed 12/12,
+  all 12 pack audits and all 11 result comparisons with zero evaluator errors,
+  after the structurally isomorphic suite was frozen separately at `f877d77`.
+  This meets the manifest's 90% single-run overall-score threshold on that check,
+  but all 11 generated query narrations required visible verified fallback.
+  Broad transfer, required repetitions, cross-model behavior, human usefulness,
+  saved model choice, qualification storage and sandboxed Python remain blocked.
 - [ ] **Scholar pack** — adapt Knowledge Vault retrieval, citation audit,
   cross-source synthesis and Teacher Mode to the same pack boundary. Embedding
   and reranking components remain distinct from the selected generative model.
@@ -157,8 +156,11 @@ qualified local model, if any, powers each workflow.
   per-entity averages and anti-joins transfer across domains. Sealed holdouts
   passed 5/12 in logistics and 6/10 valid cases in a library domain. The unseen
   ecology suite's nominal 6/13 fell to a strict 3/13 after rejecting three
-  coincidental right-result/wrong-semantics matches. Astronomy v4 then reached
-  10/12 (83.3%), still below the 90% transfer gate
+  coincidental right-result/wrong-semantics matches. Astronomy v4 initially
+  reached 10/12; the separately frozen isomorphic theatre v5 suite passed 12/12
+  on its first retained clean run, meeting the manifest's 90% single-run overall-
+  score threshold on that check without establishing broad generalization; a
+  structurally diverse holdout remains required before this item can close
 - [x] Require future analytical holdouts to validate expected semantic roles as
   well as executed results, so synthetic data coincidences cannot earn a pass
 - [x] Add the first model-independent semantic-role pass for count populations,
@@ -167,12 +169,23 @@ qualified local model, if any, powers each workflow.
 - [x] Extend role resolution to relation populations, row-count denominators,
   local categorical filters, thresholds, anti-joins and period grains. Fully
   resolved plans bypass model planning; ambiguous plans remain model-assisted
-- [x] Freeze and run a new transfer domain exactly once for this candidate.
-  Astronomy v4 passed 10/12 (83.3%); one exact-role mismatch and one genuine
-  conditional-rate failure remain, so the 90% transfer gate is not met
-- [ ] Add domain-neutral conditional numerator/denominator role resolution and
-  govern semantic equivalence of shared identifiers without weakening strict
-  result checks; prove both on development fixtures before a future v5 holdout
+- [x] Freeze and retain astronomy v4's first candidate result. It passed 10/12
+  and exposed the two generic semantic failures repaired in the next increment;
+  later v4 runs are regression evidence only
+- [x] Freeze the isomorphic theatre v5 suite before the semantic repair and
+  retain its first clean 12/12 run as a precommitted domain/name-transfer check
+- [ ] Freeze a structurally diverse, non-isomorphic semantic holdout before the
+  next planning change; vary population scope, phrasing, schema topology and
+  ambiguity boundaries so broad generalization can be measured honestly
+- [x] Add domain-neutral whole-population conditional-rate recovery and
+  post-grounding shared-identifier source resolution without weakening strict
+  result checks; freeze v5 before implementation and retain its first result
+- [x] Fail closed when a denominator filter is removed, Boolean polarity is
+  mixed, or a distinct population has no evidenced qualifying relation; retain
+  sanitized state in every clarification
+- [ ] Improve evidence-grounded analytical narration. V5 semantic execution is
+  12/12, but 0/11 generated query narrations passed the strict audit; direct
+  verified fallback remains the safe user-visible behavior
 - [x] Preflight every analytical holdout reference before the first model call;
   invalid evaluator cases must never be counted as Rangabot failures
 - [ ] Add hard-tier windows, cohorts, percentiles, correlations, retention and
