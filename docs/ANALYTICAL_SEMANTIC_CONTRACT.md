@@ -123,3 +123,9 @@ distinct count with no evidenced qualifying relation also clarify. A bare
 distinct population, one explicit Boolean condition, and an explicitly negated
 categorical scope may execute only when each maps uniquely to the approved
 schema.
+
+Clean production commit `d0077fd` subsequently retained 12/12 on both v4 and v5
+as regression checks, with all pack audits and executed-result comparisons
+passing and zero evaluator errors. All 11 executed narrations in each suite were
+again rejected. These later runs verify non-regression only; they do not replace
+v5's first retained precommitted result or broaden the qualification claim.

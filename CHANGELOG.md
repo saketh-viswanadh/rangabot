@@ -30,6 +30,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   fallback, so narration, critical repetitions, cross-model evidence, human
   usefulness and broad generalization remain unqualified. The deterministic
   suite is now 262/262.
+- After the hostile boundary audit, clean production commit `d0077fd` retained
+  12/12 on both astronomy v4 and theatre v5 as regression checks, with 12/12
+  pack audits, 11/11 executed-result comparisons and zero evaluator errors in
+  each. V5 mean/median/P95 latency was 5.3/5.7/7.5 seconds. These reruns are
+  regression evidence only; all 11 generated narrations in each were rejected.
 
 ### Architectural decisions
 

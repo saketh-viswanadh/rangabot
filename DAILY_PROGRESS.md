@@ -34,6 +34,13 @@
   score threshold on this isomorphic check, but broad transfer, narration,
   required repetitions, cross-model behavior and human usefulness remain open;
   Analytics stays experimental. The deterministic suite passes 262/262.
+- On final clean production commit `d0077fd`, astronomy v4 and theatre v5 each
+  remained 12/12 as regression checks with 12/12 pack audits, 11/11 result
+  comparisons and zero evaluator errors. V4 mean/median/P95 latency was
+  5.4/5.2/9.7 seconds; v5 was 5.3/5.7/7.5 seconds. Both again rejected all 11
+  generated query narrations, confirming that verified fallback remains the
+  current explanation path. These reruns do not replace v5's first retained
+  precommitted result or create new qualification evidence.
 
 ## 2026-08-07 — Analytics Expert Pack 0.1 reference
 

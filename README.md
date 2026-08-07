@@ -166,6 +166,12 @@ and a distinct count cannot default to an entity table when no observation
 relation is evidenced. These cases produce a focused clarification rather than a
 plausible but population-changing query.
 
+After those audit fixes, clean production commit `d0077fd` retained 12/12 on
+both astronomy v4 and theatre v5 as regression checks, with zero evaluator
+errors. Those reruns do not strengthen the qualification claim: every one of the
+11 executed answers in each still rejected model narration and used the visible
+verified fallback.
+
 Every answer exposes an optional **How this was calculated** trace with the
 query, dataset name, row count, timing, and input/query fingerprints. A strict
 numeric audit rejects narration containing values absent from the execution
