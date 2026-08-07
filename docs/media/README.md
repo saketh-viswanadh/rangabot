@@ -5,6 +5,7 @@ personal chats, documents, usernames, filesystem paths or private indexes.
 
 Start Rangabot and open:
 
+- `/?demo=welcome&theme=light` for the privacy-safe fresh-chat capture;
 - `/?demo=knowledge&theme=dark&step=answer`
 - `/?demo=knowledge&theme=light&step=answer`
 - change `step` to `question` or `thinking` for demo frames.

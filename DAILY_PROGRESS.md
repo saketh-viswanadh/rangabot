@@ -1,5 +1,33 @@
 # Daily progress
 
+## 2026-08-07 — Passive welcome and Rangabot adaptive colour system
+
+- Removed the fresh-chat category selector and manual rotation affordance from
+  the central canvas. Welcome content is now one quiet, borderless line;
+  category choice remains available only in the browser-local Preferences
+  dialog, where an infrequent setting belongs.
+- Replaced sand, sage, and lavender with five curated environments: the default
+  Rangabot amber-and-pine signature, Moss, Harbor, Plum, and Ember. Each has
+  independently authored light and dark semantic tokens instead of relying on
+  inversion or accent-only recolouring. Legacy saved palette IDs migrate to the
+  closest new direction.
+- Separated appearance mode from colour selection in Tools. Light and dark are
+  explicit icon buttons; five unnamed visual swatches carry accessible names,
+  a visible check, focus outline, and selection ring. The groups align on wide
+  layouts and stack cleanly at the 520 px breakpoint.
+- Added strict token tests across all 10 palette/mode combinations. The suite
+  checks 4.5:1 normal-text contrast, visible within-theme surface hierarchy,
+  true light/dark separation, and minimum OKLab distance between every palette;
+  the focused UI/icon suite passes 17/17.
+- Production-browser QA exercised all five palettes in both modes, the local
+  Preferences placement, keyboard focus visibility, and responsive layouts at
+  1440×900, 1280×720, 1024×768, 390×844, and 320×568. The app and body matched
+  every tested viewport width, the compact Tools panel remained scrollable at
+  the smallest height, and the console reported no warnings or errors.
+- Refreshed the 1280×720 public-safe fresh-chat capture. Demo mode remained free
+  of conversations, projects, folder approvals, saved names, and private vault
+  material.
+
 ## 2026-08-07 — Local fresh-chat personalization and strict UI audit
 
 - Rejected the first visual composition after a production-size audit showed

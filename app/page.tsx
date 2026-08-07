@@ -19,7 +19,7 @@ import { parseKnowledgeBrief } from "@/lib/knowledge-brief";
 import { CraftIcon } from "@/app/components/craft-icon";
 import { formatAnswerReceipt } from "@/lib/answer-receipt";
 import { SqlAnalysisPanel } from "@/app/components/sql-analysis-panel";
-import { WelcomePreferencesDialog, welcomeModeOptions } from "@/app/components/welcome-preferences";
+import { WelcomePreferencesDialog } from "@/app/components/welcome-preferences";
 import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
 import { parseAnalysisTraceHeader, parsePackWarningsHeader } from "@/lib/chat-validation";
 
@@ -34,7 +34,7 @@ const MarkdownMessage = dynamic(
 
 type Mode = "local" | "smart" | "teach" | "codex";
 type Appearance = "light" | "dark";
-type Palette = "sand" | "sage" | "lavender";
+type Palette = "rangabot" | "moss" | "harbor" | "plum" | "ember";
 type DisplayMessage = ChatMessage & {
   id: string;
   source?: "local";
@@ -64,6 +64,23 @@ type KnowledgeUpdates = { week: string; month: string; changelog: string; weekUp
 type KnowledgeTab = "discover" | "vault" | "updates";
 const BOOK_WELCOME_HISTORY_STORAGE_KEY = "rangabot-book-welcome-history-v1";
 const PUBLIC_DEMO_MODES = new Set(["knowledge", "welcome"]);
+const paletteOptions: Array<{ id: Palette; label: string }> = [
+  { id: "rangabot", label: "Rangabot" },
+  { id: "moss", label: "Moss" },
+  { id: "harbor", label: "Harbor" },
+  { id: "plum", label: "Plum" },
+  { id: "ember", label: "Ember" },
+];
+const legacyPaletteIds: Record<string, Palette> = {
+  sand: "rangabot",
+  sage: "moss",
+  lavender: "plum",
+};
+
+function parsePalette(value: string | null): Palette {
+  if (value && paletteOptions.some((choice) => choice.id === value)) return value as Palette;
+  return value ? legacyPaletteIds[value] ?? "rangabot" : "rangabot";
+}
 
 function parseBookWelcomeHistory() {
   try {
@@ -89,7 +106,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("smart");
   const [appearance, setAppearance] = useState<Appearance>("dark");
-  const [palette, setPalette] = useState<Palette>("sand");
+  const [palette, setPalette] = useState<Palette>("rangabot");
   const [replyTo, setReplyTo] = useState<DisplayMessage | null>(null);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [sending, setSending] = useState(false);
@@ -397,12 +414,13 @@ export default function Home() {
     const parameters = new URLSearchParams(window.location.search);
     const publicDemo = PUBLIC_DEMO_MODES.has(parameters.get("demo") ?? "");
     const savedAppearance = localStorage.getItem("rangabot-appearance") as Appearance | null;
-    const savedPalette = localStorage.getItem("rangabot-palette") as Palette | null;
+    const savedPalette = localStorage.getItem("rangabot-palette");
     const savedWelcomePreferences = publicDemo
       ? { ...defaultWelcomePreferences }
       : parseWelcomePreferences(localStorage.getItem(WELCOME_PREFERENCES_STORAGE_KEY));
     if (savedAppearance === "light" || savedAppearance === "dark") setAppearance(savedAppearance);
-    if (["sand", "sage", "lavender"].includes(savedPalette ?? "")) setPalette(savedPalette as Palette);
+    else setAppearance(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    setPalette(parsePalette(savedPalette));
     setWelcomePreferences(savedWelcomePreferences);
     setWelcomePreferencesReady(true);
     setReadKnowledgeVersion(localStorage.getItem("rangabot-knowledge-read"));
@@ -498,13 +516,13 @@ export default function Home() {
     const parameters = new URLSearchParams(window.location.search);
     if (parameters.get("demo") === "welcome") {
       setAppearance(parameters.get("theme") === "dark" ? "dark" : "light");
-      setPalette("sand");
+      setPalette("rangabot");
       setMessages([]);
       return;
     }
     if (parameters.get("demo") !== "knowledge") return;
     setAppearance(parameters.get("theme") === "light" ? "light" : "dark");
-    setPalette("sage");
+    setPalette("moss");
     const question: DisplayMessage = {
       id: "demo-question",
       role: "user",
@@ -761,13 +779,6 @@ export default function Home() {
     setWelcomeIndex((current) => nextWelcomeIndex(current, mode));
   }
 
-  function selectWelcomeMode(mode: WelcomeMode) {
-    const next = { ...welcomePreferences, mode };
-    setWelcomePreferences(next);
-    localStorage.setItem(WELCOME_PREFERENCES_STORAGE_KEY, serializeWelcomePreferences(next));
-    rotateWelcome(mode);
-  }
-
   function closeWelcomePreferences() {
     setWelcomePreferencesOpen(false);
     requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
@@ -793,7 +804,6 @@ export default function Home() {
     ? weeklyBrief.length
     : 0;
   const welcomeLine = welcomeLines[welcomeIndex] ?? welcomeLines[0];
-  const selectedWelcomeMode = welcomeModeOptions.find((option) => option.value === welcomePreferences.mode) ?? welcomeModeOptions[0];
   const routeDescription = mode === "codex"
     ? "Cloud handoff is not enabled"
     : mode === "teach"
@@ -916,11 +926,32 @@ export default function Home() {
                   <p className="repository-disclosure">Approval is stored locally. Files are read only after you choose a folder and search it.</p>
                   {repositoryMessage && <p className="repository-status" role="status">{repositoryMessage}</p>}
                 </section>
-                <div className="tool-theme" aria-label="Theme settings">
-                  <span>Appearance</span>
-                  <button type="button" className="appearance-toggle" onClick={() => changeAppearance(appearance === "dark" ? "light" : "dark")} aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}><CraftIcon name={appearance === "dark" ? "sun" : "moon"} size={15} /> {appearance === "dark" ? "Light" : "Dark"}</button>
-                  {(["sand", "sage", "lavender"] as Palette[]).map((choice) => <button type="button" key={choice} className={`palette-choice ${choice} ${palette === choice ? "selected" : ""}`} onClick={() => changePalette(choice)} aria-label={`Use ${choice} palette`}><i />{choice}</button>)}
-                </div>
+                <section className="tool-appearance" aria-labelledby="appearance-title">
+                  <div className="appearance-heading"><strong id="appearance-title">Appearance</strong><small>Stored on this device</small></div>
+                  <div className="appearance-controls">
+                    <div className="appearance-setting">
+                      <span>Mode</span>
+                      <div className="appearance-mode" role="group" aria-label="Appearance mode">
+                        {(["light", "dark"] as Appearance[]).map((choice) => (
+                          <button key={choice} type="button" onClick={() => changeAppearance(choice)} aria-pressed={appearance === choice} aria-label={`Use ${choice} mode`}>
+                            <CraftIcon name={choice === "light" ? "sun" : "moon"} size={16} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="appearance-setting colour-setting">
+                      <span>Colour</span>
+                      <div className="palette-options" role="radiogroup" aria-label="Colour theme">
+                        {paletteOptions.map((choice) => (
+                          <button key={choice.id} type="button" className={`palette-choice ${choice.id}`} role="radio" aria-checked={palette === choice.id} aria-label={`Use ${choice.label} colour theme`} onClick={() => changePalette(choice.id)}>
+                            <span className="palette-preview" aria-hidden="true" />
+                            <span className="palette-check" aria-hidden="true"><CraftIcon name="check" size={12} /></span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </section>
               </div>}
             </div>
             <button className={`status ${ready ? "ready" : "offline"}`} onClick={refreshStatus}>
@@ -950,24 +981,15 @@ export default function Home() {
                   </div> : <div className="welcome-loading" role="status">Preparing your private workspace…</div>}
                 </div>
               </div>
-              {welcomePreferencesReady && <>
+              {welcomePreferencesReady && (
                 <div className={`welcome-note ${welcomePreferences.mode === "books" ? "book-fact" : ""}`} aria-live="polite">
-                  <div className="welcome-note-meta">
-                    <label className="welcome-mode-select">
-                      <span>Show</span>
-                      <select value={welcomePreferences.mode} onChange={(event) => selectWelcomeMode(event.target.value as WelcomeMode)} aria-label="Fresh chat content">
-                        {welcomeModeOptions.map((option) => <option key={option.value} value={option.value}>{option.shortLabel}</option>)}
-                      </select>
-                    </label>
-                    <button type="button" onClick={() => rotateWelcome(welcomePreferences.mode)} aria-label={`Show another ${selectedWelcomeMode.shortLabel.toLowerCase()} item`}><CraftIcon name="arrow" size={14} /> Another</button>
-                  </div>
                   {welcomePreferences.mode === "books" ? (
                     bookWelcomeLoading ? <p className="welcome-note-loading">Choosing a cited sentence from your local books…</p>
                       : bookWelcomeFact ? <><blockquote>{bookWelcomeFact.text}</blockquote><cite>{bookWelcomeCitation}</cite></>
-                        : <div className="welcome-book-empty"><strong>No suitable book fact is indexed yet.</strong><span>Add a compatible text-based document to the Knowledge Vault, then ingest it locally.</span><button type="button" onClick={() => openKnowledgeBrief("vault")}>Open Vault status</button></div>
+                        : <div className="welcome-book-empty"><strong>No suitable book fact is indexed yet.</strong><span>Add a compatible text-based document to the Knowledge Vault, then ingest it locally.</span></div>
                   ) : <><blockquote>{welcomeLine.kind === "QUOTE" ? `“${welcomeLine.text}”` : welcomeLine.text}</blockquote><cite>{welcomeLine.kind === "QUOTE" ? `— ${welcomeLine.credit}` : welcomeLine.credit}</cite></>}
                 </div>
-              </>}
+              )}
               <div className="starter-grid" aria-label="Conversation starters">
                 <button type="button" onClick={() => chooseStarter("Help me think through an idea: ")} aria-label="Explore an idea locally" title="Brainstorm an idea locally">
                   <span className="starter-icon idea"><CraftIcon name="spark" /></span>

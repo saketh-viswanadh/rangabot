@@ -18,12 +18,14 @@ local Knowledge Vault; cloud handoff remains disabled.
 ### A calm local workspace
 
 Start with a private conversation and a rotating greeting. An optional local
-name or nickname personalizes the welcome; one quiet selector chooses Mix,
-Quotes, Jokes, Thoughts, or My books without turning the page into a settings
-panel. Four compact starters and a one-row composer leave the conversation as
-the visual priority. Sand, sage, and lavender recolor the full workspace in
-light or dark mode. Brief stays one tap away; Memory, Analyze, Mastery, approved
-folders, and appearance settings live in the compact Tools menu.
+name or nickname personalizes the welcome, while Mix, Quotes, Jokes, Thoughts,
+or My books is chosen once in local Preferences—not repeatedly on every new
+chat. The resting page keeps only one quiet welcome line, four compact starters,
+and a one-row composer so conversation remains the visual priority. Rangabot's
+warm amber-and-pine signature and four optional colour directions—Moss, Harbor,
+Plum, and Ember—each adapt across explicit light and dark environments. Brief
+stays one tap away; Memory, Analyze, Mastery, approved folders, and the aligned
+appearance controls live in the compact Tools menu.
 
 ![Rangabot fresh conversation workspace with local model status, projects, themes, and conversation starters](docs/media/rangabot-product-home.png)
 

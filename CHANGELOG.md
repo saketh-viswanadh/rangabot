@@ -9,6 +9,26 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Improved
 
+- Corrected the fresh-chat hierarchy after another production-size review.
+  The rotating content is now passive text rather than a settings card: the
+  category selector and manual rotation control have left the canvas, and Mix,
+  Quotes, Jokes, Thoughts, or My books is configured only in the local
+  Preferences dialog.
+- Replaced the three legacy colour labels with a semantic Rangabot appearance
+  system. The warm amber-and-pine Rangabot signature is joined by Moss, Harbor,
+  Plum, and Ember; every palette owns genuinely distinct canvas, sidebar, card,
+  composer, starter, text, focus, and accent tokens in both light and dark mode.
+  Existing sand, sage, and lavender browser settings migrate safely.
+- Rebuilt the Tools appearance area as two aligned controls: explicit light and
+  dark buttons plus visually unlabeled, accessible environment swatches with a
+  check and selection ring. Focus remains visible, colour is not the only state
+  signal, and narrow layouts stack the controls instead of mixing mode with the
+  first swatch.
+- Added automated WCAG AA contrast, tonal-hierarchy, light/dark separation, and
+  cross-palette perceptual-distance checks for all ten curated environments.
+  Real browser review covered 1440×900, 1280×720, 1024×768, 390×844, and
+  320×568 without document overflow or console warnings, and refreshed the
+  public-safe home capture.
 - Corrected the first fresh-chat visual iteration after production-size review.
   The empty state now has three deliberate layers—one compact personalized
   greeting, one content card with a single category selector, and four concise
