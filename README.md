@@ -168,15 +168,29 @@ plausible but population-changing query.
 
 After those audit fixes, clean production commit `d0077fd` retained 12/12 on
 both astronomy v4 and theatre v5 as regression checks, with zero evaluator
-errors. Those reruns do not strengthen the qualification claim: every one of the
-11 executed answers in each still rejected model narration and used the visible
-verified fallback.
+errors. A final diagnostic baseline then captured the rejected drafts instead of
+counting only the safe fallback: theatre v5 attempted 11 free-form narrations and
+accepted 0, with 11 unsupported-language, five false-limitation, and six
+unsupported-number failures.
+
+Analytics Pack `0.2.0` removes that unreliable free-form narration authority.
+It retains the validated plan as a typed object, compiles exact cell facts and
+operation-defined units, and renders the answer through trusted code. A
+structural audit rejects forged numbers, cells, bounds, receipts, operation-
+specific aliases/cardinality, or any post-render mutation. Every verified filter
+is shown or its display omission is explicit; local data cannot create active
+Markdown links or images. Model-authored planning explanations never enter the
+answer. The frozen zero-model-call narration suite passes 44/44 canonical cases
+and rejects 222/222 adversarial mutations and invalid result shapes; this proves renderer grounding, not
+broad analytical planning or human usefulness. Run it with
+`npm run conversation:evaluate:sql:narration` and see the
+[narration contract](docs/ANALYTICAL_NARRATION_CONTRACT.md).
 
 Every answer exposes an optional **How this was calculated** trace with the
-query, dataset name, row count, timing, and input/query fingerprints. A strict
-numeric audit rejects narration containing values absent from the execution
-result and falls back to the verified table. The advanced SQL workspace remains
-available for manual inspection and exact one-time execution. See
+query, dataset name, row count, timing, and input/query fingerprints. Model
+provenance appears only when a model actually resolved the plan; deterministic
+plans and the trusted renderer do not claim a model call. The advanced SQL
+workspace remains available for manual inspection and exact one-time execution. See
 [`docs/LOCAL_EXECUTION_ARCHITECTURE.md`](docs/LOCAL_EXECUTION_ARCHITECTURE.md).
 
 ## Artifact skills
@@ -400,11 +414,12 @@ memory-fit guard.
 
 The [Expert Pack Contract](docs/EXPERT_PACK_CONTRACT.md) defines how installable
 Analytics, Scholar, Documents, Builder and Research capabilities remain governed
-by the same Mind & Memory control plane. Analytics `0.1.0` is the first bundled
+by the same Mind & Memory control plane. Analytics `0.2.0` is the first bundled
 experimental reference: an attached-data request receives exact conversation-
 and dataset-scoped grants, all schema/grounding/final reads use one cancellable
-read-only adapter, the configured local model is explicit, and the result carries
-validated evidence, typed fallback warnings and execution receipts. DuckDB runs
+read-only adapter, every actual local-model use is explicit, and the result carries
+validated evidence, canonical answer claims and execution receipts bound to the
+exact approved input and query. DuckDB runs
 inside a hard-kill process boundary so Stop and absolute timeouts cannot strand a
 native query. The route and client reject execution traces that do not match the
 validated evidence. Run the retained astronomy regression path with
@@ -415,12 +430,12 @@ This is not a pack manager or a complete qualification claim. Runner 2.1.2 and
 result comparator 1.0.0 recorded a clean first theatre-v5 transfer run of 12/12
 at commit `23f5e2c` (4.8-second mean, 5.2-second median, 6.7-second P95, zero
 evaluator errors), with all 12 terminal/evidence/receipt audits and all 11
-executed-result comparisons passing. The stricter audit rejected all 11 query
-narrations and used the visibly disclosed direct verified fallback. Semantic
-execution therefore met the manifest's single-run overall-score threshold on
-this isomorphic check, while broad transfer, explanation quality, required
-critical repetitions, cross-model evidence and human usefulness remain
-unqualified. Saved per-pack model choices, automatic/custom switching,
+executed-result comparisons passing. That historical run rejected all 11
+free-form narrations. Pack `0.2.0` replaces that path with the separately frozen
+trusted renderer; semantic execution still meets only the manifest's single-run
+threshold on an isomorphic check. Broad transfer, richer interpretation,
+required critical repetitions, cross-model planning evidence and blind human
+usefulness remain unqualified. Saved per-pack model choices, automatic/custom switching,
 install/update/remove flows, resource lifecycle and the other packs are still
 roadmap work. No mode downloads a model or enables the internet.
 

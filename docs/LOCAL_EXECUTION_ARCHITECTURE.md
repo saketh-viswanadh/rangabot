@@ -14,19 +14,24 @@ return evidence, never independent agents.
    conversation; selecting a different or new chat clears the attachment.
 3. A high-precision intent gate distinguishes analytical requests from ordinary
    conversation. Unrelated messages do not open or inspect the dataset.
-4. Ollama receives the conversation and column names/types, not dataset rows,
-   and proposes exactly one read-only query.
+4. Trusted semantic resolution handles supported unambiguous requests. Only an
+   unresolved plan invokes Ollama, which receives bounded conversation plus
+   column names/types—not dataset rows—and returns a typed plan, never SQL.
 5. Rangabot validates the proposal. A fresh in-memory DuckDB instance imports
    only the canonical approved file, then disables external access before the
    untrusted SQL is prepared or run.
 6. Exactly one `SELECT` statement runs with memory, thread, time, row, query,
    input-size, and output limits.
-7. Ollama receives a bounded result and writes the conversational explanation.
-   A deterministic numeric audit rejects unsupported numerical claims and falls
-   back to the verified result table when necessary.
+7. A trusted renderer receives the retained typed plan and bounded result. It
+   enforces operation-specific aliases/cardinality, exact cells and units,
+   explicit scope and display limitations, then structurally audits the complete
+   answer. No second free-form model narration is authorized.
 8. Rangabot stores the answer plus an inspectable calculation trace in the
    conversation. The trace has no local path or copied dataset.
-9. The connection and in-memory database are destroyed.
+9. Before success, the pack binds the runtime input fingerprint to preflight and
+   the query fingerprint to the exact compiled query. Cancellation is rechecked
+   after every awaited boundary. The connection and in-memory database are then
+   destroyed.
 
 ## Implemented boundary
 

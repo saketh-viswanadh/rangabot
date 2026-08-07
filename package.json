@@ -44,6 +44,7 @@
     "conversation:evaluate:sql:holdout:v5": "node --experimental-strip-types scripts/evaluate-analytical-holdout-v5.ts",
     "conversation:evaluate:sql:pack": "node --experimental-strip-types scripts/evaluate-analytical-holdout-v4.ts --expert-pack",
     "conversation:evaluate:sql:roles": "node --experimental-strip-types scripts/evaluate-analytical-role-development.ts",
+    "conversation:evaluate:sql:narration": "node --experimental-strip-types scripts/evaluate-analytical-narration.ts",
     "conversation:reviewer:qualify": "node --experimental-strip-types scripts/qualify-conversation-reviewer.ts",
     "knowledge:validate": "node --experimental-strip-types scripts/knowledge-cli.ts validate",
     "knowledge:backup": "node --experimental-strip-types scripts/knowledge-cli.ts backup",
