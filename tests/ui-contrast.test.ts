@@ -17,10 +17,17 @@ function colorTokens(selector: string) {
   );
 }
 
-const palettes = ["sand", "sage", "lavender"] as const;
 const appearances = ["light", "dark"] as const;
 
-function themeTokens(palette: typeof palettes[number], appearance: typeof appearances[number]) {
+function paletteIds() {
+  const matches = [...styles.matchAll(/\.app-shell\[data-palette="([a-z][a-z-]*)"\]\[data-appearance="(?:light|dark)"\]/g)]
+    .map((match) => match[1]);
+  return [...new Set(matches)];
+}
+
+const palettes = paletteIds();
+
+function themeTokens(palette: string, appearance: typeof appearances[number]) {
   const scopes = [
     ":root",
     `.app-shell[data-appearance="${appearance}"]`,
@@ -72,12 +79,16 @@ function perceptualDistance(first: string, second: string) {
 test("applies the final semantic surface tokens to the visible UI", () => {
   assert.match(styles, /\.app-shell\s*\{[^}]*background(?:-color)?:[^;}]*var\(--canvas\)/);
   assert.match(styles, /\.sidebar\s*\{[^}]*background(?:-color)?:[^;}]*var\(--sidebar-surface\)/);
-  assert.match(styles, /\.welcome-note\s*\{[^}]*background(?:-color)?:[^;}]*var\(--card-surface\)/);
+  assert.match(styles, /\.welcome-note\s*\{[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/,
+    "The fresh-chat welcome should stay passive rather than reading as another settings card");
+  assert.match(styles, /\.starter-grid button\s*\{[^}]*background:\s*var\(--starter-surface\)/);
   assert.match(styles, /\.composer\s*\{[^}]*background(?:-color)?:[^;}]*var\(--composer-surface\)/);
   assert.match(styles, /\.message\.user \.message-body\s*\{[^}]*background:\s*var\(--user-bubble\);[^}]*color:\s*var\(--on-user\);/);
 });
 
-test("keeps all six themes at WCAG AA contrast", () => {
+test("keeps every curated light and dark theme at WCAG AA contrast", () => {
+  assert.ok(palettes.some((palette) => /^ranga(?:bot)?$/.test(palette)), "Missing the canonical Rangabot palette");
+  assert.ok(palettes.length >= 4, "Expected Rangabot plus at least three optional palettes");
   for (const appearance of appearances) {
     for (const palette of palettes) {
       const tokens = themeTokens(palette, appearance);
@@ -86,9 +97,14 @@ test("keeps all six themes at WCAG AA contrast", () => {
         "sidebar-surface",
         "card-surface",
         "composer-surface",
+        "surface-raised",
+        "starter-surface",
+        "assistant-bubble",
         "text",
         "muted",
         "accent",
+        "accent-strong",
+        "focus",
         "on-accent",
         "user-bubble",
         "on-user",
@@ -96,7 +112,7 @@ test("keeps all six themes at WCAG AA contrast", () => {
         assert.ok(tokens[required], `${palette} ${appearance} is missing opaque --${required}`);
       }
 
-      for (const background of ["canvas", "sidebar-surface", "card-surface", "composer-surface"] as const) {
+      for (const background of ["canvas", "sidebar-surface", "card-surface", "composer-surface", "surface-raised", "starter-surface", "assistant-bubble"] as const) {
         for (const foreground of ["text", "muted"] as const) {
           const ratio = contrastRatio(tokens[foreground], tokens[background]);
           assert.ok(
@@ -104,6 +120,14 @@ test("keeps all six themes at WCAG AA contrast", () => {
             `${palette} ${appearance} --${foreground} on --${background} is ${ratio.toFixed(2)}:1; expected WCAG AA 4.5:1`,
           );
         }
+      }
+
+      for (const background of ["canvas", "sidebar-surface", "card-surface", "composer-surface"] as const) {
+        const ratio = contrastRatio(tokens.focus, tokens[background]);
+        assert.ok(
+          ratio >= 3,
+          `${palette} ${appearance} --focus on --${background} is ${ratio.toFixed(2)}:1; expected 3:1`,
+        );
       }
 
       for (const [foreground, background] of [
@@ -117,6 +141,84 @@ test("keeps all six themes at WCAG AA contrast", () => {
         );
       }
     }
+  }
+});
+
+test("provides genuinely traditional white and black environments", () => {
+  const light = themeTokens("monochrome", "light");
+  const dark = themeTokens("monochrome", "dark");
+
+  assert.equal(light.canvas, "#ffffff");
+  assert.equal(dark.canvas, "#000000");
+  for (const tokens of [light, dark]) {
+    for (const token of ["canvas", "canvas-glow", "sidebar-surface", "card-surface", "composer-surface", "surface-raised", "starter-surface"] as const) {
+      const [, a, b] = oklab(tokens[token]);
+      assert.ok(Math.hypot(a, b) <= 0.012, `Monochrome --${token} has a visible colour cast`);
+    }
+  }
+});
+
+test("keeps Graphite cool-neutral and Cement warm-neutral without becoming tinted themes", () => {
+  for (const palette of ["graphite", "cement"] as const) {
+    const light = themeTokens(palette, "light");
+    const dark = themeTokens(palette, "dark");
+    assert.ok(relativeLuminance(light.canvas) >= 0.72 && relativeLuminance(light.canvas) <= 0.88,
+      `${palette} light should remain a mid-light neutral environment`);
+    assert.ok(relativeLuminance(dark.canvas) >= 0.015 && relativeLuminance(dark.canvas) <= 0.08,
+      `${palette} dark should remain a charcoal neutral environment`);
+    for (const tokens of [light, dark]) {
+      for (const token of ["canvas", "canvas-glow", "sidebar-surface", "card-surface", "composer-surface", "surface-raised", "starter-surface"] as const) {
+        const [, a, b] = oklab(tokens[token]);
+        assert.ok(Math.hypot(a, b) <= 0.035, `${palette} --${token} is too chromatic for a neutral theme`);
+      }
+    }
+  }
+});
+
+test("uses tonal hierarchy inside every theme instead of one flat colour wash", () => {
+  const distinctSurfacePairs = [
+    ["canvas", "sidebar-surface"],
+    ["canvas", "card-surface"],
+    ["canvas", "composer-surface"],
+  ] as const;
+
+  for (const appearance of appearances) {
+    for (const palette of palettes) {
+      const tokens = themeTokens(palette, appearance);
+      for (const [first, second] of distinctSurfacePairs) {
+        assert.ok(tokens[first], `${palette} ${appearance} is missing --${first}`);
+        assert.ok(tokens[second], `${palette} ${appearance} is missing --${second}`);
+        const distance = perceptualDistance(tokens[first], tokens[second]);
+        assert.ok(
+          distance >= 0.018,
+          `${palette} ${appearance} ${first}/${second} distance is ${distance.toFixed(3)}; expected a visible tonal hierarchy`,
+        );
+      }
+    }
+  }
+});
+
+test("gives every palette a genuinely different light and dark environment", () => {
+  for (const palette of palettes) {
+    const light = themeTokens(palette, "light");
+    const dark = themeTokens(palette, "dark");
+    for (const token of ["canvas", "sidebar-surface", "card-surface", "composer-surface"] as const) {
+      assert.ok(light[token], `${palette} light is missing --${token}`);
+      assert.ok(dark[token], `${palette} dark is missing --${token}`);
+      const distance = perceptualDistance(light[token], dark[token]);
+      assert.ok(
+        distance >= 0.35,
+        `${palette} light/dark --${token} distance is ${distance.toFixed(3)}; expected at least 0.350`,
+      );
+    }
+    assert.ok(
+      relativeLuminance(light.canvas) >= 0.72,
+      `${palette} light canvas luminance is ${relativeLuminance(light.canvas).toFixed(3)}; expected a true light environment`,
+    );
+    assert.ok(
+      relativeLuminance(dark.canvas) <= 0.08,
+      `${palette} dark canvas luminance is ${relativeLuminance(dark.canvas).toFixed(3)}; expected a true dark environment`,
+    );
   }
 });
 

@@ -1,5 +1,54 @@
 # Daily progress
 
+## 2026-08-07 — Traditional neutrals and a coherent Preferences flow
+
+- Added one orthogonal Black & White palette whose light state is genuinely
+  white and whose dark state is genuinely black. Added cool Graphite and warm
+  Cement without inventing contradictory White-light/White-dark palette states.
+  Rangabot now has eight palettes and 16 independently verified environments.
+- Moved Appearance out of “Local workbench.” A persistent header Preferences
+  action now opens a focused Personal/Appearance dialog; Tools contains only
+  local capabilities, approved folders, and their permission disclosures.
+- Replaced custom radio semantics with native palette radios plus explicit
+  arrow, Home, and End navigation. The selected check and ring remain visible,
+  names remain visually quiet but accessible, and the eight 44 px targets use a
+  deterministic 4×2 grid.
+- Made preference actions sticky inside the mobile sheet. Real browser checks at
+  1280×720, 390×844, and 320×568 found no horizontal overflow, kept all swatches
+  at 44×44, and left Save visible even when Personal content needs scrolling.
+- Exercised all 16 palette/mode combinations in the production build. Every one
+  applied the expected semantic canvas/sidebar tokens without overflow; strict
+  tests also enforce 4.5:1 text contrast, 3:1 focus contrast, surface hierarchy,
+  light/dark distance, neutral chroma, and pairwise palette separation.
+
+## 2026-08-07 — Passive welcome and Rangabot adaptive colour system
+
+- Removed the fresh-chat category selector and manual rotation affordance from
+  the central canvas. Welcome content is now one quiet, borderless line;
+  category choice remains available only in the browser-local Preferences
+  dialog, where an infrequent setting belongs.
+- Replaced sand, sage, and lavender with five curated environments: the default
+  Rangabot amber-and-pine signature, Moss, Harbor, Plum, and Ember. Each has
+  independently authored light and dark semantic tokens instead of relying on
+  inversion or accent-only recolouring. Legacy saved palette IDs migrate to the
+  closest new direction.
+- Separated appearance mode from colour selection in Tools. Light and dark are
+  explicit icon buttons; five unnamed visual swatches carry accessible names,
+  a visible check, focus outline, and selection ring. The groups align on wide
+  layouts and stack cleanly at the 520 px breakpoint.
+- Added strict token tests across all 10 palette/mode combinations. The suite
+  checks 4.5:1 normal-text contrast, visible within-theme surface hierarchy,
+  true light/dark separation, and minimum OKLab distance between every palette;
+  the focused UI/icon suite passes 17/17.
+- Production-browser QA exercised all five palettes in both modes, the local
+  Preferences placement, keyboard focus visibility, and responsive layouts at
+  1440×900, 1280×720, 1024×768, 390×844, and 320×568. The app and body matched
+  every tested viewport width, the compact Tools panel remained scrollable at
+  the smallest height, and the console reported no warnings or errors.
+- Refreshed the 1280×720 public-safe fresh-chat capture. Demo mode remained free
+  of conversations, projects, folder approvals, saved names, and private vault
+  material.
+
 ## 2026-08-07 — Local fresh-chat personalization and strict UI audit
 
 - Rejected the first visual composition after a production-size audit showed

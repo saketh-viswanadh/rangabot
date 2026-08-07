@@ -1,10 +1,10 @@
 import type { ReactNode, SVGProps } from "react";
 
 export type CraftIconName =
-  | "add" | "analysis" | "arrow" | "attach" | "chat" | "chevron" | "close" | "code"
+  | "add" | "analysis" | "arrow" | "attach" | "chat" | "check" | "chevron" | "close" | "code"
   | "document" | "edit" | "external" | "folder" | "knowledge" | "mail" | "menu"
   | "mastery" | "memory" | "moon" | "pin" | "reply" | "search" | "send" | "shield"
-  | "spark" | "stop" | "sun" | "trash" | "tune";
+  | "settings" | "spark" | "stop" | "sun" | "trash" | "tune";
 
 type CraftIconProps = Omit<SVGProps<SVGSVGElement>, "name"> & { name: CraftIconName; size?: number };
 
@@ -15,6 +15,7 @@ export function CraftIcon({ name, size = 18, className = "", ...props }: CraftIc
     arrow: <><path d="M4 10h11" /><path d="m11 6 4 4-4 4" /></>,
     attach: <path d="M7.2 10.8 12 6a2.1 2.1 0 0 1 3 3l-6 6a3.5 3.5 0 0 1-5-5l6.2-6.2" />,
     chat: <><path d="M5.2 4.5h10v7.2H9.5l-4.3 3.5Z" /><path d="M3.2 7v8.5h6.3" /></>,
+    check: <path d="m5.2 10.2 3.1 3.1 6.5-7" />,
     chevron: <path d="m8 5 5 5-5 5" />,
     close: <><path d="m6 6 8 8" /><path d="m14 6-8 8" /></>,
     code: <><path d="m7.5 6-4 4 4 4" /><path d="m12.5 6 4 4-4 4" /><path d="m11.5 4-3 12" /></>,
@@ -32,6 +33,7 @@ export function CraftIcon({ name, size = 18, className = "", ...props }: CraftIc
     reply: <><path d="m8 5-5 5 5 5" /><path d="M4 10h6c4 0 6 2 6 5" /></>,
     search: <><circle cx="8.5" cy="8.5" r="4.5" /><path d="m12 12 4 4" /></>,
     send: <><path d="m3.5 10 13-6-4.6 12-2.5-4Z" /><path d="m9.4 12 7.1-8" /></>,
+    settings: <><circle cx="10" cy="10" r="2.5" /><path d="M10 3.2v1.3M10 15.5v1.3M3.2 10h1.3M15.5 10h1.3M5.2 5.2l.9.9M13.9 13.9l.9.9M14.8 5.2l-.9.9M6.1 13.9l-.9.9" /></>,
     shield: <path d="M10 3 4.5 5v4.2c0 3.5 2.2 6.3 5.5 7.8 3.3-1.5 5.5-4.3 5.5-7.8V5Z" />,
     spark: <><path d="M10 3v4M10 13v4M3 10h4M13 10h4" /><path d="m5 5 2 2m6 6 2 2m0-10-2 2m-6 6-2 2" /></>,
     stop: <rect x="5.5" y="5.5" width="9" height="9" rx="1" />,
