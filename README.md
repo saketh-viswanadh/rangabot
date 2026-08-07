@@ -22,10 +22,11 @@ name or nickname personalizes the welcome, while Mix, Quotes, Jokes, Thoughts,
 or My books is chosen once in local Preferences—not repeatedly on every new
 chat. The resting page keeps only one quiet welcome line, four compact starters,
 and a one-row composer so conversation remains the visual priority. Rangabot's
-warm amber-and-pine signature and four optional colour directions—Moss, Harbor,
-Plum, and Ember—each adapt across explicit light and dark environments. Brief
-stays one tap away; Memory, Analyze, Mastery, approved folders, and the aligned
-appearance controls live in the compact Tools menu.
+warm amber-and-pine signature is joined by traditional Black & White, cool
+Graphite, warm Cement, Moss, Harbor, Plum, and Ember. Each adapts across
+explicit light and dark environments. Brief and Preferences stay one tap away;
+Memory, Analyze, Mastery, and approved folders remain in the compact local
+Tools menu.
 
 ![Rangabot fresh conversation workspace with local model status, projects, themes, and conversation starters](docs/media/rangabot-product-home.png)
 

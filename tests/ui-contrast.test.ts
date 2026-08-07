@@ -97,9 +97,14 @@ test("keeps every curated light and dark theme at WCAG AA contrast", () => {
         "sidebar-surface",
         "card-surface",
         "composer-surface",
+        "surface-raised",
+        "starter-surface",
+        "assistant-bubble",
         "text",
         "muted",
         "accent",
+        "accent-strong",
+        "focus",
         "on-accent",
         "user-bubble",
         "on-user",
@@ -107,7 +112,7 @@ test("keeps every curated light and dark theme at WCAG AA contrast", () => {
         assert.ok(tokens[required], `${palette} ${appearance} is missing opaque --${required}`);
       }
 
-      for (const background of ["canvas", "sidebar-surface", "card-surface", "composer-surface"] as const) {
+      for (const background of ["canvas", "sidebar-surface", "card-surface", "composer-surface", "surface-raised", "starter-surface", "assistant-bubble"] as const) {
         for (const foreground of ["text", "muted"] as const) {
           const ratio = contrastRatio(tokens[foreground], tokens[background]);
           assert.ok(
@@ -115,6 +120,14 @@ test("keeps every curated light and dark theme at WCAG AA contrast", () => {
             `${palette} ${appearance} --${foreground} on --${background} is ${ratio.toFixed(2)}:1; expected WCAG AA 4.5:1`,
           );
         }
+      }
+
+      for (const background of ["canvas", "sidebar-surface", "card-surface", "composer-surface"] as const) {
+        const ratio = contrastRatio(tokens.focus, tokens[background]);
+        assert.ok(
+          ratio >= 3,
+          `${palette} ${appearance} --focus on --${background} is ${ratio.toFixed(2)}:1; expected 3:1`,
+        );
       }
 
       for (const [foreground, background] of [
@@ -126,6 +139,37 @@ test("keeps every curated light and dark theme at WCAG AA contrast", () => {
           ratio >= 4.5,
           `${palette} ${appearance} --${foreground} on --${background} is ${ratio.toFixed(2)}:1; expected WCAG AA 4.5:1`,
         );
+      }
+    }
+  }
+});
+
+test("provides genuinely traditional white and black environments", () => {
+  const light = themeTokens("monochrome", "light");
+  const dark = themeTokens("monochrome", "dark");
+
+  assert.equal(light.canvas, "#ffffff");
+  assert.equal(dark.canvas, "#000000");
+  for (const tokens of [light, dark]) {
+    for (const token of ["canvas", "canvas-glow", "sidebar-surface", "card-surface", "composer-surface", "surface-raised", "starter-surface"] as const) {
+      const [, a, b] = oklab(tokens[token]);
+      assert.ok(Math.hypot(a, b) <= 0.012, `Monochrome --${token} has a visible colour cast`);
+    }
+  }
+});
+
+test("keeps Graphite cool-neutral and Cement warm-neutral without becoming tinted themes", () => {
+  for (const palette of ["graphite", "cement"] as const) {
+    const light = themeTokens(palette, "light");
+    const dark = themeTokens(palette, "dark");
+    assert.ok(relativeLuminance(light.canvas) >= 0.72 && relativeLuminance(light.canvas) <= 0.88,
+      `${palette} light should remain a mid-light neutral environment`);
+    assert.ok(relativeLuminance(dark.canvas) >= 0.015 && relativeLuminance(dark.canvas) <= 0.08,
+      `${palette} dark should remain a charcoal neutral environment`);
+    for (const tokens of [light, dark]) {
+      for (const token of ["canvas", "canvas-glow", "sidebar-surface", "card-surface", "composer-surface", "surface-raised", "starter-surface"] as const) {
+        const [, a, b] = oklab(tokens[token]);
+        assert.ok(Math.hypot(a, b) <= 0.035, `${palette} --${token} is too chromatic for a neutral theme`);
       }
     }
   }

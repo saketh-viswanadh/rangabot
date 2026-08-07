@@ -22,6 +22,15 @@ import { SqlAnalysisPanel } from "@/app/components/sql-analysis-panel";
 import { WelcomePreferencesDialog } from "@/app/components/welcome-preferences";
 import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
 import { parseAnalysisTraceHeader, parsePackWarningsHeader } from "@/lib/chat-validation";
+import {
+  APPEARANCE_STORAGE_KEY,
+  DEFAULT_PALETTE,
+  PALETTE_STORAGE_KEY,
+  normalizeStoredPalette,
+  parseAppearance,
+  type Appearance,
+  type Palette,
+} from "@/lib/appearance-preferences";
 
 const MemoryPanel = dynamic(
   () => import("@/app/components/memory-panel").then((module) => module.MemoryPanel),
@@ -33,8 +42,6 @@ const MarkdownMessage = dynamic(
 );
 
 type Mode = "local" | "smart" | "teach" | "codex";
-type Appearance = "light" | "dark";
-type Palette = "rangabot" | "moss" | "harbor" | "plum" | "ember";
 type DisplayMessage = ChatMessage & {
   id: string;
   source?: "local";
@@ -64,24 +71,6 @@ type KnowledgeUpdates = { week: string; month: string; changelog: string; weekUp
 type KnowledgeTab = "discover" | "vault" | "updates";
 const BOOK_WELCOME_HISTORY_STORAGE_KEY = "rangabot-book-welcome-history-v1";
 const PUBLIC_DEMO_MODES = new Set(["knowledge", "welcome"]);
-const paletteOptions: Array<{ id: Palette; label: string }> = [
-  { id: "rangabot", label: "Rangabot" },
-  { id: "moss", label: "Moss" },
-  { id: "harbor", label: "Harbor" },
-  { id: "plum", label: "Plum" },
-  { id: "ember", label: "Ember" },
-];
-const legacyPaletteIds: Record<string, Palette> = {
-  sand: "rangabot",
-  sage: "moss",
-  lavender: "plum",
-};
-
-function parsePalette(value: string | null): Palette {
-  if (value && paletteOptions.some((choice) => choice.id === value)) return value as Palette;
-  return value ? legacyPaletteIds[value] ?? "rangabot" : "rangabot";
-}
-
 function parseBookWelcomeHistory() {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(BOOK_WELCOME_HISTORY_STORAGE_KEY) ?? "[]");
@@ -106,7 +95,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("smart");
   const [appearance, setAppearance] = useState<Appearance>("dark");
-  const [palette, setPalette] = useState<Palette>("rangabot");
+  const [palette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
   const [replyTo, setReplyTo] = useState<DisplayMessage | null>(null);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [sending, setSending] = useState(false);
@@ -413,14 +402,15 @@ export default function Home() {
   useEffect(() => {
     const parameters = new URLSearchParams(window.location.search);
     const publicDemo = PUBLIC_DEMO_MODES.has(parameters.get("demo") ?? "");
-    const savedAppearance = localStorage.getItem("rangabot-appearance") as Appearance | null;
-    const savedPalette = localStorage.getItem("rangabot-palette");
+    const savedAppearance = parseAppearance(localStorage.getItem(APPEARANCE_STORAGE_KEY));
+    const savedPalette = normalizeStoredPalette(localStorage.getItem(PALETTE_STORAGE_KEY));
     const savedWelcomePreferences = publicDemo
       ? { ...defaultWelcomePreferences }
       : parseWelcomePreferences(localStorage.getItem(WELCOME_PREFERENCES_STORAGE_KEY));
-    if (savedAppearance === "light" || savedAppearance === "dark") setAppearance(savedAppearance);
+    if (savedAppearance) setAppearance(savedAppearance);
     else setAppearance(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    setPalette(parsePalette(savedPalette));
+    setPalette(savedPalette.palette);
+    if (!publicDemo && savedPalette.shouldPersist) localStorage.setItem(PALETTE_STORAGE_KEY, savedPalette.palette);
     setWelcomePreferences(savedWelcomePreferences);
     setWelcomePreferencesReady(true);
     setReadKnowledgeVersion(localStorage.getItem("rangabot-knowledge-read"));
@@ -784,9 +774,13 @@ export default function Home() {
     requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
   }
 
-  function saveWelcomePreferences(preferences: WelcomePreferences) {
+  function saveWelcomePreferences(preferences: WelcomePreferences, nextAppearance: Appearance, nextPalette: Palette) {
     setWelcomePreferences(preferences);
+    setAppearance(nextAppearance);
+    setPalette(nextPalette);
     localStorage.setItem(WELCOME_PREFERENCES_STORAGE_KEY, serializeWelcomePreferences(preferences));
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, nextAppearance);
+    localStorage.setItem(PALETTE_STORAGE_KEY, nextPalette);
     setWelcomePreferencesOpen(false);
     rotateWelcome(preferences.mode);
     requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
@@ -837,16 +831,6 @@ export default function Home() {
     const y = Math.max(-1, Math.min(1, (event.clientY / window.innerHeight - .5) * 2));
     event.currentTarget.style.setProperty("--look-x", x.toFixed(2));
     event.currentTarget.style.setProperty("--look-y", y.toFixed(2));
-  }
-
-  function changeAppearance(next: Appearance) {
-    setAppearance(next);
-    localStorage.setItem("rangabot-appearance", next);
-  }
-
-  function changePalette(next: Palette) {
-    setPalette(next);
-    localStorage.setItem("rangabot-palette", next);
   }
 
   return (
@@ -901,8 +885,11 @@ export default function Home() {
             <button type="button" className="utility-button brief-button" onClick={() => openKnowledgeBrief()} aria-label={`Open Knowledge Brief${unreadKnowledge ? `, ${unreadKnowledge} new items` : ""}`}>
               <CraftIcon name="knowledge" size={15} /><span>Brief</span>{unreadKnowledge > 0 && <b>{unreadKnowledge}</b>}
             </button>
+            <button ref={preferencesTriggerRef} type="button" className="utility-button preferences-button" onClick={() => { setToolsOpen(false); setWelcomePreferencesOpen(true); }} aria-label="Open Preferences">
+              <CraftIcon name="settings" size={15} /><span>Preferences</span>
+            </button>
             <div className="tools-menu">
-              <button ref={toolsTriggerRef} type="button" className="utility-button" onClick={() => setToolsOpen((open) => !open)} aria-expanded={toolsOpen} aria-controls="rangabot-tools"><CraftIcon name="tune" size={15} /><span>Tools</span></button>
+              <button ref={toolsTriggerRef} type="button" className="utility-button" onClick={() => setToolsOpen((open) => !open)} aria-label="Open Tools" aria-expanded={toolsOpen} aria-controls="rangabot-tools"><CraftIcon name="tune" size={15} /><span>Tools</span></button>
               {toolsOpen && <div ref={toolsPopoverRef} id="rangabot-tools" className="tools-popover" role="region" aria-label="Rangabot tools">
                 <div className="tools-popover-heading"><div><strong>Local workbench</strong><small>Choose what Rangabot may use</small></div><span className="privacy-indicator"><CraftIcon name="shield" size={14} /> Local</span></div>
                 <nav className="tools-grid" aria-label="Workbench tools">
@@ -925,32 +912,6 @@ export default function Home() {
                   </form>
                   <p className="repository-disclosure">Approval is stored locally. Files are read only after you choose a folder and search it.</p>
                   {repositoryMessage && <p className="repository-status" role="status">{repositoryMessage}</p>}
-                </section>
-                <section className="tool-appearance" aria-labelledby="appearance-title">
-                  <div className="appearance-heading"><strong id="appearance-title">Appearance</strong><small>Stored on this device</small></div>
-                  <div className="appearance-controls">
-                    <div className="appearance-setting">
-                      <span>Mode</span>
-                      <div className="appearance-mode" role="group" aria-label="Appearance mode">
-                        {(["light", "dark"] as Appearance[]).map((choice) => (
-                          <button key={choice} type="button" onClick={() => changeAppearance(choice)} aria-pressed={appearance === choice} aria-label={`Use ${choice} mode`}>
-                            <CraftIcon name={choice === "light" ? "sun" : "moon"} size={16} />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="appearance-setting colour-setting">
-                      <span>Colour</span>
-                      <div className="palette-options" role="radiogroup" aria-label="Colour theme">
-                        {paletteOptions.map((choice) => (
-                          <button key={choice.id} type="button" className={`palette-choice ${choice.id}`} role="radio" aria-checked={palette === choice.id} aria-label={`Use ${choice.label} colour theme`} onClick={() => changePalette(choice.id)}>
-                            <span className="palette-preview" aria-hidden="true" />
-                            <span className="palette-check" aria-hidden="true"><CraftIcon name="check" size={12} /></span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
                 </section>
               </div>}
             </div>
@@ -977,7 +938,6 @@ export default function Home() {
                 <div className="welcome-heading">
                   {welcomePreferencesReady ? <div className="welcome-greeting-line">
                     <h2 id="welcome-title">{formatWelcomeGreeting(greetingIndex, welcomePreferences.preferredName ?? "")}</h2>
-                    <button ref={preferencesTriggerRef} type="button" className="welcome-edit" onClick={() => setWelcomePreferencesOpen(true)} aria-label="Personalize your greeting and fresh-chat content" title="Personalize"><CraftIcon name="tune" size={14} /></button>
                   </div> : <div className="welcome-loading" role="status">Preparing your private workspace…</div>}
                 </div>
               </div>
@@ -1169,7 +1129,7 @@ export default function Home() {
       )}
       <MemoryPanel open={memoryPanelOpen} onClose={closeMemoryPanel} />
       <SqlAnalysisPanel key={sqlDraft ? `${sqlDraft.datasetId}:${sqlDraft.query}` : "manual"} open={sqlPanelOpen} onClose={closeSqlPanel} onAttach={(dataset) => { void attachDatasetToChat(dataset); setSqlDraft(null); }} initialDraft={sqlDraft} />
-      {welcomePreferencesOpen && <WelcomePreferencesDialog preferences={welcomePreferences} onClose={closeWelcomePreferences} onSave={saveWelcomePreferences} />}
+      {welcomePreferencesOpen && <WelcomePreferencesDialog preferences={welcomePreferences} appearance={appearance} palette={palette} onClose={closeWelcomePreferences} onSave={saveWelcomePreferences} />}
     </main>
   );
 }

@@ -14,18 +14,20 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   category selector and manual rotation control have left the canvas, and Mix,
   Quotes, Jokes, Thoughts, or My books is configured only in the local
   Preferences dialog.
-- Replaced the three legacy colour labels with a semantic Rangabot appearance
-  system. The warm amber-and-pine Rangabot signature is joined by Moss, Harbor,
-  Plum, and Ember; every palette owns genuinely distinct canvas, sidebar, card,
-  composer, starter, text, focus, and accent tokens in both light and dark mode.
-  Existing sand, sage, and lavender browser settings migrate safely.
-- Rebuilt the Tools appearance area as two aligned controls: explicit light and
-  dark buttons plus visually unlabeled, accessible environment swatches with a
-  check and selection ring. Focus remains visible, colour is not the only state
-  signal, and narrow layouts stack the controls instead of mixing mode with the
-  first swatch.
-- Added automated WCAG AA contrast, tonal-hierarchy, light/dark separation, and
-  cross-palette perceptual-distance checks for all ten curated environments.
+- Expanded the semantic Rangabot appearance system to eight adaptive palettes.
+  Black & White provides a true white light environment and true black dark
+  environment; Graphite and Cement add cool and warm neutrals alongside the
+  Rangabot signature, Moss, Harbor, Plum, and Ember. Every palette owns distinct
+  canvas, sidebar, card, composer, starter, text, focus, and accent tokens.
+  Existing sand, sage, and lavender browser settings migrate and rewrite safely.
+- Moved Appearance out of the local Tools workbench and into a persistent
+  Preferences surface beside name and fresh-chat settings. Personal and
+  Appearance tabs reduce density, native palette radios support reliable arrow,
+  Home, and End navigation, and a sticky action bar keeps Save reachable on a
+  320×568 screen. Tools is again limited to capabilities and local approvals.
+- Added automated WCAG AA contrast, focus-visibility, tonal-hierarchy,
+  light/dark separation, neutral-chroma, and cross-palette perceptual-distance
+  checks for all 16 curated environments.
   Real browser review covered 1440×900, 1280×720, 1024×768, 390×844, and
   320×568 without document overflow or console warnings, and refreshed the
   public-safe home capture.

@@ -4,7 +4,7 @@ export type CraftIconName =
   | "add" | "analysis" | "arrow" | "attach" | "chat" | "check" | "chevron" | "close" | "code"
   | "document" | "edit" | "external" | "folder" | "knowledge" | "mail" | "menu"
   | "mastery" | "memory" | "moon" | "pin" | "reply" | "search" | "send" | "shield"
-  | "spark" | "stop" | "sun" | "trash" | "tune";
+  | "settings" | "spark" | "stop" | "sun" | "trash" | "tune";
 
 type CraftIconProps = Omit<SVGProps<SVGSVGElement>, "name"> & { name: CraftIconName; size?: number };
 
@@ -33,6 +33,7 @@ export function CraftIcon({ name, size = 18, className = "", ...props }: CraftIc
     reply: <><path d="m8 5-5 5 5 5" /><path d="M4 10h6c4 0 6 2 6 5" /></>,
     search: <><circle cx="8.5" cy="8.5" r="4.5" /><path d="m12 12 4 4" /></>,
     send: <><path d="m3.5 10 13-6-4.6 12-2.5-4Z" /><path d="m9.4 12 7.1-8" /></>,
+    settings: <><circle cx="10" cy="10" r="2.5" /><path d="M10 3.2v1.3M10 15.5v1.3M3.2 10h1.3M15.5 10h1.3M5.2 5.2l.9.9M13.9 13.9l.9.9M14.8 5.2l-.9.9M6.1 13.9l-.9.9" /></>,
     shield: <path d="M10 3 4.5 5v4.2c0 3.5 2.2 6.3 5.5 7.8 3.3-1.5 5.5-4.3 5.5-7.8V5Z" />,
     spark: <><path d="M10 3v4M10 13v4M3 10h4M13 10h4" /><path d="m5 5 2 2m6 6 2 2m0-10-2 2m-6 6-2 2" /></>,
     stop: <rect x="5.5" y="5.5" width="9" height="9" rx="1" />,

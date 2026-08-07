@@ -247,9 +247,10 @@ qualified local model, if any, powers each workflow.
 - [x] Streaming responses and Stop generation
 - [x] Apple-inspired interface and Ranga mascot
 - [x] Minimal golden-retriever Ranga with ambient thinking-light treatment
-- [x] Semantic adaptive appearance system: Rangabot, Moss, Harbor, Plum, and
-  Ember environments with explicit light/dark modes, WCAG AA text contrast,
-  accessible unlabeled swatches, and mode-aware restrained Ranga styling
+- [x] Semantic adaptive appearance system: Rangabot, Black & White, Graphite,
+  Cement, Moss, Harbor, Plum, and Ember with explicit light/dark modes, WCAG AA
+  text and focus contrast, accessible unlabeled native-radio swatches, and
+  mode-aware restrained Ranga styling in persistent Preferences
 - [x] Local SQLite conversation history: create, list, reopen, update, and delete
 - [x] Project-aware local conversation search and persistent pinning
 - [x] Local Markdown conversation export and restore
@@ -260,8 +261,9 @@ qualified local model, if any, powers each workflow.
   browser-local name or nickname, Mix/Quotes/Jokes/Thoughts/My books controls,
   and bounded cited book facts that retain no welcome text
 - [x] Strict responsive UI pass: passive preference-free fresh-chat canvas,
-  compact one-row composer, five visibly distinct semantic light/dark palettes,
-  aligned appearance controls, mobile chat/project drawer with background focus
+  compact one-row composer, eight visibly distinct semantic light/dark palettes,
+  persistent Personal/Appearance preferences, mobile chat/project drawer with
+  background focus
   isolation, restrained motion, and an evidence-first Path to Mastery without
   the decorative banner
 - [x] Local project folders with project-scoped chat history
