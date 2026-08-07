@@ -8,6 +8,7 @@ import { completeJsonWithOllama, completeTextWithOllama } from "../lib/providers
 import { inspectDatasetSchema, executeReadOnlySql, type SqlExecutionResult } from "../lib/sql-runtime.ts";
 import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan, resolveAnalyticalBoundary } from "../lib/analytical-plan.ts";
 import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
+import { ANALYTICAL_EVALUATION_TOLERANCE, compareSqlResults } from "../lib/analytical-result-comparison.ts";
 import { compileGroundedAdvancedAnalyticalPlan, compileResolvedAdvancedAnalyticalPlan } from "../lib/analytical-filter-grounding.ts";
 import { analysisNarrationIsGrounded, buildAnalysisNarrationMessages, formatVerifiedAnalysisFallback, shouldRunSqlAnalysis } from "../lib/conversational-analysis.ts";
 import { buildConversationMessages } from "../lib/conversation-orchestration.ts";
@@ -129,23 +130,6 @@ function resultTable(result: SqlExecutionResult) {
   return [`| ${result.columns.join(" | ")} |`, `| ${result.columns.map(() => "---").join(" | ")} |`, ...result.rows.map((row) => `| ${row.map(cell).join(" | ")} |`)].join("\n");
 }
 
-function comparable(value: unknown): { kind: "number"; value: number } | { kind: "text"; value: string } {
-  const text = cell(value).trim().toLowerCase();
-  const number = Number(text.replace(/[%,$]/g, ""));
-  return Number.isFinite(number) && text !== "" ? { kind: "number", value: number } : { kind: "text", value: text };
-}
-
-function valuesMatch(left: unknown, right: unknown) {
-  const a = comparable(left); const b = comparable(right);
-  if (a.kind === "number" && b.kind === "number") return Math.abs(a.value - b.value) <= Math.max(0.02, Math.abs(a.value) * 0.0001);
-  return a.kind === "text" && b.kind === "text" && a.value === b.value;
-}
-
-function resultContainsGold(candidate: SqlExecutionResult, gold: SqlExecutionResult) {
-  if (candidate.rows.length !== gold.rows.length) return false;
-  return gold.rows.every((goldRow) => candidate.rows.some((candidateRow) => goldRow.every((goldValue) => candidateRow.some((candidateValue) => valuesMatch(goldValue, candidateValue)))));
-}
-
 const semanticStopWords = new Set(["a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it", "of", "or", "so", "the", "this", "to"]);
 function semanticTokens(value: string) {
   return new Set(value.toLowerCase().match(/[a-z0-9]+/g)?.filter((token) => token.length > 2 && !semanticStopWords.has(token)) ?? []);
@@ -179,7 +163,7 @@ async function runCase(testCase: ConversationalSqlCase, dataset: ApprovedDataset
       sql = proposal.query;
       candidateResult = await executeReadOnlySql({ approvedDatasetPath: databasePath, query: sql });
       const narrated = await completeTextWithOllama(buildAnalysisNarrationMessages(testCase.question, proposal, candidateResult), { numPredict: 700, timeoutMs: 180_000 });
-      answer = analysisNarrationIsGrounded(narrated, candidateResult) ? narrated : formatVerifiedAnalysisFallback(candidateResult);
+      answer = analysisNarrationIsGrounded(narrated, candidateResult, { query: proposal.query }) ? narrated : formatVerifiedAnalysisFallback(candidateResult);
     } else {
       answer = await completeTextWithOllama(buildConversationMessages(messages).messages, { numPredict: 500, timeoutMs: 180_000 });
     }
@@ -191,8 +175,10 @@ async function runCase(testCase: ConversationalSqlCase, dataset: ApprovedDataset
 
     if (!testCase.goldSql) throw new Error("Executable fixture has no gold SQL.");
     const gold = await executeReadOnlySql({ approvedDatasetPath: databasePath, query: testCase.goldSql });
-    const resultCorrect = Boolean(candidateResult && resultContainsGold(candidateResult, gold));
-    const interpretationCorrect = Boolean(candidateResult && resultCorrect && analysisNarrationIsGrounded(answer, candidateResult) && answer.trim());
+    const resultCorrect = Boolean(candidateResult && compareSqlResults(candidateResult, gold, { candidateSql: sql!, referenceSql: testCase.goldSql, ...ANALYTICAL_EVALUATION_TOLERANCE }).passed);
+    const interpretationCorrect = Boolean(candidateResult && resultCorrect
+      && (answer === formatVerifiedAnalysisFallback(candidateResult) || analysisNarrationIsGrounded(answer, candidateResult, { query: sql ?? undefined }))
+      && answer.trim());
     return { id: testCase.id, difficulty: testCase.difficulty, context: testCase.context, expectation: testCase.expectation, question: testCase.question, expectedAnswer: resultTable(gold), rangabotAnswer: answer, sql, resultCorrect, interpretationCorrect, passed: resultCorrect && interpretationCorrect, latencyMs: Date.now() - started };
   } catch (error) {
     let expectedAnswer = testCase.expectedAnswer ?? "";

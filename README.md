@@ -376,6 +376,29 @@ context, keeps complete answers private and unloads each model before starting
 the next. See [local model guidance](docs/models.md) before overriding a model's
 memory-fit guard.
 
+The [Expert Pack Contract](docs/EXPERT_PACK_CONTRACT.md) defines how installable
+Analytics, Scholar, Documents, Builder and Research capabilities remain governed
+by the same Mind & Memory control plane. Analytics `0.1.0` is the first bundled
+experimental reference: an attached-data request receives exact conversation-
+and dataset-scoped grants, all schema/grounding/final reads use one cancellable
+read-only adapter, the configured local model is explicit, and the result carries
+validated evidence, typed fallback warnings and execution receipts. DuckDB runs
+inside a hard-kill process boundary so Stop and absolute timeouts cannot strand a
+native query. The route and client reject execution traces that do not match the
+validated evidence. Run its unchanged sealed transfer path
+with `npm run conversation:evaluate:sql:pack`.
+
+This is not a pack manager or a qualification claim. The unchanged sealed suite
+scored 10/12 through runner 2.1.2 and result comparator 1.0.0 at clean commit
+`8725d47` (83.3%, 5.3-second mean, 4.5-second median, 18.1-second P95, zero
+evaluator execution errors), below its 90% gate. All 12 terminal/evidence/receipt
+audits and all 10 executed-result comparisons passed. The stricter audit rejected
+all 10 generated query narrations and used a direct verified fallback, now
+disclosed visibly in chat; that is useful protection and evidence that narration
+quality remains unsolved. Saved per-pack model choices, automatic/custom
+switching, install/update/remove flows, resource lifecycle and the other packs
+are still roadmap work. No mode downloads a model or enables the internet.
+
 Teacher Mode generation can be compared explicitly with
 `npm run knowledge:evaluate:answers -- --model=qwen2.5:7b --num-ctx=4096 --sample=5`.
 Retrieval-only evaluation does not use the chat model. Model-specific answer

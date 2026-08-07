@@ -66,3 +66,19 @@ test("compiles fully resolved requests without a model plan", async () => {
   assert.equal(ambiguous, null);
   rmSync(databasePath, { force: true });
 });
+
+test("routes every categorical grounding read through the authorized executor", async () => {
+  const columns = [
+    { table: "people", name: "person_id", type: "INTEGER" },
+    { table: "people", name: "display_name", type: "VARCHAR" },
+    { table: "topics", name: "label", type: "VARCHAR" },
+  ];
+  const queries: string[] = [];
+  const grounded = await groundAdvancedAnalyticalFilters(plan("Robotics"), "How many people used Robotics?", columns, "/must-not-be-opened.duckdb", async (query) => {
+    queries.push(query);
+    const rows = query.includes('AS "value"') ? [["topics.label", "Robotics"]] : [["topics.label"]];
+    return { columns: [], rows, receipt: { engine: "duckdb", input: { filename: "approved.duckdb", sha256: "a".repeat(64), sizeBytes: 1 }, querySha256: "b".repeat(64), readOnly: true, externalAccess: false, rowLimit: 200, returnedRows: rows.length, truncated: false, durationMs: 1 } };
+  });
+  assert.ok(queries.length >= 1);
+  assert.equal(grounded.plan.filters[0]?.column, "topics.label");
+});

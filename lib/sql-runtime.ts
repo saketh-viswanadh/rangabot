@@ -1,12 +1,28 @@
 import { createHash } from "node:crypto";
+import type { ChildProcess } from "node:child_process";
 import { createReadStream, realpathSync, statSync } from "node:fs";
-import { basename, extname } from "node:path";
-import { DuckDBInstance, StatementType } from "@duckdb/node-api";
+import { createRequire } from "node:module";
+import { basename, extname, resolve } from "node:path";
 
 const supportedExtensions = new Set([".csv", ".parquet", ".duckdb"]);
 const maxInputBytes = 100 * 1024 * 1024;
 const maxRows = 200;
 const defaultTimeoutMs = 10_000;
+const workerPath = resolve(/* turbopackIgnore: true */ process.cwd(), "lib", "sql-runtime-worker.cjs");
+const serverRequire = createRequire(resolve(process.cwd(), "package.json"));
+const { fork: forkProcess } = serverRequire("node:child_process") as typeof import("node:child_process");
+
+export type SqlRuntimeFailureCode = "cancelled" | "dataset-changed" | "invalid-query" | "resource-limit" | "timeout" | "tool-failure";
+
+export class SqlRuntimeError extends Error {
+  readonly code: SqlRuntimeFailureCode;
+
+  constructor(code: SqlRuntimeFailureCode, message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.code = code;
+    this.name = "SqlRuntimeError";
+  }
+}
 
 export type SqlExecutionReceipt = {
   engine: "duckdb";
@@ -32,15 +48,32 @@ function digest(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-async function hashFile(path: string) {
+function cancellationError(signal?: AbortSignal) {
+  return signal?.reason instanceof Error
+    ? signal.reason
+    : new SqlRuntimeError("cancelled", "The SQL operation was stopped.");
+}
+
+function throwIfCancelled(signal?: AbortSignal) {
+  if (signal?.aborted) throw cancellationError(signal);
+}
+
+async function hashFile(path: string, signal?: AbortSignal) {
+  throwIfCancelled(signal);
   const hash = createHash("sha256");
-  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  try {
+    for await (const chunk of createReadStream(path, { signal })) hash.update(chunk);
+  } catch (error) {
+    if (signal?.aborted) throw cancellationError(signal);
+    throw error;
+  }
   return hash.digest("hex");
 }
 
-export async function inspectDatasetIdentity(path: string) {
+export async function inspectDatasetIdentity(path: string, options: { signal?: AbortSignal } = {}) {
+  throwIfCancelled(options.signal);
   const dataset = validateApprovedDataset(path);
-  return { ...dataset, sha256: await hashFile(dataset.canonical) };
+  return { ...dataset, sha256: await hashFile(dataset.canonical, options.signal) };
 }
 
 export function validateApprovedDataset(path: string) {
@@ -50,76 +83,113 @@ export function validateApprovedDataset(path: string) {
   const extension = extname(canonical).toLowerCase();
   if (!supportedExtensions.has(extension)) throw new Error("Only CSV, Parquet, and DuckDB datasets are supported.");
   if (stat.size === 0) throw new Error("The approved dataset is empty.");
-  if (stat.size > maxInputBytes) throw new Error("The approved dataset exceeds the 100 MB execution limit.");
+  if (stat.size > maxInputBytes) throw new SqlRuntimeError("resource-limit", "The approved dataset exceeds the 100 MB execution limit.");
   return { canonical, extension, sizeBytes: stat.size, filename: basename(canonical) };
 }
 
-export async function inspectDatasetSchema(path: string): Promise<DatasetColumn[]> {
-  const dataset = validateApprovedDataset(path);
-  const instance = dataset.extension === ".duckdb"
-    ? await DuckDBInstance.create(dataset.canonical, { access_mode: "READ_ONLY", max_memory: "256MB", threads: "2", enable_external_access: "false" })
-    : await DuckDBInstance.create(":memory:", { max_memory: "256MB", threads: "2", enable_external_access: "true" });
-  const connection = await instance.connect();
+function boundedTimeout(value: number | undefined) {
+  return Math.min(Math.max(value ?? defaultTimeoutMs, 100), 30_000);
+}
+
+function operationSignal(inputSignal: AbortSignal | undefined, timeoutMs: number, operation: string) {
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(inputSignal?.reason ?? new SqlRuntimeError("cancelled", `The ${operation} operation was stopped.`));
+  if (inputSignal?.aborted) onAbort();
+  else inputSignal?.addEventListener("abort", onAbort, { once: true });
+  const timer = setTimeout(() => controller.abort(new SqlRuntimeError("timeout", `The ${operation} operation exceeded the ${timeoutMs} ms limit.`)), timeoutMs);
+  return {
+    signal: controller.signal,
+    cleanup() {
+      clearTimeout(timer);
+      inputSignal?.removeEventListener("abort", onAbort);
+    },
+  };
+}
+
+function terminate(child: ChildProcess) {
+  if (child.killed) return;
+  child.kill(process.platform === "win32" ? undefined : "SIGKILL");
+}
+
+function runDuckDbWorker<T>(request: Record<string, unknown>, signal: AbortSignal, onQueryStart?: () => void): Promise<T> {
+  throwIfCancelled(signal);
+  return new Promise<T>((resolvePromise, rejectPromise) => {
+    const child = forkProcess(workerPath, [], { stdio: ["ignore", "ignore", "ignore", "ipc"], serialization: "advanced" });
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      child.removeListener("message", onMessage);
+      callback();
+    };
+    const onAbort = () => finish(() => {
+      terminate(child);
+      rejectPromise(cancellationError(signal));
+    });
+    signal.addEventListener("abort", onAbort, { once: true });
+    child.once("error", (error) => finish(() => rejectPromise(new SqlRuntimeError("tool-failure", "The isolated SQL runtime could not start.", { cause: error }))));
+    child.once("exit", (code, childSignal) => finish(() => rejectPromise(new SqlRuntimeError("tool-failure", `The isolated SQL runtime exited before returning a result (${childSignal ?? code ?? "unknown"}).`))));
+    const onMessage = (message: unknown) => {
+      if (message && typeof message === "object" && "progress" in message && message.progress === "query-started") {
+        onQueryStart?.();
+        return;
+      }
+      finish(() => {
+      if (!message || typeof message !== "object" || !("ok" in message)) {
+        rejectPromise(new SqlRuntimeError("tool-failure", "The isolated SQL runtime returned an invalid response."));
+        return;
+      }
+      const response = message as { ok: boolean; value?: T; error?: { code?: string; message?: string } };
+      if (response.ok) {
+        resolvePromise(response.value as T);
+        return;
+      }
+      const code = response.error?.code === "invalid-query" ? "invalid-query" : "tool-failure";
+      rejectPromise(new SqlRuntimeError(code, response.error?.message || "The isolated SQL runtime failed safely."));
+      });
+    };
+    child.on("message", onMessage);
+    child.send(request, (error) => {
+      if (error) finish(() => rejectPromise(new SqlRuntimeError("tool-failure", "The isolated SQL runtime could not receive its request.", { cause: error })));
+    });
+  });
+}
+
+export async function inspectDatasetSchema(path: string, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<DatasetColumn[]> {
+  const timeoutMs = boundedTimeout(options.timeoutMs);
+  const deadline = operationSignal(options.signal, timeoutMs, "SQL schema inspection");
   try {
-    if (dataset.extension !== ".duckdb") {
-      const reader = dataset.extension === ".csv" ? "read_csv_auto($path)" : "read_parquet($path)";
-      await connection.run(`CREATE TABLE dataset AS SELECT * FROM ${reader}`, { path: dataset.canonical });
-      await connection.run("SET enable_external_access = false");
-      const result = await connection.runAndReadAll("DESCRIBE dataset");
-      return (result.getRows() as unknown[][]).map((row) => ({ name: String(row[0]), type: String(row[1]) })).slice(0, 500);
-    }
-    const result = await connection.runAndReadAll(`
-      SELECT table_name, column_name, data_type
-      FROM information_schema.columns
-      WHERE table_schema = 'main'
-      ORDER BY table_name, ordinal_position
-      LIMIT 500
-    `);
-    return (result.getRows() as unknown[][]).map((row) => ({ table: String(row[0]), name: String(row[1]), type: String(row[2]) }));
+    throwIfCancelled(deadline.signal);
+    const dataset = validateApprovedDataset(path);
+    return await runDuckDbWorker<DatasetColumn[]>({ operation: "schema", path: dataset.canonical, extension: dataset.extension }, deadline.signal);
   } finally {
-    connection.closeSync();
-    instance.closeSync();
+    deadline.cleanup();
   }
 }
 
-export async function executeReadOnlySql(input: { approvedDatasetPath: string; query: string; timeoutMs?: number; expectedInputSha256?: string }): Promise<SqlExecutionResult> {
-  const dataset = await inspectDatasetIdentity(input.approvedDatasetPath);
-  if (input.expectedInputSha256 && dataset.sha256 !== input.expectedInputSha256) throw new Error("The approved dataset changed after preview. Create a new preview.");
-  const query = input.query.trim().replace(/;\s*$/, "");
-  if (!query || query.length > 20_000) throw new Error("Provide one SQL query under 20,000 characters.");
-  const timeoutMs = Math.min(Math.max(input.timeoutMs ?? defaultTimeoutMs, 100), 30_000);
-  const instance = dataset.extension === ".duckdb"
-    ? await DuckDBInstance.create(dataset.canonical, { access_mode: "READ_ONLY", max_memory: "256MB", threads: "2", enable_external_access: "false" })
-    : await DuckDBInstance.create(":memory:", { max_memory: "256MB", threads: "2", enable_external_access: "true" });
-  const connection = await instance.connect();
+export async function executeReadOnlySql(input: { approvedDatasetPath: string; query: string; timeoutMs?: number; expectedInputSha256?: string; signal?: AbortSignal; onQueryStart?: () => void }): Promise<SqlExecutionResult> {
   const started = Date.now();
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutMs = boundedTimeout(input.timeoutMs);
+  const deadline = operationSignal(input.signal, timeoutMs, "SQL execution");
   try {
-    if (dataset.extension !== ".duckdb") {
-      const reader = dataset.extension === ".csv" ? "read_csv_auto($path)" : "read_parquet($path)";
-      await connection.run(`CREATE TABLE dataset AS SELECT * FROM ${reader}`, { path: dataset.canonical });
-      await connection.run("SET enable_external_access = false");
-    }
-
-    const extracted = await connection.extractStatements(query);
-    if (extracted.count !== 1) throw new Error("Only one SQL statement is allowed.");
-    const prepared = await extracted.prepare(0);
-    if (prepared.statementType !== StatementType.SELECT) throw new Error("Only read-only SELECT queries are allowed.");
-
-    const bounded = `SELECT * FROM (${query}) AS rangabot_result LIMIT ${maxRows + 1}`;
-    const execution = connection.runAndReadAll(bounded);
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        connection.interrupt();
-        reject(new Error(`The SQL query exceeded the ${timeoutMs} ms limit.`));
-      }, timeoutMs);
-    });
-    const result = await Promise.race([execution, timeout]);
-    const allRows = result.getRowsJson() as unknown[][];
-    const truncated = allRows.length > maxRows;
-    const rows = allRows.slice(0, maxRows);
+    throwIfCancelled(deadline.signal);
+    const dataset = await inspectDatasetIdentity(input.approvedDatasetPath, { signal: deadline.signal });
+    if (input.expectedInputSha256 && dataset.sha256 !== input.expectedInputSha256) throw new SqlRuntimeError("dataset-changed", "The approved dataset changed after preview. Create a new preview.");
+    const query = input.query.trim().replace(/;\s*$/, "");
+    if (!query || query.length > 20_000) throw new SqlRuntimeError("invalid-query", "Provide one SQL query under 20,000 characters.");
+    const executed = await runDuckDbWorker<{ columns: string[]; rows: unknown[][]; truncated: boolean }>({
+      operation: "execute",
+      path: dataset.canonical,
+      extension: dataset.extension,
+      query,
+      notifyQueryStart: Boolean(input.onQueryStart),
+    }, deadline.signal, input.onQueryStart);
+    const rows = executed.rows.slice(0, maxRows);
+    const durationMs = Date.now() - started;
+    if (durationMs > timeoutMs) throw new SqlRuntimeError("timeout", `The SQL execution operation exceeded the ${timeoutMs} ms limit.`);
     return {
-      columns: result.columnNames(),
+      columns: executed.columns,
       rows,
       receipt: {
         engine: "duckdb",
@@ -129,13 +199,11 @@ export async function executeReadOnlySql(input: { approvedDatasetPath: string; q
         externalAccess: false,
         rowLimit: maxRows,
         returnedRows: rows.length,
-        truncated,
-        durationMs: Date.now() - started,
+        truncated: executed.truncated,
+        durationMs,
       },
     };
   } finally {
-    if (timer) clearTimeout(timer);
-    connection.closeSync();
-    instance.closeSync();
+    deadline.cleanup();
   }
 }

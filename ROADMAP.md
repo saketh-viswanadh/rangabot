@@ -5,6 +5,9 @@
 From 2026-08-02 through 2026-08-08, the broader order below is frozen. The only
 active product priority is the versioned Core Conversation Reliability plan in
 [`docs/CORE_CONVERSATION_CONTRACT.md`](docs/CORE_CONVERSATION_CONTRACT.md).
+On 2026-08-07 the user explicitly approved beginning the already-designed Expert
+Pack foundation without weakening any Core Conversation release gate. Analytics
+is therefore an experimental reference slice, not a replacement release score.
 
 The completed foundation remains documented below. New work follows this order
 unless user feedback exposes a more urgent defect:
@@ -28,6 +31,92 @@ unless user feedback exposes a more urgent defect:
 
 Automatic model-weight mutation is not part of this sequence. A reviewed
 fine-tuning dataset and rollback workflow remain a later proposal.
+
+After the Core Conversation Reliability release decision, the next major
+architecture milestone is the **Expert Pack Contract**. This formalizes the
+existing principle that Mind & Memory governs every capability while allowing
+people to install only the expert workflows they need and choose which
+qualified local model, if any, powers each workflow.
+
+### Approved Expert Pack architecture
+
+1. **One Rangabot, one control plane** — Mind & Memory exclusively owns safety,
+   privacy, permissions, instruction precedence, relevant approved memory,
+   bounded conversation context, provider failure behavior and final response
+   synthesis. Packs cannot override these rules or create independent memory.
+2. **Installable capability packs** — a pack contains a manifest, bounded tools,
+   permission scopes, resource estimates, typed inputs and evidence outputs,
+   qualification fixtures, acceptance gates and an uninstall path. A model or
+   system prompt alone is not a pack.
+3. **Per-pack model choice** — every pack supports `automatic`, `general model`
+   and `custom installed model` selection. A one-request override never silently
+   changes the saved assignment.
+4. **Pack-specific qualification** — model compatibility is reported as
+   qualified, experimental, poor machine fit, incompatible or not installed.
+   General conversation quality cannot substitute for Analytics, Scholar,
+   Builder, document or reviewer qualification.
+5. **Resource-aware lifecycle** — installed weights may remain on disk, but only
+   required models load for an active stage. Rangabot prefers an already loaded
+   qualified model, executes different large models sequentially, unloads them
+   after a configurable idle period and prevents unsafe parallel loading on
+   constrained hardware.
+6. **Typed expert collaboration** — packs exchange plans, evidence, receipts and
+   validated artifacts through shared contracts, not hidden free-form agent
+   conversations. Mind & Memory produces the single coherent user-facing answer.
+7. **Evidence-backed routing** — deterministic signals such as an attached
+   dataset, selected repository or requested artifact take priority over model
+   classification. Ambiguous material actions require a focused clarification;
+   web access always requires its separate visible approval boundary.
+
+### Expert Pack delivery order
+
+- [ ] **Foundation: Expert Pack Contract** — contract v1.3, immutable bundled
+  registry, strict manifest/request/result validators, resource-scoped runtime
+  grants, explicit provider model ids, stable HTTP failures and typed evidence
+  receipts are implemented. Routing decision records, saved model assignment,
+  resource lifecycle and qualification-result storage remain before completion.
+- [ ] **Reference pack: Analytics** — `0.1.0` now wraps the existing
+  conversation-triggered read-only SQL path behind Mind-issued conversation and
+  dataset grants. Identity pinning, schema inspection, categorical grounding,
+  final SQL, cancellation, verified narration fallback and trace provenance use
+  the same injected boundary. Native SQL now has a hard-kill process boundary;
+  route precedence and evidence-to-trace consistency have synthetic integration
+  tests. The unchanged runner-2.1.2 sealed run at clean commit `8725d47` remained
+  10/12 (83.3%; 5.3-second mean, 4.5-second median, 18.1-second P95), with all
+  12 pack audits, all 10 result comparisons and zero evaluator errors. One
+  source-semantics miss and one clarification instead of conditional-rate
+  execution keep it below the 90% gate. The stricter grounding audit accepted no
+  generated query narration; verified fallback is safe and visible, but narration
+  reliability is not qualified. Saved model choice, qualification and sandboxed
+  Python are still blocked.
+- [ ] **Scholar pack** — adapt Knowledge Vault retrieval, citation audit,
+  cross-source synthesis and Teacher Mode to the same pack boundary. Embedding
+  and reranking components remain distinct from the selected generative model.
+- [ ] **Documents pack** — conversation-led Word creation first, followed by PDF,
+  presentation and spreadsheet sub-capabilities. Templates, render inspection
+  and artifact validators—not a specialist model alone—define quality.
+- [ ] **Builder pack** — permissioned repository context, code search, bounded
+  commands, tests, patches and technical documentation with inspectable receipts.
+- [ ] **Research pack** — remain deferred until the persistent domain allowlist,
+  query preview, revocation and local-first insufficiency gates are complete.
+- [ ] **Pack manager** — install, remove, update, roll back and inspect packs;
+  show disk use, estimated RAM, permissions, model assignments, benchmark
+  evidence and limitations before activation.
+- [ ] **Resource-aware router** — plan the smallest sufficient pack/model chain,
+  estimate model switches, expose why each route was selected and fail safely
+  when no qualified configuration fits the machine.
+
+### Needs design before implementation
+
+- Define the signed/distributable pack format and trust policy for third-party
+  community packs.
+- Define the reviewed installation flow for models referenced by packs. Contract
+  v1 forbids automatic downloads; installation remains a separate explicit user
+  action until this design is approved.
+- Define stable compatibility guarantees across pack, Rangabot, provider and
+  model versions.
+- Decide which pack metadata and benchmark aggregates are safe to publish while
+  keeping private prompts, documents, datasets, memories and answers local.
 
 ## Approved
 

@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "id": "analytics",
+  "name": "Analytics",
+  "version": "0.1.0",
+  "summary": "Analyse explicitly attached local data with bounded read-only execution and inspectable evidence.",
+  "maturity": "experimental",
+  "capabilities": [
+    "conversational-sql",
+    "read-only-execution",
+    "verified-narration"
+  ],
+  "permissions": [
+    "approved-dataset:read",
+    "local-runtime:execute"
+  ],
+  "tools": [
+    {
+      "id": "duckdb-readonly",
+      "required": true,
+      "execution": "deterministic",
+      "network": "disabled"
+    }
+  ],
+  "modelPolicy": {
+    "selectionModes": [
+      "automatic",
+      "general",
+      "custom"
+    ],
+    "defaultMode": "general",
+    "allowRequestOverride": true,
+    "minimumContextTokens": 4096,
+    "requiresStructuredOutput": true,
+    "requiresToolCalling": false
+  },
+  "resources": {
+    "downloadSizeMb": 0,
+    "workingMemoryMb": 256,
+    "maxConcurrentGenerativeModels": 1,
+    "unloadAfterSeconds": 300
+  },
+  "qualification": {
+    "suiteId": "analytics-pack",
+    "suiteVersion": "0.1.0",
+    "minimumOverallPassRate": 0.9,
+    "minimumCategoryPassRate": 0.8,
+    "requiredCriticalPassRate": 1,
+    "criticalRepetitions": 3
+  },
+  "uninstall": {
+    "preserveUserDataByDefault": true,
+    "removableArtifacts": [
+      "derived-cache",
+      "qualification-results"
+    ]
+  }
+}

@@ -2,12 +2,13 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
+import { ANALYTICAL_EVALUATION_TOLERANCE, compareSqlResults } from "../lib/analytical-result-comparison.ts";
 import { compileGroundedAdvancedAnalyticalPlan, compileResolvedAdvancedAnalyticalPlan } from "../lib/analytical-filter-grounding.ts";
 import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan, resolveAnalyticalBoundary } from "../lib/analytical-plan.ts";
 import type { ApprovedDataset } from "../lib/datasets.ts";
 import { completeJsonWithOllama } from "../lib/providers/ollama.ts";
 import type { ChatMessage } from "../lib/providers/types.ts";
-import { executeReadOnlySql, inspectDatasetSchema, type SqlExecutionResult } from "../lib/sql-runtime.ts";
+import { executeReadOnlySql, inspectDatasetSchema } from "../lib/sql-runtime.ts";
 
 type HoldoutCase = { id: string; question: string; goldSql?: string; boundary?: "clarify" | "unavailable" };
 const cases: HoldoutCase[] = [
@@ -42,16 +43,6 @@ async function createDatabase() {
   } finally { connection.closeSync(); instance.closeSync(); }
 }
 
-function cell(value: unknown) { return value === null ? "null" : typeof value === "object" ? JSON.stringify(value) : String(value); }
-function equivalent(left: unknown, right: unknown) {
-  const a = Number(cell(left)); const b = Number(cell(right));
-  if (Number.isFinite(a) && Number.isFinite(b)) return Math.abs(a - b) <= Math.max(0.02, Math.abs(b) * 0.0001);
-  return cell(left).toLowerCase() === cell(right).toLowerCase();
-}
-function resultsMatch(candidate: SqlExecutionResult, gold: SqlExecutionResult) {
-  return candidate.rows.length === gold.rows.length && gold.rows.every((row) => candidate.rows.some((other) => row.every((value) => other.some((item) => equivalent(item, value)))));
-}
-
 await createDatabase();
 const dataset: ApprovedDataset = { id: "holdout-v1", name: "logistics-holdout.duckdb", path: databasePath, format: "duckdb", sizeBytes: 0, addedAt: new Date().toISOString() };
 const schema = await inspectDatasetSchema(databasePath);
@@ -67,7 +58,8 @@ for (const item of cases) {
     else {
       const candidate = await executeReadOnlySql({ approvedDatasetPath: databasePath, query: proposal.query });
       const gold = await executeReadOnlySql({ approvedDatasetPath: databasePath, query: item.goldSql! });
-      results.push({ ...item, action: proposal.action, sql: proposal.query, passed: resultsMatch(candidate, gold), latencyMs: Date.now() - started });
+      const resultComparison = compareSqlResults(candidate, gold, { candidateSql: proposal.query, referenceSql: item.goldSql!, ...ANALYTICAL_EVALUATION_TOLERANCE });
+      results.push({ ...item, action: proposal.action, sql: proposal.query, resultComparison, passed: resultComparison.passed, latencyMs: Date.now() - started });
     }
   } catch (error) { results.push({ ...item, action: "error", sql: null, passed: false, error: error instanceof Error ? error.message : String(error), latencyMs: Date.now() - started }); }
   console.log(`${results.at(-1)?.passed ? "PASS" : "FAIL"} ${item.id}`);

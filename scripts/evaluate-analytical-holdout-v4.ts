@@ -27,4 +27,4 @@ const definition: AnalyticalHoldoutDefinition = {
   ],
 };
 
-await runAnalyticalHoldout(definition);
+await runAnalyticalHoldout(definition, { mode: process.argv.includes("--expert-pack") ? "expert-pack" : "legacy" });

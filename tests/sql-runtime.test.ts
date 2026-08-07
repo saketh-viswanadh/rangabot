@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { executeReadOnlySql, inspectDatasetSchema, validateApprovedDataset } from "../lib/sql-runtime.ts";
+import { executeReadOnlySql, inspectDatasetIdentity, inspectDatasetSchema, SqlRuntimeError, validateApprovedDataset } from "../lib/sql-runtime.ts";
 
 function fixture(name: string, content: string) {
   const path = join(tmpdir(), `rangabot-${process.pid}-${name}`);
@@ -46,6 +46,46 @@ test("validates the approved dataset boundary", () => {
 test("inspects only the approved dataset schema for local query planning", async () => {
   const path = fixture("schema.csv", "region,amount\nNorth,12.5\n");
   assert.deepEqual(await inspectDatasetSchema(path), [{ name: "region", type: "VARCHAR" }, { name: "amount", type: "DOUBLE" }]);
+});
+
+test("cancels identity, schema, and execution before opening the approved dataset", async () => {
+  const path = fixture("cancel.csv", "value\n1\n");
+  const controller = new AbortController();
+  controller.abort();
+  const isCancellation = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
+  await assert.rejects(() => inspectDatasetIdentity(path, { signal: controller.signal }), isCancellation);
+  await assert.rejects(() => inspectDatasetSchema(path, { signal: controller.signal }), isCancellation);
+  await assert.rejects(() => executeReadOnlySql({ approvedDatasetPath: path, query: "SELECT * FROM dataset", signal: controller.signal }), isCancellation);
+});
+
+test("interrupts an in-flight DuckDB query when the user stops generation", async () => {
+  const root = mkdtempSync(join(tmpdir(), "rangabot-interrupt-"));
+  const path = join(root, "interrupt.duckdb");
+  const writer = await DuckDBInstance.create(path);
+  writer.closeSync();
+  try {
+    const controller = new AbortController();
+    let queryStarted = false;
+    const execution = executeReadOnlySql({
+      approvedDatasetPath: path,
+      query: "SELECT SUM(i) FROM range(1000000000) t(i)",
+      signal: controller.signal,
+      timeoutMs: 30_000,
+      onQueryStart: () => { queryStarted = true; controller.abort(); },
+    });
+    await assert.rejects(execution, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+    assert.equal(queryStarted, true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("interrupts and cleans up a DuckDB query at the absolute SQL timeout", async () => {
+  const path = fixture("timeout.csv", "value\n1\n");
+  await assert.rejects(
+    () => executeReadOnlySql({ approvedDatasetPath: path, query: "SELECT SUM(i) FROM range(1000000000) t(i)", timeoutMs: 100 }),
+    (error: unknown) => error instanceof SqlRuntimeError && error.code === "timeout",
+  );
 });
 
 test("inspects and joins an approved multi-table DuckDB database read only", async () => {

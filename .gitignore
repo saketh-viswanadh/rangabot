@@ -24,3 +24,8 @@ data/knowledge/evaluations/results/
 data/evaluations/results/
 work/
 outputs/
+website/dist/
+website/.vinext/
+website/.wrangler/
+website/node_modules/
+website/next-env.d.ts

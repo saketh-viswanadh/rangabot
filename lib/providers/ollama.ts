@@ -67,7 +67,7 @@ export async function completeJsonWithOllama(messages: ChatMessage[], options?: 
     method: "POST",
     signal: options?.signal,
     body: JSON.stringify({
-      model: configuredModel,
+      model: options?.modelId ?? configuredModel,
       messages: messages.map(({ role, content }) => ({ role, content })),
       format: options?.jsonSchema ?? "json",
       stream: false,
@@ -86,7 +86,7 @@ export async function completeTextWithOllama(messages: ChatMessage[], options?: 
     method: "POST",
     signal: options?.signal,
     body: JSON.stringify({
-      model: configuredModel,
+      model: options?.modelId ?? configuredModel,
       messages: messages.map(({ role, content }) => ({ role, content })),
       stream: false,
       options: generationOptions(options, 1000),
@@ -104,7 +104,7 @@ export async function streamChatWithOllama(messages: ChatMessage[], options?: Ge
     method: "POST",
     signal: options?.signal,
     body: JSON.stringify({
-      model: configuredModel,
+      model: options?.modelId ?? configuredModel,
       messages: messages.map(({ role, content }) => ({ role, content })),
       stream: true,
       options: generationOptions(options, 1000),
