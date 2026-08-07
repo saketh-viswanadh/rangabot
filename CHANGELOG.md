@@ -33,6 +33,12 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   rejected. The complete deterministic project suite is 270/270. These results
   prove bounded renderer integrity, not broad analytical planning, statistical
   interpretation, cross-model planning quality or blind human usefulness.
+- On clean implementation commit `45d3ff1`, unchanged astronomy v4 and theatre
+  v5 regressions each pass 12/12 with zero evaluator errors and 11/11 valid
+  trusted narrations. Theatre v5 mean/median/P95 latency fell from
+  5,014.8/5,023.5/8,018 ms on the preserved free-form baseline to
+  210.1/221/237 ms, with no second narration model call. This is regression and
+  latency evidence, not a new independent transfer result.
 - Repaired the two remaining Analytics semantic failures without adding domain,
   question, value or model-specific production rules. Distinct populations now
   choose their qualifying relation only after local categorical grounding, using

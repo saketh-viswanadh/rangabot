@@ -27,10 +27,13 @@
   Markdown safety. All 44 pass. The audit rejects 222/222 forged outputs and six
   invalid result shapes without a model call. ReactMarkdown rendering confirms a
   hostile local cell creates no link or image.
-- The full deterministic suite passes 270/270. A preliminary dirty-tree theatre
-  v5 Expert Pack regression remains 12/12 with 11/11 structurally valid trusted
-  narrations and zero model-authored narration attempts; clean-commit v4/v5
-  reruns remain required before release evidence is final.
+- The full deterministic suite passes 270/270. On clean implementation commit
+  `45d3ff1`, astronomy v4 and theatre v5 each remain 12/12 with zero evaluator
+  errors, 11/11 structurally valid trusted narrations and zero model-authored
+  narration attempts. V5 mean/median/P95 latency is 210.1/221/237 ms, compared
+  with 5,014.8/5,023.5/8,018 ms on the preserved free-form baseline at
+  `b8a3938`—a 95.8% mean-latency reduction on the same frozen suite. These later
+  runs are regression evidence, not new transfer qualification.
 - Honest boundary: this improves exact presentation, provenance and latency. It
   does not prove broad planning transfer, causal/statistical interpretation,
   cross-model planning quality, critical repetitions or blind human usefulness.

@@ -265,6 +265,13 @@ late cancellation cannot become success. Broad planning transfer, critical
 repetitions, cross-model planning evidence, and blind human usefulness remain
 open, so Analytics stays experimental.
 
+On clean implementation commit `45d3ff1`, unchanged v4 and v5 regressions each
+pass 12/12 with zero evaluator errors and 11/11 structurally valid trusted
+narrations. V5 mean/median/P95 latency is 210.1/221/237 ms, versus
+5,014.8/5,023.5/8,018 ms on the preserved free-form baseline at `b8a3938`.
+This later same-suite evidence demonstrates non-regression and the cost removed
+with the second narration model call; it is not a new transfer qualification.
+
 ## Deliberately deferred
 
 - third-party pack signing, trust roots and revocation;

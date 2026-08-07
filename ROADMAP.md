@@ -84,7 +84,10 @@ qualified local model, if any, powers each workflow.
   cancellation wins. Route precedence and evidence-to-trace consistency have
   synthetic integration tests. The frozen narration suite passes 44/44 canonical
   expectations and rejects 222/222 adversarial/invalid cases without a model
-  call. The first clean theatre-v5 transfer run at commit `23f5e2c` passed 12/12,
+  call. Clean implementation commit `45d3ff1` retains 12/12 on unchanged v4 and
+  v5 regressions, with 11/11 valid trusted narrations in each, zero evaluator
+  errors and 210.1 ms v5 mean latency. The first clean theatre-v5 transfer run
+  at commit `23f5e2c` passed 12/12,
   all 12 pack audits and all 11 result comparisons with zero evaluator errors,
   after the structurally isomorphic suite was frozen separately at `f877d77`.
   This meets the manifest's 90% single-run overall-score threshold on that check,

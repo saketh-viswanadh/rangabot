@@ -133,3 +133,7 @@ as regression checks, with all pack audits and executed-result comparisons
 passing and zero evaluator errors. All 11 executed narrations in each suite were
 again rejected. These later runs verify non-regression only; they do not replace
 v5's first retained precommitted result or broaden the qualification claim.
+The free-form authoring path was then retired. Clean Analytics `0.2.0`
+implementation commit `45d3ff1` retains 12/12 on both unchanged regressions,
+with 11/11 structurally valid trusted narrations and zero evaluator errors in
+each. This remains regression evidence rather than a new transfer result.

@@ -122,6 +122,15 @@ wrong aliases, columns, rows, widths, and zero-column output. The current result
 is 44/44 canonical and 222/222 rejected adversarial/invalid cases. Full outputs
 are private and Git-ignored.
 
+On clean implementation commit `45d3ff1`, unchanged astronomy v4 and theatre v5
+Expert Pack regressions each pass 12/12 with zero evaluator errors, 11/11
+structurally valid trusted narrations and zero model-authored narration attempts.
+Theatre v5 mean/median/P95 latency is 210.1/221/237 ms. The preserved clean
+free-form baseline at `b8a3938` was 5,014.8/5,023.5/8,018 ms with 0/11 accepted
+narrations, so the mean fell 95.8% after removing the second model call. These
+are same-suite regression measurements; they do not replace v5's first retained
+transfer result.
+
 Passing this suite establishes renderer determinism and structural grounding.
 It does not establish broad analytical planning, statistical reasoning, causal
 interpretation, cross-model planning quality, or blind human usefulness.

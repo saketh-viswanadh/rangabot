@@ -181,8 +181,13 @@ specific aliases/cardinality, or any post-render mutation. Every verified filter
 is shown or its display omission is explicit; local data cannot create active
 Markdown links or images. Model-authored planning explanations never enter the
 answer. The frozen zero-model-call narration suite passes 44/44 canonical cases
-and rejects 222/222 adversarial mutations and invalid result shapes; this proves renderer grounding, not
-broad analytical planning or human usefulness. Run it with
+and rejects 222/222 adversarial mutations and invalid result shapes. On clean
+implementation commit `45d3ff1`, unchanged astronomy v4 and theatre v5
+regressions each pass 12/12 with 11/11 structurally valid trusted narrations and
+zero evaluator errors. V5 mean latency fell from 5,014.8 ms on the preserved
+free-form baseline to 210.1 ms because the second narration model call was
+removed. These results prove renderer grounding and regression safety, not broad
+analytical planning or human usefulness. Run the frozen renderer suite with
 `npm run conversation:evaluate:sql:narration` and see the
 [narration contract](docs/ANALYTICAL_NARRATION_CONTRACT.md).
 
