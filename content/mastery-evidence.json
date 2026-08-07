@@ -1,7 +1,7 @@
 {
   "version": 1,
   "repository": "saketh-viswanadh/rangabot",
-  "verifiedAt": "2026-08-02",
+  "verifiedAt": "2026-08-08",
   "entries": [
     {
       "id": "pr-1",
@@ -494,6 +494,266 @@
       "contributors": [
         "saketh-viswanadh"
       ]
+    },
+    {
+      "id": "pr-66",
+      "kind": "pull_request",
+      "reference": "#66",
+      "title": "Rebuild mastery as an evidence-backed program audit",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/66",
+      "mergeCommit": "63b57650c94e161770c6c161b4e3b5853f817b55",
+      "mergedAt": "2026-08-02T07:03:27Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-67",
+      "kind": "pull_request",
+      "reference": "#67",
+      "title": "Lead mastery with strict capability readiness",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/67",
+      "mergeCommit": "aea434b5cf36b75f9b9a93fe32b3bfc2053c9339",
+      "mergedAt": "2026-08-02T07:25:34Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-68",
+      "kind": "pull_request",
+      "reference": "#68",
+      "title": "Strengthen Mind and Memory release architecture",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/68",
+      "mergeCommit": "f185d081dcc38e02495ff68b2da0540aeeee5df1",
+      "mergedAt": "2026-08-02T09:10:13Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-69",
+      "kind": "pull_request",
+      "reference": "#69",
+      "title": "Qualify adaptive conversation review safely",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/69",
+      "mergeCommit": "74cd8aed53fa1415a90d58723302bca45db64b0f",
+      "mergedAt": "2026-08-02T10:02:39Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-70",
+      "kind": "pull_request",
+      "reference": "#70",
+      "title": "Record strict core release gate",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/70",
+      "mergeCommit": "b2cf9356f11912d221c82b110c0d36ec9b39b65b",
+      "mergedAt": "2026-08-02T10:48:53Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-71",
+      "kind": "pull_request",
+      "reference": "#71",
+      "title": "Harden premise reasoning",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/71",
+      "mergeCommit": "70fecec08962cc1ebccad2fadcee44cb130e77d6",
+      "mergedAt": "2026-08-02T12:10:49Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-72",
+      "kind": "pull_request",
+      "reference": "#72",
+      "title": "Add verified reasoning ledger",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/72",
+      "mergeCommit": "f2e18124712f9842909f0ba6cf41d075b632f0fa",
+      "mergedAt": "2026-08-02T12:28:19Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-73",
+      "kind": "pull_request",
+      "reference": "#73",
+      "title": "Add safe DuckDB foundation",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/73",
+      "mergeCommit": "06b4a12e2689f62888361f7987083197f497b3f3",
+      "mergedAt": "2026-08-02T13:36:52Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-74",
+      "kind": "pull_request",
+      "reference": "#74",
+      "title": "Add exact SQL approval flow",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/74",
+      "mergeCommit": "246d8f61fac988055addecfb43cdd97d0400c0f2",
+      "mergedAt": "2026-08-02T14:09:29Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-75",
+      "kind": "pull_request",
+      "reference": "#75",
+      "title": "Add visible SQL approval workspace",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/75",
+      "mergeCommit": "3af7a6798b69395772d19b4b54f09c844b9fdf63",
+      "mergedAt": "2026-08-02T17:13:09Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-76",
+      "kind": "pull_request",
+      "reference": "#76",
+      "title": "Add schema-bound SQL chat drafting",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/76",
+      "mergeCommit": "196dd49a5750873c7459ce3e6cf1a77ee5e0bbdf",
+      "mergedAt": "2026-08-02T17:58:30Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-77",
+      "kind": "pull_request",
+      "reference": "#77",
+      "title": "Fix macOS development watcher crash",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/77",
+      "mergeCommit": "91f8bafeae236c98ba61fac9e9383fca9ccf5225",
+      "mergedAt": "2026-08-02T17:42:59Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-78",
+      "kind": "pull_request",
+      "reference": "#78",
+      "title": "Add conversational verified analysis",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/78",
+      "mergeCommit": "73aa3ca5d85b982f6118a5b488de582028fe1562",
+      "mergedAt": "2026-08-02T18:19:38Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-79",
+      "kind": "pull_request",
+      "reference": "#79",
+      "title": "Harden local memory selection reliability",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/79",
+      "mergeCommit": "d1bfadd556bc3c01f23074e985619c6e6a94f1e6",
+      "mergedAt": "2026-08-03T07:55:14Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-80",
+      "kind": "pull_request",
+      "reference": "#80",
+      "title": "Add strict multi-table conversational SQL baseline",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/80",
+      "mergeCommit": "67547d67036e4d531c587c4de51a8dd0716fb40c",
+      "mergedAt": "2026-08-03T09:18:12Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-81",
+      "kind": "pull_request",
+      "reference": "#81",
+      "title": "Compile constrained analytical plans",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/81",
+      "mergeCommit": "c76da4d8c0a7fa3d3674c8d94a1b1cc221e5dcca",
+      "mergedAt": "2026-08-03T11:01:57Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-82",
+      "kind": "pull_request",
+      "reference": "#82",
+      "title": "Harden conversational analytical context",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/82",
+      "mergeCommit": "971aa733336ffaa86256979642a3eca1c79a3aae",
+      "mergedAt": "2026-08-04T08:00:56Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-83",
+      "kind": "pull_request",
+      "reference": "#83",
+      "title": "Add model-independent analytical semantics",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/83",
+      "mergeCommit": "01b6fd999b2eeebc42a5f0eb07070d5bfc134408",
+      "mergedAt": "2026-08-04T10:31:22Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-84",
+      "kind": "pull_request",
+      "reference": "#84",
+      "title": "Add schema-derived analytical role resolution",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/84",
+      "mergeCommit": "1dff8364baefb0ff409c422a09b0c578c1ecb880",
+      "mergedAt": "2026-08-04T19:25:44Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-85",
+      "kind": "pull_request",
+      "reference": "#85",
+      "title": "Add cross-model runtime reliability",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/85",
+      "mergeCommit": "63506cfc55da88a5fa183f988a889655742ceaad",
+      "mergedAt": "2026-08-04T20:44:40Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-87",
+      "kind": "pull_request",
+      "reference": "#87",
+      "title": "Add Expert Pack contract and experimental Analytics runtime",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/87",
+      "mergeCommit": "2ec424bc712e23450a892f5d224efc2f8e9a9127",
+      "mergedAt": "2026-08-07T03:41:46Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-89",
+      "kind": "pull_request",
+      "reference": "#89",
+      "title": "Harden Analytics semantic planning and scope safety",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/89",
+      "mergeCommit": "9ad4f84e580eddaca0b3d5512b3baac5ccb37a45",
+      "mergedAt": "2026-08-07T05:32:31Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-90",
+      "kind": "pull_request",
+      "reference": "#90",
+      "title": "Ground analytical answers in verified results",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/90",
+      "mergeCommit": "0c514a88138f5f0e2244a8d66270249c902e04d2",
+      "mergedAt": "2026-08-07T11:14:45Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-91",
+      "kind": "pull_request",
+      "reference": "#91",
+      "title": "Refine fresh-chat personalization and visual system",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/91",
+      "mergeCommit": "3436f8a73ec10fae7437bdf66e4a4ef42eba15d0",
+      "mergedAt": "2026-08-07T14:38:01Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-92",
+      "kind": "pull_request",
+      "reference": "#92",
+      "title": "Refine Rangabot welcome, preferences, and adaptive themes",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/92",
+      "mergeCommit": "eb2206974c2e257173c3c158bbc59569a3268524",
+      "mergedAt": "2026-08-07T16:50:05Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-93",
+      "kind": "pull_request",
+      "reference": "#93",
+      "title": "Harden Rangabot core turn lifecycle",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/93",
+      "mergeCommit": "0a594fc6fd636f092782b7d9b4bc8b92bb8d908a",
+      "mergedAt": "2026-08-07T18:52:51Z",
+      "contributors": ["saketh-viswanadh"]
     }
   ]
 }

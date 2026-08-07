@@ -1,5 +1,30 @@
 # Daily progress
 
+## 2026-08-08 — Canonical Charter and Path to Mastery v3
+
+- Converted the agreed vision and mission into one canonical Charter with a
+  personal promise, governing decision test, twelve principles, and ten-part
+  product identity. A generator now keeps the human-readable Charter aligned
+  with its structured source, and CI rejects drift.
+- Re-audited the whole program into nine charter-aligned paths, 45 capability
+  nodes, and 161 acceptance criteria. The strict current result is 7/45 fully
+  unlocked (16%), 72/161 verified criteria, 52% weighted development progress,
+  and 26 nodes below their complete gate. Partial work never counts as unlocked.
+- Mapped 33 founder achievements to specific new nodes and merged evidence.
+  Contributor credit remains independent from product readiness and stays
+  protected by official approval governance.
+- Added the Charter throughout the app, README, contribution workflow, roadmap,
+  GitHub proposal/PR templates, and the public website. The website reads the
+  same repository sources, adds a tenth `/charter` route, and uses a new
+  charter-aligned social preview instead of copying claims manually.
+- Restored the complete public website source into the current reviewed change
+  so the deployed product no longer depends on an unmerged historical branch.
+  Public publishing remains blocked until the maintainer merges and explicitly
+  approves deployment.
+- Focused checks cover Charter drift, mastery evidence/governance, app mastery
+  rendering, all ten public routes, navigation, and privacy-safe public content.
+  Full project and dependency validation follow before the pull request.
+
 ## 2026-08-07 — Core Turn Lifecycle v2
 
 - Replaced whole-transcript client writes with a durable server-owned turn

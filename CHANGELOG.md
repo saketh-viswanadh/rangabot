@@ -7,6 +7,36 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+### Added
+
+- Established the canonical Rangabot Charter as a generated, governed source of
+  truth for the product vision, mission, personal promise, decision test, twelve
+  north-star principles, and ten parts of Rangabot's identity. The same source
+  now drives repository documentation and a dedicated public website page.
+- Rebuilt Path to Mastery v3 around nine charter-aligned paths: Mind & Memory,
+  Scholar, Analyst, Builder, Creator, Personal Companion, Model Steward,
+  Guardian, and Open Platform. Its 45 capabilities and 161 criteria translate
+  the complete program into evidence-backed gates and a contributor-readable
+  backlog.
+- Added the complete public website source to the main Rangabot change set,
+  including a Charter route, canonical mastery data imports, ten-route rendered
+  tests, and a charter-aligned 1200×630 social card. Public deployment remains a
+  separate maintainer approval.
+
+### Changed
+
+- Reconciled every cited mastery criterion against merged evidence only. The
+  strict result is 7/45 fully unlocked (16% readiness), 72/161 verified
+  criteria, and 52% weighted development progress. The weighted figure includes
+  partial work and is never presented as readiness.
+- Remapped founder recognition into 33 evidence-backed claims attached to the
+  new capability nodes. Attribution records work performed; it does not unlock
+  a capability or bypass acceptance criteria.
+- Extended pull-request, proposal, CODEOWNER, CI, README, contributing, roadmap,
+  and mastery governance surfaces so material work names its Charter principle,
+  mastery criterion, model assumptions, ordinary-hardware assumptions, and
+  supporting evidence.
+
 ### Improved
 
 - Replaced browser-authored chat persistence with Core Turn Lifecycle v2. Each

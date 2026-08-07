@@ -1,4 +1,6 @@
 const protectedMasteryFiles = new Set([
+  "content/rangabot-charter.json",
+  "docs/RANGABOT_CHARTER.md",
   "content/path-to-mastery.json",
   "content/mastery-contributors.json",
   "content/mastery-evidence.json",
@@ -6,6 +8,7 @@ const protectedMasteryFiles = new Set([
   "lib/mastery-tree.ts",
   "lib/mastery-contributors.ts",
   "scripts/check-mastery-evidence.ts",
+  "scripts/generate-charter.ts",
   "scripts/generate-mastery-tree.ts",
 ]);
 
