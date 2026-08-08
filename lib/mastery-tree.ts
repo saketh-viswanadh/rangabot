@@ -31,7 +31,7 @@ export type MasteryEpicSource = {
 };
 
 export type MasteryTreeSource = {
-  version: 2;
+  version: 3;
   title: string;
   updatedAt: string;
   evidenceVerifiedAt: string;
@@ -114,7 +114,7 @@ export function materializeMasteryTree(source: MasteryTreeSource): MasteryTree {
 export function validateMasteryTree(value: unknown, evidenceValue?: unknown): asserts value is MasteryTreeSource {
   if (!value || typeof value !== "object") throw new Error("Mastery tree must be an object.");
   const tree = value as Partial<MasteryTreeSource>;
-  if (tree.version !== 2 || !tree.title || !tree.updatedAt || !tree.evidenceVerifiedAt || !tree.vision || !tree.core || !Array.isArray(tree.epics) || tree.epics.length < 9) throw new Error("Mastery program metadata is incomplete.");
+  if (tree.version !== 3 || !tree.title || !tree.updatedAt || !tree.evidenceVerifiedAt || !tree.vision || !tree.core || !Array.isArray(tree.epics) || tree.epics.length < 9) throw new Error("Mastery program metadata is incomplete.");
   const evidence = evidenceValue as Partial<MasteryEvidenceRegistry> | undefined;
   if (!evidence || evidence.version !== 1 || !Array.isArray(evidence.entries)) throw new Error("Mastery evidence registry is missing.");
   const evidenceIds = new Set<string>();

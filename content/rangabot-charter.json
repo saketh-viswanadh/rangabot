@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "updatedAt": "2026-08-08",
+  "vision": [
+    "A world where everyone can own a capable, trustworthy AI companion—one that runs on the computers people already have, grows with them, and enables open-source models to reach their full practical potential.",
+    "Powerful AI should not be reserved for enormous models, expensive subscriptions, specialized hardware, or large technology companies."
+  ],
+  "mission": [
+    "Build Rangabot as an open, local-first personal intelligence system that combines the user's chosen models, knowledge, memory, and approved tools to understand context, reason carefully, and complete meaningful work.",
+    "Rangabot recognizes each model's strengths and limitations, improves its performance through intelligent orchestration, and routes work to the smallest capable model, specialist, or deterministic local tool—while keeping the user in control of everything it knows, uses, creates, and shares."
+  ],
+  "tagline": "Your machine. Your models. Their full potential.",
+  "promise": "Know me. Think with me. Help me do excellent work. Stay mine.",
+  "decisionTest": "Does this make Rangabot more useful, truthful, personal, and capable on ordinary hardware—while preserving user ownership, respecting model limitations, and avoiding unnecessary cost or compute?",
+  "principles": [
+    {
+      "id": "local-first",
+      "title": "Local first, not local only",
+      "summary": "Deliver meaningful capability without requiring a cloud account, paid API, or permanent internet connection. External help must be explicit, inspectable, and approved; nothing silently leaves the machine."
+    },
+    {
+      "id": "user-ownership",
+      "title": "The user owns the intelligence",
+      "summary": "Chats, memories, knowledge, models, skills, projects, data, generated work, preferences, and evaluation history must remain inspectable, portable, editable, and deletable."
+    },
+    {
+      "id": "understand-first",
+      "title": "Understand before answering",
+      "summary": "Resolve the user's real intent, current context, approved memory, relevant evidence, required tools, expected format, and missing information before producing an answer."
+    },
+    {
+      "id": "truth-first",
+      "title": "Truth before confidence",
+      "summary": "Never invent data, citations, memories, actions, current information, tool execution, or model capability. State what is known, inferred, missing, and verifiable."
+    },
+    {
+      "id": "model-uplift",
+      "title": "Make every model better",
+      "summary": "Memory, retrieval, planning, tools, validation, and recovery must improve many supported models rather than encode answers for one model, benchmark, or demonstration."
+    },
+    {
+      "id": "model-respect",
+      "title": "Respect every model's strengths and limitations",
+      "summary": "Do not force one model to pretend it can do everything. Qualify models by task, context, reliability, resources, and known limitations, then compose their strengths honestly."
+    },
+    {
+      "id": "smallest-capable",
+      "title": "Use the smallest capable intelligence",
+      "summary": "Prefer deterministic local operations and efficient qualified models. Larger models or external services must justify their quality, compute, cost, latency, and privacy trade-offs."
+    },
+    {
+      "id": "tools-over-hallucination",
+      "title": "Tools over hallucination",
+      "summary": "When a task requires calculation, retrieval, code execution, inspection, or validation, trusted tools should produce the evidence and the model should plan and interpret it."
+    },
+    {
+      "id": "personal-not-intrusive",
+      "title": "Personal without becoming intrusive",
+      "summary": "Learn only through approved and inspectable memory. Current instructions always override memory, and unrelated personal information never enters an answer merely because it was remembered."
+    },
+    {
+      "id": "one-mind",
+      "title": "One coherent mind, many capabilities",
+      "summary": "Conversation, teaching, analysis, coding, writing, and creation should feel like one assistant coordinating typed expert capabilities—not disconnected applications or hidden agents."
+    },
+    {
+      "id": "evidence-earned",
+      "title": "Capabilities are earned through evidence",
+      "summary": "Code is not mastery. Reliability, privacy, usefulness, recovery, model portability, and consumer-hardware performance must pass explicit gates without weakening difficult tests."
+    },
+    {
+      "id": "meaningful-work",
+      "title": "Meaningful work is the final measure",
+      "summary": "Optimize for helping ordinary people learn, decide, analyze, build, create, organize knowledge, and save time—not impressive demos, benchmark trivia, or unnecessarily long answers."
+    }
+  ],
+  "identity": [
+    { "id": "mind", "title": "Mind", "description": "Understands intent, maintains context, reasons carefully, and recovers safely." },
+    { "id": "memory", "title": "Memory", "description": "Remembers selectively, transparently, and only with the user's approval." },
+    { "id": "scholar", "title": "Scholar", "description": "Learns from approved knowledge, synthesizes evidence, and teaches clearly." },
+    { "id": "analyst", "title": "Analyst", "description": "Executes against real data and explains verified results without invention." },
+    { "id": "builder", "title": "Builder", "description": "Understands, creates, tests, and documents software with bounded access." },
+    { "id": "creator", "title": "Creator", "description": "Produces high-quality writing, documents, presentations, and structured artifacts." },
+    { "id": "assistant", "title": "Personal companion", "description": "Adapts to the user and coordinates useful work without becoming intrusive." },
+    { "id": "steward", "title": "Model steward", "description": "Understands, qualifies, and unlocks the practical strengths of open models." },
+    { "id": "guardian", "title": "Guardian", "description": "Protects privacy, permissions, provenance, truthfulness, and user control." },
+    { "id": "platform", "title": "Open platform", "description": "Makes local AI installable, testable, collaborative, and dependable on ordinary machines." }
+  ]
+}

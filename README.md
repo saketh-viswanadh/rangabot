@@ -1,10 +1,15 @@
 # Rangabot
 
-A beautiful, local-first assistant for private chat, coding, brainstorming and
-teaching from your own documents. Rangabot uses downloaded Ollama models and a
-local Knowledge Vault; cloud handoff remains disabled.
+> **Your machine. Your models. Their full potential.**
 
-![Rangabot — private local AI with a golden-retriever guide](docs/media/rangabot-social-preview.png)
+Rangabot is an open, local-first personal intelligence system built to help
+open-source models reach their full practical potential on the computers people
+already own. It combines the user's chosen models, approved knowledge, selective
+memory, deterministic tools, and evidence-backed expert capabilities to support
+meaningful conversation, learning, coding, analysis, and creation without a
+mandatory cloud account, paid API, or specialized machine.
+
+![Rangabot — private local AI with a golden-retriever guide](docs/media/rangabot-social-preview-charter.png)
 
 > **Reliability status:** Rangabot is active pre-release software. Core chat,
 > local memory, retrieval, and document creation work today, but capability
@@ -12,6 +17,18 @@ local Knowledge Vault; cloud handoff remains disabled.
 > and its strict acceptance gates are documented in
 > [the Core Conversation Contract](docs/CORE_CONVERSATION_CONTRACT.md); a merged
 > feature is not automatically a mastered capability.
+
+## Vision, mission, and north star
+
+Rangabot's canonical [charter](docs/RANGABOT_CHARTER.md) governs product
+priorities, architecture, evaluation, public claims, and the Path to Mastery.
+Its personal promise is: **Know me. Think with me. Help me do excellent work.
+Stay mine.**
+
+The governing decision is whether a change makes Rangabot more useful,
+truthful, personal, and capable on ordinary hardware while preserving user
+ownership, respecting model limitations, and avoiding unnecessary cost or
+compute.
 
 ## Product showcase
 
@@ -100,8 +117,11 @@ model server.
 - Offline welcome library with 100 quotes, 100 jokes and 100 thoughts, plus a 60-item no-repeat window
 - No cloud transmission
 - Interactive **Path to Mastery** at `/mastery`, generated from the same strict
-  capability data used by the public contributor backlog, with the capability
-  tree promoted above decorative art and keyboard-contained detail dialogs
+  capability data used by the public contributor backlog. Version 3 maps all
+  work into nine charter-aligned paths: Mind & Memory, Scholar, Analyst,
+  Builder, Creator, Personal Companion, Model Steward, Guardian, and Open
+  Platform. Its current strict readiness is 7/45 capabilities; weighted
+  development progress is not presented as readiness
 
 Conversation data stays in `data/rangabot.db` on this computer. The database and
 its journal files are excluded from Git.

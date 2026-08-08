@@ -23,9 +23,9 @@ const branchIcons: Record<string, CraftIconName> = {
   analyst: "analysis",
   builder: "code",
   creator: "document",
-  assistant: "chat",
+  companion: "chat",
+  steward: "mastery",
   guardian: "shield",
-  companion: "mastery",
   platform: "folder",
 };
 
