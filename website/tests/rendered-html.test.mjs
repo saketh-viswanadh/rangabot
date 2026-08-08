@@ -109,3 +109,15 @@ test("keeps starter infrastructure and private product data out of the site", as
   assert.doesNotMatch(combined, /rangabot\.db|repositories\.json|knowledge\.db|\.env\.local/);
   await assert.rejects(access(new URL("data", root)));
 });
+
+test("launches vinext without POSIX-only environment syntax", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
+  const runner = await readFile(new URL("build/run-vinext.mjs", root), "utf8");
+
+  for (const script of [packageJson.scripts.dev, packageJson.scripts.build, packageJson.scripts.start]) {
+    assert.match(script, /^node build\/run-vinext\.mjs /);
+    assert.doesNotMatch(script, /^[A-Z_]+=\S+ /);
+  }
+  assert.match(runner, /process\.platform === "win32" \? "vinext\.cmd" : "vinext"/);
+  assert.match(runner, /WRANGLER_LOG_PATH: "\.wrangler\/wrangler\.log"/);
+});

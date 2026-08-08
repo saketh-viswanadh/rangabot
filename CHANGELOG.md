@@ -36,6 +36,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   and mastery governance surfaces so material work names its Charter principle,
   mastery criterion, model assumptions, ordinary-hardware assumptions, and
   supporting evidence.
+- Replaced the website's POSIX-only inline environment commands with a small
+  Node launcher so development, build, and start use the same Sites-compatible
+  vinext process on macOS, Linux, and Windows.
 
 ### Improved
 

@@ -23,7 +23,11 @@
   approves deployment.
 - Focused checks cover Charter drift, mastery evidence/governance, app mastery
   rendering, all ten public routes, navigation, and privacy-safe public content.
-  Full project and dependency validation follow before the pull request.
+  Full project and dependency validation passed locally. GitHub's first run then
+  exposed one Windows-only website script defect: POSIX inline environment
+  assignment. A dependency-free Node launcher now sets the same log path and
+  invokes the platform's vinext executable; a focused regression test locks the
+  cross-platform command contract.
 
 ## 2026-08-07 — Core Turn Lifecycle v2
 
