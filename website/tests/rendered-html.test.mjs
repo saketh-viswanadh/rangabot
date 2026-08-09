@@ -65,6 +65,15 @@ test("renders the canonical charter and current mastery evidence", async () => {
   assert.match(masteryHtml, /2026-08-08/);
 });
 
+test("keeps the mastery summary constrained beside a flexible path list", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.mastery-summary-grid\s*\{[^}]*grid-template-columns:\s*minmax\(190px, 240px\)\s+minmax\(0, 1fr\)/s);
+  assert.match(css, /\.mastery-summary-grid\s*\{[^}]*align-items:\s*start/s);
+  assert.match(css, /\.readiness-disc\s*\{[^}]*width:\s*min\(100%, 220px\)/s);
+  assert.match(css, /\.mastery-path\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)\s+auto/s);
+});
+
 test("keeps primary navigation usable without client-side routing", async () => {
   const response = await render();
   const html = await response.text();
