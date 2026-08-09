@@ -1,18 +1,19 @@
 {
-  "version": 2,
+  "version": 3,
   "title": "Path to Mastery",
-  "updatedAt": "2026-08-02",
-  "evidenceVerifiedAt": "2026-08-02",
-  "vision": "An ever-loyal, local-first personal assistant that uses private models, approved knowledge and local tools first, then asks permission before using allowlisted web or external services.",
+  "updatedAt": "2026-08-08",
+  "evidenceVerifiedAt": "2026-08-08",
+  "vision": "Extraordinary capability from ordinary machines: one user-owned local intelligence that helps open models reach their full practical potential through honest orchestration, approved knowledge, memory, tools, and evidence.",
   "core": {
     "id": "rangabot",
     "name": "Rangabot",
-    "subtitle": "Loyal local personal assistant",
-    "description": "The central intelligence connecting conversation, planning, knowledge, memory, tools, creation and trust.",
+    "subtitle": "Your machine. Your models. Their full potential.",
+    "description": "The open, local-first personal intelligence system coordinating a trustworthy mind, selective memory, expert capabilities, model stewardship, and user-owned work.",
     "unlockCriteria": [
-      "Every mastery path has at least one dependable end-to-end capability",
-      "Local-first permission boundaries pass security review",
-      "Core quality and latency targets remain green for two releases"
+      "Every mastery path has at least one dependable end-to-end capability on ordinary hardware",
+      "Core conversation, privacy, truthfulness, and recovery gates pass without rubric weakening",
+      "Every shipped capability names its qualified models, machine profile, evidence, and limitations",
+      "Users retain inspectable control over all knowledge, memory, permissions, models, and outputs"
     ]
   },
   "epics": [
@@ -20,99 +21,146 @@
       "id": "mind",
       "name": "Mind & Memory",
       "glyph": "◉",
-      "summary": "Understand intent, plan work and learn locally without hidden model mutation.",
+      "summary": "Understand the person, protect context, reason honestly, and preserve a clean conversational mind across every model.",
       "nodes": [
         {
-          "id": "local-conversation",
-          "name": "Natural conversation",
-          "description": "Stream private local-model conversations with stop control and structured history.",
+          "id": "natural-conversation",
+          "name": "Focused conversation",
+          "description": "Answer directly, naturally, and consistently while following current instructions, corrections, context, format, and uncertainty.",
           "dependencies": [],
           "criteria": [
             {
-              "id": "local-conversation-1",
-              "text": "Streaming and stop controls pass",
+              "id": "natural-conversation-1",
+              "text": "One complete frozen 60-case candidate reaches at least 90% overall and 100% on critical trust cases",
               "state": "verified",
               "evidence": [
-                "pr-3"
-              ]
-            },
-            {
-              "id": "local-conversation-2",
-              "text": "Conversation history persists locally",
-              "state": "verified",
-              "evidence": [
-                "pr-5"
-              ]
-            },
-            {
-              "id": "local-conversation-3",
-              "text": "No remote provider receives content",
-              "state": "verified",
-              "evidence": [
-                "pr-50"
-              ]
-            },
-            {
-              "id": "local-conversation-4",
-              "text": "Frozen core benchmark reaches at least 90% overall and 100% on critical trust cases",
-              "state": "failed",
-              "evidence": [
-                "pr-64"
+                "pr-93"
               ],
-              "note": "Frozen v1.0.2 core evaluation rescored 51/60 overall and 21/22 critical; both release gates are missed."
+              "note": "Clean v1.0.11 implementation evidence is 59/60 overall and 22/22 critical."
+            },
+            {
+              "id": "natural-conversation-2",
+              "text": "Every capability category reaches at least 80% on that complete candidate",
+              "state": "verified",
+              "evidence": [
+                "pr-93"
+              ],
+              "note": "Every category reached at least 4/5."
+            },
+            {
+              "id": "natural-conversation-3",
+              "text": "Critical trust cases pass three complete repetitions on the exact release candidate",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "natural-conversation-4",
+              "text": "A blinded human usefulness sample reaches at least 4/5",
+              "state": "planned",
+              "evidence": []
             }
           ],
-          "backlog": "Maintain reliability across supported local models",
-          "previouslyUnlocked": true
+          "backlog": "Run repeated critical and blinded usefulness release gates"
         },
         {
-          "id": "intent-planning",
-          "name": "Intent planning",
-          "description": "Classify requests and plan retrieval or artifact work using bounded context.",
+          "id": "turn-lifecycle",
+          "name": "Durable turn lifecycle",
+          "description": "Own every request on the server so completion, Stop, timeout, reload, failure, retry, and persistence cannot corrupt later context.",
+          "dependencies": [],
+          "criteria": [
+            {
+              "id": "turn-lifecycle-1",
+              "text": "Idempotent UUID start permits only one pending turn per conversation",
+              "state": "verified",
+              "evidence": [
+                "pr-93"
+              ]
+            },
+            {
+              "id": "turn-lifecycle-2",
+              "text": "Only clean completion atomically appends the user and assistant pair to canonical history",
+              "state": "verified",
+              "evidence": [
+                "pr-93"
+              ]
+            },
+            {
+              "id": "turn-lifecycle-3",
+              "text": "Cancelled and failed partials remain inspectable but never enter prompts, search, memory, or portable export",
+              "state": "verified",
+              "evidence": [
+                "pr-93"
+              ]
+            },
+            {
+              "id": "turn-lifecycle-4",
+              "text": "Timeout, cancellation, provider failure, reload adoption, and migration recovery pass deterministic tests and cross-platform CI",
+              "state": "verified",
+              "evidence": [
+                "pr-93"
+              ]
+            }
+          ],
+          "backlog": "Repeat destructive recovery on release candidates"
+        },
+        {
+          "id": "intent-orchestration",
+          "name": "Intent & orchestration",
+          "description": "Choose conversation, retrieval, analysis, creation, or a specialist path using bounded, inspectable context without a hidden agent free-for-all.",
           "dependencies": [
-            "local-conversation"
+            "natural-conversation",
+            "turn-lifecycle"
           ],
           "criteria": [
             {
-              "id": "intent-planning-1",
-              "text": "Resolve follow-up references",
+              "id": "intent-orchestration-1",
+              "text": "Safety, current request, correction, recent context, approved memory, and defaults follow the frozen precedence order",
               "state": "verified",
               "evidence": [
-                "pr-51"
+                "pr-68",
+                "pr-71",
+                "pr-79"
               ]
             },
             {
-              "id": "intent-planning-2",
-              "text": "Separate retrieval, creation and tool intents",
-              "state": "partial",
+              "id": "intent-orchestration-2",
+              "text": "Follow-up references and bounded recent context resolve reliably",
+              "state": "verified",
               "evidence": [
-                "pr-39",
-                "pr-51"
+                "pr-51",
+                "pr-68"
               ]
             },
             {
-              "id": "intent-planning-3",
-              "text": "Pass ambiguous-intent fixtures",
+              "id": "intent-orchestration-3",
+              "text": "Deterministic signals select retrieval, analysis, repository, or artifact paths before model classification",
               "state": "partial",
               "evidence": [
-                "pr-64"
+                "pr-78",
+                "pr-87"
               ],
-              "note": "The 60-case suite contains ambiguity cases, but intent classification is not isolated as a measured gate."
+              "note": "Analytics has an explicit pack path; the remaining capability routes do not yet share one measured router."
+            },
+            {
+              "id": "intent-orchestration-4",
+              "text": "Ambiguous and multi-step intent has an isolated cross-model acceptance suite",
+              "state": "planned",
+              "evidence": []
             }
           ],
-          "backlog": "Add inspectable multi-step plans"
+          "backlog": "Build the shared evidence-backed capability router"
         },
         {
           "id": "local-memory",
           "name": "Inspectable local memory",
-          "description": "Remember explicitly approved preferences, facts and instructions with provenance.",
+          "description": "Remember only explicitly approved, relevant information with provenance, conflict handling, and complete user control.",
           "dependencies": [
-            "intent-planning"
+            "intent-orchestration"
           ],
           "criteria": [
             {
               "id": "local-memory-1",
-              "text": "Every memory has origin and confidence",
+              "text": "Every saved memory has an origin, confidence, and explicit approval",
               "state": "verified",
               "evidence": [
                 "pr-54"
@@ -120,7 +168,7 @@
             },
             {
               "id": "local-memory-2",
-              "text": "Users can inspect, edit, export and delete",
+              "text": "Users can inspect, edit, export, import with review, and delete memories",
               "state": "verified",
               "evidence": [
                 "pr-54",
@@ -129,89 +177,68 @@
             },
             {
               "id": "local-memory-3",
-              "text": "No conversation silently becomes universal fact",
+              "text": "Synthetic selection reaches 15/15 precision, 15/15 recall, and current-turn precedence",
               "state": "verified",
               "evidence": [
-                "pr-54"
+                "pr-79"
               ]
             },
             {
               "id": "local-memory-4",
-              "text": "Current-turn instructions override relevant memory in 100% of critical cases",
-              "state": "failed",
-              "evidence": [
-                "pr-64"
-              ],
-              "note": "Current-turn-over-memory precedence failed one critical end-to-end case."
-            }
-          ],
-          "backlog": "Add corrections and explainable learning progress before unlock review"
-        },
-        {
-          "id": "learning-progress",
-          "name": "Learning progress",
-          "description": "Track what the user understands and adapt explanations without profiling invisibly.",
-          "dependencies": [
-            "local-memory"
-          ],
-          "criteria": [
-            {
-              "id": "learning-progress-1",
-              "text": "Proficiency changes are explainable",
-              "state": "planned",
-              "evidence": []
-            },
-            {
-              "id": "learning-progress-2",
-              "text": "User can reset a subject profile",
-              "state": "planned",
-              "evidence": []
-            },
-            {
-              "id": "learning-progress-3",
-              "text": "Teaching evaluation improves",
+              "text": "Corrections and superseded memories retain inspectable provenance and resolution controls",
               "state": "planned",
               "evidence": []
             }
           ],
-          "backlog": "Unlock after inspectable memory"
+          "backlog": "Add explicit correction and supersession workflows"
         },
         {
           "id": "self-review",
-          "name": "Self-review loop",
-          "description": "Review grounding, completeness and contradictions before returning important work.",
+          "name": "Truth & self-review",
+          "description": "Detect false premises, unsupported actions, contradictions, and weak drafts without allowing a reviewer to damage a stronger answer.",
           "dependencies": [
-            "intent-planning"
+            "intent-orchestration"
           ],
           "criteria": [
             {
               "id": "self-review-1",
-              "text": "Grounding at least 95%",
-              "state": "failed",
+              "text": "False-premise, unavailable-action, and verified-reasoning boundaries are deterministic",
+              "state": "verified",
               "evidence": [
-                "pr-50"
-              ],
-              "note": "Latest recorded answer grounding was 90%, below the 95% gate."
+                "pr-71",
+                "pr-72"
+              ]
             },
             {
               "id": "self-review-2",
-              "text": "Known contradictions rejected",
+              "text": "Reviewer activation requires correcting every bad draft and preserving every good draft",
               "state": "verified",
               "evidence": [
-                "pr-48"
+                "pr-69"
               ]
             },
             {
               "id": "self-review-3",
-              "text": "Revision never replaces a stronger draft",
-              "state": "verified",
+              "text": "At least one approved local reviewer model qualifies 12/12",
+              "state": "failed",
               "evidence": [
-                "pr-50"
-              ]
+                "pr-69",
+                "pr-85"
+              ],
+              "note": "Evaluated Llama and Qwen profiles scored 1/12; neither may rewrite live answers."
+            },
+            {
+              "id": "self-review-4",
+              "text": "Important free-form answers pass a general evidence and contradiction audit without benchmark-specific prompts",
+              "state": "partial",
+              "evidence": [
+                "pr-48",
+                "pr-90"
+              ],
+              "note": "Grounded Analytics narration is deterministic; broad conversational review is not yet qualified."
             }
           ],
-          "backlog": "Replace lexical checks with stronger entailment review",
-          "previouslyUnlocked": false
+          "backlog": "Design a model-independent review stage that preserves strong drafts"
         }
       ]
     },
@@ -219,17 +246,17 @@
       "id": "scholar",
       "name": "Scholar",
       "glyph": "◇",
-      "summary": "Turn private books and approved research into clear, cited teaching.",
+      "summary": "Turn private books and approved sources into clear teaching, cross-source synthesis, and honest current awareness.",
       "nodes": [
         {
           "id": "vault-ingestion",
           "name": "Knowledge Vault",
-          "description": "Incrementally ingest supported local documents with hierarchy, embeddings and rollback.",
+          "description": "Ingest supported private documents locally with hierarchy, compatibility reporting, bounded storage, backup, and rollback.",
           "dependencies": [],
           "criteria": [
             {
               "id": "vault-ingestion-1",
-              "text": "Supported files ingest locally",
+              "text": "Supported PDF, DOCX, HTML, Markdown, and text files ingest locally with hierarchy",
               "state": "verified",
               "evidence": [
                 "pr-11",
@@ -238,7 +265,7 @@
             },
             {
               "id": "vault-ingestion-2",
-              "text": "Incompatible files are visible",
+              "text": "Incompatible and pending files are visible with next-step guidance",
               "state": "verified",
               "evidence": [
                 "pr-43"
@@ -246,27 +273,36 @@
             },
             {
               "id": "vault-ingestion-3",
-              "text": "Backup and rollback pass",
+              "text": "Backup and rollback pass a published destructive-recovery acceptance run",
               "state": "partial",
               "evidence": [
                 "pr-11"
               ],
-              "note": "Backup and rollback exist, but no dedicated destructive-recovery acceptance run is published."
+              "note": "The commands exist; a dedicated destructive recovery result is not published."
+            },
+            {
+              "id": "vault-ingestion-4",
+              "text": "Private vault contents and embeddings remain excluded from Git and public evidence",
+              "state": "verified",
+              "evidence": [
+                "pr-15",
+                "pr-50"
+              ]
             }
           ],
-          "backlog": "Improve OCR guidance and extraction coverage"
+          "backlog": "Publish a privacy-safe destructive recovery fixture"
         },
         {
           "id": "hybrid-retrieval",
           "name": "Hybrid retrieval",
-          "description": "Combine keyword and vector search while guarding relevance and subject boundaries.",
+          "description": "Combine keyword and embedding search with visible fallback, passage locators, and subject-boundary protection.",
           "dependencies": [
             "vault-ingestion"
           ],
           "criteria": [
             {
               "id": "hybrid-retrieval-1",
-              "text": "Retrieval pass rate at least 90%",
+              "text": "Frozen retrieval evaluation reaches at least 90%",
               "state": "verified",
               "evidence": [
                 "pr-46"
@@ -283,7 +319,7 @@
             },
             {
               "id": "hybrid-retrieval-3",
-              "text": "Every passage has a locator",
+              "text": "Every retrieved passage has source and locator metadata",
               "state": "verified",
               "evidence": [
                 "pr-42"
@@ -298,12 +334,12 @@
               ]
             }
           ],
-          "backlog": "Raise the unlock floor to 95%"
+          "backlog": "Raise the retrieval release floor to 95% across larger private vaults"
         },
         {
           "id": "teacher-mode",
-          "name": "Reliable Teacher",
-          "description": "Synthesize original explanations from several books and labelled model background.",
+          "name": "Reliable teacher",
+          "description": "Synthesize useful original explanations from several books while separating cited evidence from downloaded-model background.",
           "dependencies": [
             "hybrid-retrieval",
             "self-review"
@@ -311,89 +347,88 @@
           "criteria": [
             {
               "id": "teacher-mode-1",
-              "text": "Answer pass rate at least 90%",
+              "text": "Complete answer suite reaches at least 90%",
               "state": "failed",
               "evidence": [
                 "pr-50"
               ],
-              "note": "Latest recorded answer pass rate is 83.3%, below 90%."
+              "note": "Latest retained complete result is 83.3%."
             },
             {
               "id": "teacher-mode-2",
-              "text": "Grounding at least 95%",
+              "text": "Grounding reaches at least 95%",
               "state": "failed",
               "evidence": [
                 "pr-50"
               ],
-              "note": "Latest recorded grounding is 90%, below 95%."
+              "note": "Latest retained grounding is 90%."
             },
             {
               "id": "teacher-mode-3",
-              "text": "Median latency below 30 seconds",
-              "state": "failed",
-              "evidence": [
-                "pr-50"
-              ],
-              "note": "Latest recorded average latency is 64.1 seconds; median below 30 seconds is unproven."
-            },
-            {
-              "id": "teacher-mode-4",
-              "text": "No subject below 80%",
+              "text": "Every subject reaches at least 80%",
               "state": "failed",
               "evidence": [
                 "pr-48"
               ],
-              "note": "No complete current result proves every subject is at least 80%."
+              "note": "No complete current result proves this gate."
+            },
+            {
+              "id": "teacher-mode-4",
+              "text": "Median latency is below 30 seconds on the reference consumer machine",
+              "state": "failed",
+              "evidence": [
+                "pr-50"
+              ],
+              "note": "Latest retained run reported 64.1-second mean latency; the median gate is unproven."
             }
           ],
-          "backlog": "Fix mythology variance, synthesis and latency",
-          "previouslyUnlocked": false
+          "backlog": "Improve synthesis reliability and latency without weakening citations"
         },
         {
-          "id": "concept-layer",
-          "name": "Cross-book concepts",
-          "description": "Maintain rebuildable concepts, relationships, agreements and disagreements across sources.",
+          "id": "cross-source-synthesis",
+          "name": "Cross-source concepts",
+          "description": "Maintain rebuildable concepts, agreements, disagreements, and relationships across books with provenance.",
           "dependencies": [
             "teacher-mode",
             "local-memory"
           ],
           "criteria": [
             {
-              "id": "concept-layer-1",
-              "text": "Rebuild after source changes",
+              "id": "cross-source-synthesis-1",
+              "text": "Derived concepts rebuild when source fingerprints change",
               "state": "planned",
               "evidence": []
             },
             {
-              "id": "concept-layer-2",
-              "text": "Preserve conflicting interpretations",
+              "id": "cross-source-synthesis-2",
+              "text": "Conflicting interpretations are preserved rather than flattened",
               "state": "partial",
               "evidence": [
                 "pr-49"
               ]
             },
             {
-              "id": "concept-layer-3",
-              "text": "Every relation has provenance",
+              "id": "cross-source-synthesis-3",
+              "text": "Every derived relationship traces to supporting passages",
               "state": "partial",
               "evidence": [
                 "pr-49"
               ]
             }
           ],
-          "backlog": "Design the derived concept store"
+          "backlog": "Design the rebuildable local concept store"
         },
         {
           "id": "current-awareness",
           "name": "Current awareness",
-          "description": "Maintain meaningful weekly and monthly offline intelligence with evidence classes.",
+          "description": "Maintain meaningful offline weekly and monthly intelligence with dates, evidence classes, links, and explicit vault status.",
           "dependencies": [
             "vault-ingestion"
           ],
           "criteria": [
             {
               "id": "current-awareness-1",
-              "text": "Only meaningful developments included",
+              "text": "Only meaningful developments are included",
               "state": "partial",
               "evidence": [
                 "pr-32"
@@ -401,7 +436,7 @@
             },
             {
               "id": "current-awareness-2",
-              "text": "Dates and primary links verified",
+              "text": "Dates, primary links, and evidence classes are verified",
               "state": "partial",
               "evidence": [
                 "pr-32"
@@ -409,14 +444,20 @@
             },
             {
               "id": "current-awareness-3",
-              "text": "Indexed versus source-tracked status visible",
+              "text": "Indexed versus source-tracked status is visible",
               "state": "verified",
               "evidence": [
                 "pr-32"
               ]
+            },
+            {
+              "id": "current-awareness-4",
+              "text": "Freshness and source coverage are automatically audited without filler",
+              "state": "planned",
+              "evidence": []
             }
           ],
-          "backlog": "Broaden sources and automate freshness validation"
+          "backlog": "Add reproducible freshness and source-coverage validation"
         }
       ]
     },
@@ -424,162 +465,206 @@
       "id": "analyst",
       "name": "Analyst",
       "glyph": "△",
-      "summary": "Execute Python, SQL and models locally, then explain results without inventing data.",
+      "summary": "Use approved data, deterministic execution, and typed evidence to answer analytical questions without inventing results.",
       "nodes": [
         {
-          "id": "analysis-knowledge",
-          "name": "Analytics knowledge",
-          "description": "Teach Python, SQL, statistics, ML, visualization and data platforms from local sources.",
+          "id": "data-permission",
+          "name": "Approved data context",
+          "description": "Grant, retain, restore, detach, and revoke read-only analytical access through explicit local controls.",
           "dependencies": [
-            "teacher-mode"
+            "local-first"
           ],
           "criteria": [
             {
-              "id": "analysis-knowledge-1",
-              "text": "Every technical subject passes 90%",
-              "state": "failed",
+              "id": "data-permission-1",
+              "text": "CSV, Parquet, and DuckDB files require persistent explicit approval",
+              "state": "verified",
               "evidence": [
-                "pr-48"
-              ],
-              "note": "The recorded subject suite does not prove every technical subject at 90%."
-            },
-            {
-              "id": "analysis-knowledge-2",
-              "text": "Examples are executable",
-              "state": "partial",
-              "evidence": [
-                "pr-48"
+                "pr-73",
+                "pr-74"
               ]
             },
             {
-              "id": "analysis-knowledge-3",
-              "text": "Version-sensitive claims are sourced",
-              "state": "partial",
+              "id": "data-permission-2",
+              "text": "Conversation binding restores approved data without asking for the path every turn",
+              "state": "verified",
               "evidence": [
-                "pr-32"
+                "pr-82"
+              ]
+            },
+            {
+              "id": "data-permission-3",
+              "text": "Detaching a chat and revoking global approval are distinct and immediate",
+              "state": "verified",
+              "evidence": [
+                "pr-82"
               ]
             }
           ],
-          "backlog": "Deepen statistics and platform-specific coverage"
+          "backlog": "Add safe schema refresh when approved files change"
+        },
+        {
+          "id": "semantic-planning",
+          "name": "Model-independent semantics",
+          "description": "Resolve population, grain, measure, relationships, filters, and ambiguity from the approved schema before SQL exists.",
+          "dependencies": [
+            "data-permission",
+            "intent-orchestration"
+          ],
+          "criteria": [
+            {
+              "id": "semantic-planning-1",
+              "text": "Simple aggregate and relational roles compile without benchmark-domain names",
+              "state": "verified",
+              "evidence": [
+                "pr-81",
+                "pr-83",
+                "pr-84"
+              ]
+            },
+            {
+              "id": "semantic-planning-2",
+              "text": "Ambiguous denominators, polarity, and unsupported populations fail closed",
+              "state": "verified",
+              "evidence": [
+                "pr-89"
+              ]
+            },
+            {
+              "id": "semantic-planning-3",
+              "text": "A separately frozen isomorphic transfer suite passes its first retained run",
+              "state": "verified",
+              "evidence": [
+                "pr-89"
+              ],
+              "note": "Theatre v5 passed 12/12; this is not broad generalization."
+            },
+            {
+              "id": "semantic-planning-4",
+              "text": "A structurally diverse non-isomorphic holdout reaches at least 90%",
+              "state": "planned",
+              "evidence": []
+            }
+          ],
+          "backlog": "Freeze and run a structurally diverse semantic holdout"
         },
         {
           "id": "safe-runtime",
-          "name": "Safe local runtime",
-          "description": "Run approved Python and SQL in a bounded local sandbox with visible inputs and outputs.",
+          "name": "Verified local execution",
+          "description": "Compile and run bounded read-only SQL in an isolated local process with cancellation, fingerprints, and inspectable receipts.",
           "dependencies": [
-            "intent-planning"
+            "data-permission",
+            "semantic-planning"
           ],
           "criteria": [
             {
               "id": "safe-runtime-1",
-              "text": "Explicit data and folder approval",
-              "state": "planned",
-              "evidence": []
+              "text": "Only one validated SELECT runs with external access and writes disabled",
+              "state": "verified",
+              "evidence": [
+                "pr-73",
+                "pr-78"
+              ]
             },
             {
               "id": "safe-runtime-2",
-              "text": "Time, memory and filesystem limits",
-              "state": "planned",
-              "evidence": []
+              "text": "Time, row, memory, cancellation, and hard-kill boundaries are enforced",
+              "state": "verified",
+              "evidence": [
+                "pr-87"
+              ]
             },
             {
               "id": "safe-runtime-3",
-              "text": "Complete execution log",
-              "state": "planned",
-              "evidence": []
+              "text": "Every result receipt binds the approved input and exact query fingerprints",
+              "state": "verified",
+              "evidence": [
+                "pr-78",
+                "pr-87"
+              ]
+            },
+            {
+              "id": "safe-runtime-4",
+              "text": "Unchanged astronomy and theatre regressions each pass 12/12 with zero evaluator errors",
+              "state": "verified",
+              "evidence": [
+                "pr-89",
+                "pr-90"
+              ]
             }
           ],
-          "backlog": "Choose the first Python and SQL sandbox design"
+          "backlog": "Add equivalent sandboxed Python execution"
         },
         {
-          "id": "evidence-analysis",
-          "name": "Evidence-backed analysis",
-          "description": "Base conclusions on actual executed queries, checks and model results.",
+          "id": "grounded-analysis",
+          "name": "Evidence-backed interpretation",
+          "description": "Explain only verified cells, filters, units, bounds, and limitations before attempting richer statistical interpretation.",
           "dependencies": [
             "safe-runtime",
-            "analysis-knowledge",
             "self-review"
           ],
           "criteria": [
             {
-              "id": "evidence-analysis-1",
-              "text": "Never fabricate outputs",
-              "state": "planned",
-              "evidence": []
+              "id": "grounded-analysis-1",
+              "text": "Trusted narration passes 44/44 canonical cases",
+              "state": "verified",
+              "evidence": [
+                "pr-90"
+              ]
             },
             {
-              "id": "evidence-analysis-2",
-              "text": "Every finding links to executed evidence",
-              "state": "planned",
-              "evidence": []
+              "id": "grounded-analysis-2",
+              "text": "Forged outputs and invalid result shapes are rejected 222/222",
+              "state": "verified",
+              "evidence": [
+                "pr-90"
+              ]
             },
             {
-              "id": "evidence-analysis-3",
-              "text": "Data-quality warnings precede conclusions",
+              "id": "grounded-analysis-3",
+              "text": "Free-form model text cannot introduce unsupported numbers or claims",
+              "state": "verified",
+              "evidence": [
+                "pr-90"
+              ]
+            },
+            {
+              "id": "grounded-analysis-4",
+              "text": "Causal, statistical, recommendation, and human-usefulness interpretation is separately qualified",
               "state": "planned",
               "evidence": []
             }
           ],
-          "backlog": "Unlock after safe runtime"
+          "backlog": "Qualify fact-selected statistical interpretation and human usefulness"
         },
         {
-          "id": "model-lab",
-          "name": "Local model lab",
-          "description": "Train or evaluate approved local models and interpret reproducible results.",
+          "id": "python-model-lab",
+          "name": "Python & local model lab",
+          "description": "Run reproducible statistics, modelling, visualisation, and model comparisons in a bounded network-free Python environment.",
           "dependencies": [
-            "evidence-analysis"
+            "safe-runtime"
           ],
           "criteria": [
             {
-              "id": "model-lab-1",
-              "text": "Reproducible experiment manifests",
+              "id": "python-model-lab-1",
+              "text": "Python runs without network, package installation, or unapproved file access",
               "state": "planned",
               "evidence": []
             },
             {
-              "id": "model-lab-2",
-              "text": "Baseline and holdout evaluation",
+              "id": "python-model-lab-2",
+              "text": "Experiments retain code, inputs, environment, seeds, metrics, and resource receipts",
               "state": "planned",
               "evidence": []
             },
             {
-              "id": "model-lab-3",
-              "text": "Resource use visible",
+              "id": "python-model-lab-3",
+              "text": "Visuals and model conclusions pass data-quality and interpretation review",
               "state": "planned",
               "evidence": []
             }
           ],
-          "backlog": "Unlock after evidence-backed analysis"
-        },
-        {
-          "id": "analytics-report",
-          "name": "Analytical reports",
-          "description": "Create decision-ready reports with validated charts, tables, caveats and sources.",
-          "dependencies": [
-            "evidence-analysis",
-            "word-create"
-          ],
-          "criteria": [
-            {
-              "id": "analytics-report-1",
-              "text": "Calculations reproducible",
-              "state": "planned",
-              "evidence": []
-            },
-            {
-              "id": "analytics-report-2",
-              "text": "Visuals validated",
-              "state": "planned",
-              "evidence": []
-            },
-            {
-              "id": "analytics-report-3",
-              "text": "Claims cite data outputs",
-              "state": "planned",
-              "evidence": []
-            }
-          ],
-          "backlog": "Unlock after execution and artifact quality"
+          "backlog": "Design the sandboxed Python contract"
         }
       ]
     },
@@ -587,61 +672,65 @@
       "id": "builder",
       "name": "Builder",
       "glyph": "⌘",
-      "summary": "Understand, change, test and document approved local software projects.",
+      "summary": "Understand, change, test, and document approved local software projects with bounded permissions and inspectable evidence.",
       "nodes": [
         {
-          "id": "repo-context",
+          "id": "repository-context",
           "name": "Repository context",
-          "description": "Allowlist repositories and attach bounded, revalidated code previews.",
-          "dependencies": [],
+          "description": "Allowlist repositories and expose only bounded, symlink-safe, secret-aware code previews after an explicit search.",
+          "dependencies": [
+            "local-first"
+          ],
           "criteria": [
             {
-              "id": "repo-context-1",
-              "text": "Explicit allowlist",
+              "id": "repository-context-1",
+              "text": "Repository access requires a persistent explicit allowlist",
               "state": "verified",
               "evidence": [
                 "pr-36"
               ]
             },
             {
-              "id": "repo-context-2",
-              "text": "Symlink-safe bounded previews",
+              "id": "repository-context-2",
+              "text": "Search and previews are bounded, line-numbered, and symlink-safe",
               "state": "verified",
               "evidence": [
                 "pr-37"
               ]
             },
             {
-              "id": "repo-context-3",
-              "text": "Secret checks pass",
+              "id": "repository-context-3",
+              "text": "Secrets, dependencies, build output, and ineligible files are excluded",
               "state": "verified",
               "evidence": [
+                "pr-37",
                 "pr-50"
               ]
             }
           ],
-          "backlog": "Improve file selection and preview UX"
+          "backlog": "Add user-visible repository permission scopes"
         },
         {
           "id": "code-understanding",
           "name": "Code understanding",
-          "description": "Explain selected code and answer scoped project questions using the local model.",
+          "description": "Explain architecture and behavior from exact approved files while distinguishing repository evidence from inference.",
           "dependencies": [
-            "repo-context",
-            "local-conversation"
+            "repository-context",
+            "natural-conversation"
           ],
           "criteria": [
             {
               "id": "code-understanding-1",
-              "text": "References exact files and lines",
+              "text": "Answers reference exact files and lines from attached previews",
               "state": "verified",
               "evidence": [
-                "pr-37"
+                "pr-37",
+                "pr-38"
               ]
             },
             {
               "id": "code-understanding-2",
-              "text": "Distinguishes evidence from assumptions",
+              "text": "Evidence and assumptions are visibly separated",
               "state": "partial",
               "evidence": [
                 "pr-38"
@@ -649,132 +738,132 @@
             },
             {
               "id": "code-understanding-3",
-              "text": "Cross-file evaluation passes",
+              "text": "Cross-file architecture and defect analysis passes a frozen suite across models",
               "state": "planned",
               "evidence": []
             }
           ],
-          "backlog": "Add multi-file context planning"
+          "backlog": "Create a frozen cross-file understanding evaluation"
         },
         {
           "id": "coding-agent",
           "name": "Coding agent",
-          "description": "Plan, edit, run and verify code inside an explicitly approved project.",
+          "description": "Plan, patch, test, and recover approved repository changes without silently expanding authority.",
           "dependencies": [
             "code-understanding",
-            "safe-runtime"
+            "python-model-lab"
           ],
           "criteria": [
             {
               "id": "coding-agent-1",
-              "text": "Diff preview before risky changes",
+              "text": "Every change has an inspectable plan and bounded patch preview",
               "state": "planned",
               "evidence": []
             },
             {
               "id": "coding-agent-2",
-              "text": "Tests run after edits",
+              "text": "Relevant tests and validation run after edits",
               "state": "planned",
               "evidence": []
             },
             {
               "id": "coding-agent-3",
-              "text": "Rollback remains available",
+              "text": "Failure leaves a recoverable worktree and clear handoff",
               "state": "planned",
               "evidence": []
             }
           ],
-          "backlog": "Unlock after safe execution"
+          "backlog": "Define the local repository mutation and rollback contract"
         },
         {
-          "id": "technical-docs",
+          "id": "technical-documentation",
           "name": "Technical documentation",
-          "description": "Create repository-grounded documentation, architecture summaries and diagrams.",
+          "description": "Create accurate architecture, setup, API, flow, and handoff material grounded in the repository and validation results.",
           "dependencies": [
             "code-understanding",
             "word-create"
           ],
           "criteria": [
             {
-              "id": "technical-docs-1",
-              "text": "Claims trace to repository evidence",
+              "id": "technical-documentation-1",
+              "text": "Every technical claim traces to code, configuration, or test evidence",
               "state": "planned",
               "evidence": []
             },
             {
-              "id": "technical-docs-2",
-              "text": "Diagrams validate against code",
+              "id": "technical-documentation-2",
+              "text": "Diagrams validate against the implemented system",
               "state": "planned",
               "evidence": []
             },
             {
-              "id": "technical-docs-3",
-              "text": "Output passes artifact gates",
+              "id": "technical-documentation-3",
+              "text": "Rendered output passes the shared artifact quality contract",
               "state": "planned",
               "evidence": []
             }
           ],
-          "backlog": "Design documentation fixtures"
+          "backlog": "Build the repository-grounded documentation evaluator"
         },
         {
           "id": "project-delivery",
           "name": "Project delivery",
-          "description": "Coordinate specifications, implementation, verification and release notes locally.",
+          "description": "Carry a software request from intent through tested implementation and honest documentation without automatic publishing.",
           "dependencies": [
             "coding-agent",
-            "technical-docs"
+            "technical-documentation"
           ],
           "criteria": [
             {
               "id": "project-delivery-1",
-              "text": "Inspectable task plan",
+              "text": "Plans, progress, and acceptance criteria remain inspectable",
               "state": "planned",
               "evidence": []
             },
             {
               "id": "project-delivery-2",
-              "text": "Verified acceptance criteria",
+              "text": "Completion requires verified tests and limitation disclosure",
               "state": "planned",
               "evidence": []
             },
             {
               "id": "project-delivery-3",
-              "text": "No automatic publishing",
+              "text": "Publishing, deployment, and external writes always require explicit authority",
               "state": "planned",
               "evidence": []
             }
           ],
-          "backlog": "Future mastery milestone",
-          "vision": true
+          "backlog": "Run the first end-to-end local project delivery benchmark"
         }
       ]
     },
     {
       "id": "creator",
       "name": "Creator",
-      "glyph": "✦",
-      "summary": "Create polished documents, writing, slides and spreadsheets through normal chat.",
+      "glyph": "▤",
+      "summary": "Turn conversation into excellent writing and artifacts through requirements, templates, rendering, validation, and review—not raw model output alone.",
       "nodes": [
         {
           "id": "word-create",
           "name": "Word creation",
-          "description": "Gather a brief in chat and create a validated DOCX with local previews.",
+          "description": "Gather requirements in chat and create a locally rendered DOCX grounded in the conversation and approved sources.",
           "dependencies": [
-            "local-conversation",
+            "natural-conversation",
             "self-review"
           ],
           "criteria": [
             {
               "id": "word-create-1",
-              "text": "Factual content grounded",
+              "text": "Conversation requirements produce a complete reader-facing draft",
               "state": "partial",
               "evidence": [
+                "pr-40",
                 "pr-41"
               ]
             },
             {
               "id": "word-create-2",
-              "text": "Genre fixtures pass",
+              "text": "Factual content traces to approved conversation or source material",
               "state": "partial",
               "evidence": [
                 "pr-41"
@@ -782,7 +871,7 @@
             },
             {
               "id": "word-create-3",
-              "text": "Rendered pages reviewed",
+              "text": "DOCX structure and rendered previews are validated before download",
               "state": "partial",
               "evidence": [
                 "pr-40"
@@ -790,330 +879,533 @@
             },
             {
               "id": "word-create-4",
-              "text": "No planning scaffolding leaks",
+              "text": "Planning scaffolding never leaks into the finished document",
               "state": "verified",
               "evidence": [
                 "pr-41"
               ]
             }
           ],
-          "backlog": "Reach general gold-standard quality"
+          "backlog": "Build broader genre and gold-standard visual evaluation"
         },
         {
           "id": "word-edit",
           "name": "Word editing",
-          "description": "Safely revise a user-selected document while preserving unaffected content and layout.",
+          "description": "Edit an explicitly selected document while preserving unaffected content, formatting, and reviewable changes.",
           "dependencies": [
             "word-create"
           ],
           "criteria": [
             {
               "id": "word-edit-1",
-              "text": "Explicit file selection",
+              "text": "File selection and requested scope are explicit",
               "state": "planned",
               "evidence": []
             },
             {
               "id": "word-edit-2",
-              "text": "Change preview",
+              "text": "Users see a change preview before replacement",
               "state": "planned",
               "evidence": []
             },
             {
               "id": "word-edit-3",
-              "text": "Round-trip preservation tests",
+              "text": "Round-trip structure and formatting preservation pass",
               "state": "planned",
               "evidence": []
             }
           ],
-          "backlog": "Implement the next artifact vertical slice"
+          "backlog": "Define the Word round-trip editing contract"
         },
         {
-          "id": "email-writing",
-          "name": "Email & writing studio",
-          "description": "Draft, revise and critique audience-aware email and long-form writing locally.",
+          "id": "writing-studio",
+          "name": "Writing & email studio",
+          "description": "Help people draft precise, audience-aware writing while keeping facts, tone, exclusions, and any sending action under user control.",
           "dependencies": [
-            "intent-planning",
+            "intent-orchestration",
             "self-review"
           ],
           "criteria": [
             {
-              "id": "email-writing-1",
-              "text": "Dedicated briefs and rubrics",
+              "id": "writing-studio-1",
+              "text": "Dedicated briefs and rubrics cover email and long-form writing",
               "state": "planned",
               "evidence": []
             },
             {
-              "id": "email-writing-2",
-              "text": "Tone and factual checks",
+              "id": "writing-studio-2",
+              "text": "Tone, audience, format, and exclusions pass frozen cases",
               "state": "partial",
               "evidence": [
                 "pr-62"
               ]
             },
             {
-              "id": "email-writing-3",
-              "text": "No sending without confirmation",
+              "id": "writing-studio-3",
+              "text": "Rangabot never claims to send without a connected approved tool and confirmation",
               "state": "verified",
               "evidence": [
-                "pr-62"
+                "pr-62",
+                "pr-71"
               ]
             }
           ],
-          "backlog": "Build dedicated writing quality gates"
+          "backlog": "Build the writing quality and factuality suite"
         },
         {
-          "id": "pdf-slides",
+          "id": "pdf-presentations",
           "name": "PDF & presentations",
-          "description": "Create printable PDFs and story-led presentation decks with visual QA.",
+          "description": "Create visually coherent, accessible PDF and presentation artifacts through deterministic rendering and visual inspection.",
           "dependencies": [
             "word-create",
             "word-edit"
           ],
           "criteria": [
             {
-              "id": "pdf-slides-1",
-              "text": "Deterministic rendering",
+              "id": "pdf-presentations-1",
+              "text": "Deterministic templates and rendering are implemented",
               "state": "planned",
               "evidence": []
             },
             {
-              "id": "pdf-slides-2",
-              "text": "Visual QA",
+              "id": "pdf-presentations-2",
+              "text": "Every page or slide receives visual QA",
               "state": "planned",
               "evidence": []
             },
             {
-              "id": "pdf-slides-3",
-              "text": "Accessible export",
+              "id": "pdf-presentations-3",
+              "text": "Accessible export and source fidelity pass",
               "state": "planned",
               "evidence": []
             }
           ],
-          "backlog": "Unlock after Word mastery"
+          "backlog": "Implement PDF after Word quality gates close"
         },
         {
           "id": "spreadsheets",
           "name": "Spreadsheets",
-          "description": "Create validated XLSX workbooks with formulas, charts and explanations.",
+          "description": "Create and edit useful workbooks with validated formulas, data quality, layout, and reproducible analytical provenance.",
           "dependencies": [
             "safe-runtime"
           ],
           "criteria": [
             {
               "id": "spreadsheets-1",
-              "text": "Formula validation",
+              "text": "Formula and reference validation passes",
               "state": "planned",
               "evidence": []
             },
             {
               "id": "spreadsheets-2",
-              "text": "Data-quality checks",
+              "text": "Data-quality checks precede conclusions",
               "state": "planned",
               "evidence": []
             },
             {
               "id": "spreadsheets-3",
-              "text": "Rendered workbook review",
+              "text": "Rendered workbook review and accessibility pass",
               "state": "planned",
               "evidence": []
             }
           ],
-          "backlog": "Design the spreadsheet execution boundary"
+          "backlog": "Define the spreadsheet artifact contract"
         }
       ]
     },
     {
-      "id": "assistant",
-      "name": "Personal Assistant",
-      "glyph": "⌁",
-      "summary": "Help with files, research, email, calendar and routines under explicit permissions.",
+      "id": "companion",
+      "name": "Personal Companion",
+      "glyph": "✦",
+      "summary": "Know the user without becoming intrusive, make work feel calm and coherent, and coordinate approved assistance as one loyal local companion.",
       "nodes": [
         {
-          "id": "projects",
+          "id": "local-projects",
           "name": "Local projects",
-          "description": "Organize chats into local project folders without granting filesystem access.",
+          "description": "Organize chats into user-created projects without granting implicit file or external access.",
           "dependencies": [
-            "local-conversation"
+            "natural-conversation"
           ],
           "criteria": [
             {
-              "id": "projects-1",
-              "text": "Project-scoped chats",
+              "id": "local-projects-1",
+              "text": "Project-scoped chats persist locally",
               "state": "verified",
               "evidence": [
                 "pr-10"
               ]
             },
             {
-              "id": "projects-2",
-              "text": "Deletion preserves chats safely",
+              "id": "local-projects-2",
+              "text": "Project deletion preserves or rehomes chats safely",
               "state": "verified",
               "evidence": [
                 "pr-10"
               ]
             },
             {
-              "id": "projects-3",
-              "text": "No implicit file access",
+              "id": "local-projects-3",
+              "text": "Project membership never implies filesystem access",
               "state": "verified",
               "evidence": [
                 "pr-10"
               ]
             }
           ],
-          "backlog": "Evolve projects into permission-aware workspaces"
+          "backlog": "Connect projects to explicit scoped resources"
         },
         {
-          "id": "web-allowlist",
-          "name": "Web allowlist",
-          "description": "Let users persistently approve, inspect and revoke trusted web domains locally.",
+          "id": "adaptive-experience",
+          "name": "Adaptive experience",
+          "description": "Provide a calm responsive workspace, accessible controls, personal greeting, and locally stored appearance preferences without polluting model memory.",
           "dependencies": [
-            "local-memory"
+            "natural-conversation"
           ],
           "criteria": [
             {
-              "id": "web-allowlist-1",
-              "text": "Local editable domain list",
-              "state": "planned",
-              "evidence": []
+              "id": "adaptive-experience-1",
+              "text": "Responsive chat, manual scrolling, search, pinning, and keyboard navigation work",
+              "state": "partial",
+              "evidence": [
+                "pr-31",
+                "pr-34",
+                "pr-60"
+              ],
+              "note": "Core flows exist; a complete accessibility audit remains open."
             },
             {
-              "id": "web-allowlist-2",
-              "text": "Query preview",
-              "state": "planned",
-              "evidence": []
+              "id": "adaptive-experience-2",
+              "text": "Name, greeting, welcome category, and appearance remain browser-local preferences",
+              "state": "verified",
+              "evidence": [
+                "pr-91",
+                "pr-92"
+              ]
             },
             {
-              "id": "web-allowlist-3",
-              "text": "Private context excluded by default",
-              "state": "planned",
-              "evidence": []
-            },
-            {
-              "id": "web-allowlist-4",
-              "text": "Per-domain capability scopes",
-              "state": "planned",
-              "evidence": []
+              "id": "adaptive-experience-3",
+              "text": "Light, dark, reduced-motion, and contrast requirements pass automated and manual review",
+              "state": "partial",
+              "evidence": [
+                "pr-7",
+                "pr-9",
+                "pr-92"
+              ]
             }
           ],
-          "backlog": "Implement permission storage and review UI"
+          "backlog": "Run complete keyboard, screen-reader, mobile, and contrast review"
         },
         {
-          "id": "web-research",
-          "name": "Permissioned web research",
-          "description": "Search allowlisted sources only when local knowledge is insufficient, with citations and dates.",
-          "dependencies": [
-            "web-allowlist",
-            "self-review"
-          ],
-          "criteria": [
-            {
-              "id": "web-research-1",
-              "text": "Local-first attempt recorded",
-              "state": "planned",
-              "evidence": []
-            },
-            {
-              "id": "web-research-2",
-              "text": "Only approved query leaves device",
-              "state": "planned",
-              "evidence": []
-            },
-            {
-              "id": "web-research-3",
-              "text": "Sources and retrieval dates shown",
-              "state": "planned",
-              "evidence": []
-            },
-            {
-              "id": "web-research-4",
-              "text": "Vault ingestion requires separate approval",
-              "state": "planned",
-              "evidence": []
-            }
-          ],
-          "backlog": "Unlock after persistent allowlists"
-        },
-        {
-          "id": "email-calendar",
-          "name": "Email & calendar",
-          "description": "Read and prepare personal workflows while requiring confirmation before mutations.",
-          "dependencies": [
-            "web-allowlist",
-            "intent-planning"
-          ],
-          "criteria": [
-            {
-              "id": "email-calendar-1",
-              "text": "Read scopes are explicit",
-              "state": "planned",
-              "evidence": []
-            },
-            {
-              "id": "email-calendar-2",
-              "text": "Send and calendar changes always confirmed",
-              "state": "planned",
-              "evidence": []
-            },
-            {
-              "id": "email-calendar-3",
-              "text": "Audit log remains local",
-              "state": "planned",
-              "evidence": []
-            }
-          ],
-          "backlog": "Design connector permission scopes"
-        },
-        {
-          "id": "daily-assistant",
-          "name": "Daily companion",
-          "description": "Prepare local briefs, reminders and proactive suggestions without becoming intrusive.",
+          "id": "personal-learning",
+          "name": "Personal learning",
+          "description": "Adapt explanations and progress through transparent subject preferences and proficiency that the user can inspect and reset.",
           "dependencies": [
             "local-memory",
-            "email-calendar",
-            "web-research"
+            "teacher-mode"
           ],
           "criteria": [
             {
-              "id": "daily-assistant-1",
-              "text": "User controls frequency",
+              "id": "personal-learning-1",
+              "text": "Proficiency changes have visible evidence and confidence",
               "state": "planned",
               "evidence": []
             },
             {
-              "id": "daily-assistant-2",
-              "text": "Every source visible",
+              "id": "personal-learning-2",
+              "text": "Users can inspect and reset every subject profile",
               "state": "planned",
               "evidence": []
             },
             {
-              "id": "daily-assistant-3",
-              "text": "No action without authority",
+              "id": "personal-learning-3",
+              "text": "Adaptive teaching improves a frozen usefulness evaluation",
               "state": "planned",
               "evidence": []
             }
           ],
-          "backlog": "Future personal-assistant mastery",
-          "vision": true
+          "backlog": "Design inspectable subject progress"
+        },
+        {
+          "id": "approved-assistance",
+          "name": "Approved external assistance",
+          "description": "Draft and coordinate web, email, calendar, and other connected work only through visible scopes, previews, and confirmations.",
+          "dependencies": [
+            "external-boundary",
+            "intent-orchestration"
+          ],
+          "criteria": [
+            {
+              "id": "approved-assistance-1",
+              "text": "Every connection exposes read and write scopes",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "approved-assistance-2",
+              "text": "Every material write has a final user-visible confirmation",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "approved-assistance-3",
+              "text": "Local audit receipts exclude unnecessary private content",
+              "state": "planned",
+              "evidence": []
+            }
+          ],
+          "backlog": "Implement the persistent web-domain allowlist before any connector"
+        },
+        {
+          "id": "daily-companion",
+          "name": "Daily companion",
+          "description": "Offer user-controlled briefs and follow-ups whose sources, timing, authority, and non-actions remain explicit.",
+          "dependencies": [
+            "personal-learning",
+            "approved-assistance"
+          ],
+          "criteria": [
+            {
+              "id": "daily-companion-1",
+              "text": "Users control frequency, sources, and quiet periods",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "daily-companion-2",
+              "text": "Every item links to its actual source",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "daily-companion-3",
+              "text": "No external action occurs without authority",
+              "state": "planned",
+              "evidence": []
+            }
+          ],
+          "backlog": "Define the local daily-assistance contract"
+        }
+      ]
+    },
+    {
+      "id": "steward",
+      "name": "Model Steward",
+      "glyph": "◎",
+      "summary": "Appreciate each open model, qualify its real strengths and limits, and route the smallest capable local intelligence for the work.",
+      "nodes": [
+        {
+          "id": "model-registry",
+          "name": "Model registry",
+          "description": "Describe supported models, licenses, context, hardware guidance, installation state, and known limitations without marketing inflation.",
+          "dependencies": [
+            "local-first"
+          ],
+          "criteria": [
+            {
+              "id": "model-registry-1",
+              "text": "Public registry records model, source, license, context, and hardware guidance",
+              "state": "verified",
+              "evidence": [
+                "pr-15"
+              ]
+            },
+            {
+              "id": "model-registry-2",
+              "text": "Installed state is detected locally without automatic downloads",
+              "state": "verified",
+              "evidence": [
+                "pr-1",
+                "pr-15"
+              ]
+            },
+            {
+              "id": "model-registry-3",
+              "text": "Every profile publishes task-specific limitations and qualification status",
+              "state": "partial",
+              "evidence": [
+                "pr-85"
+              ],
+              "note": "The profile contract exists; broad task qualification is incomplete."
+            }
+          ],
+          "backlog": "Reconcile the registry with task-specific qualification evidence"
+        },
+        {
+          "id": "model-qualification",
+          "name": "Model qualification",
+          "description": "Evaluate identical frozen tasks across approved installed models and separate orchestration limitations from model limitations.",
+          "dependencies": [
+            "model-registry",
+            "evaluation-governance"
+          ],
+          "criteria": [
+            {
+              "id": "model-qualification-1",
+              "text": "A registry-driven matrix runner records model, context, hardware, latency, errors, and score",
+              "state": "verified",
+              "evidence": [
+                "pr-85"
+              ]
+            },
+            {
+              "id": "model-qualification-2",
+              "text": "Critical cases repeat at least three times per candidate profile",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "model-qualification-3",
+              "text": "At least two useful consumer-fit profiles complete the unchanged suite",
+              "state": "failed",
+              "evidence": [
+                "pr-85"
+              ],
+              "note": "Qwen was removed from the tested 8 GB host after poor speed and fit; only one profile remains installed."
+            },
+            {
+              "id": "model-qualification-4",
+              "text": "Published recommendations distinguish task quality from machine fit",
+              "state": "partial",
+              "evidence": [
+                "pr-85"
+              ]
+            }
+          ],
+          "backlog": "Qualify a second genuinely consumer-fit model profile"
+        },
+        {
+          "id": "expert-pack-framework",
+          "name": "Expert Pack framework",
+          "description": "Let users install bounded specialist capabilities with typed inputs, evidence outputs, permissions, model choice, qualification, and uninstall paths.",
+          "dependencies": [
+            "intent-orchestration",
+            "model-registry"
+          ],
+          "criteria": [
+            {
+              "id": "expert-pack-framework-1",
+              "text": "Versioned manifest, request, result, failure, grant, and receipt validators are implemented",
+              "state": "verified",
+              "evidence": [
+                "pr-87"
+              ]
+            },
+            {
+              "id": "expert-pack-framework-2",
+              "text": "Analytics runs as an experimental reference pack behind Mind & Memory",
+              "state": "verified",
+              "evidence": [
+                "pr-87",
+                "pr-90"
+              ]
+            },
+            {
+              "id": "expert-pack-framework-3",
+              "text": "Saved per-pack model assignment and qualification storage are implemented",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "expert-pack-framework-4",
+              "text": "Third-party pack signing, compatibility, and trust policy are approved",
+              "state": "planned",
+              "evidence": []
+            }
+          ],
+          "backlog": "Complete routing records and saved model assignments"
+        },
+        {
+          "id": "strength-routing",
+          "name": "Strength-aware routing",
+          "description": "Select deterministic tools, general models, specialist packs, or explicit clarification from evidence rather than model size or hidden preference.",
+          "dependencies": [
+            "expert-pack-framework",
+            "model-qualification"
+          ],
+          "criteria": [
+            {
+              "id": "strength-routing-1",
+              "text": "Deterministic task evidence takes priority over model classification",
+              "state": "partial",
+              "evidence": [
+                "pr-78",
+                "pr-87"
+              ]
+            },
+            {
+              "id": "strength-routing-2",
+              "text": "The route exposes why each pack, tool, and model was selected",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "strength-routing-3",
+              "text": "No qualified route produces an honest limitation instead of a fabricated answer",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "strength-routing-4",
+              "text": "Cross-model routing improves unchanged task success without benchmark-specific rules",
+              "state": "planned",
+              "evidence": []
+            }
+          ],
+          "backlog": "Implement inspectable routing decision records"
+        },
+        {
+          "id": "resource-lifecycle",
+          "name": "Resource-aware lifecycle",
+          "description": "Load only the models needed for the active stage, sequence heavy work safely, and expose disk, RAM, latency, and idle-unload behavior.",
+          "dependencies": [
+            "model-qualification",
+            "strength-routing"
+          ],
+          "criteria": [
+            {
+              "id": "resource-lifecycle-1",
+              "text": "Required disk and estimated RAM are visible before activation",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "resource-lifecycle-2",
+              "text": "Large models run sequentially on constrained machines",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "resource-lifecycle-3",
+              "text": "Idle unload, cancellation, and crash recovery pass",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "resource-lifecycle-4",
+              "text": "The smallest qualified path is preferred and recorded",
+              "state": "planned",
+              "evidence": []
+            }
+          ],
+          "backlog": "Design the consumer-hardware resource scheduler"
         }
       ]
     },
     {
       "id": "guardian",
       "name": "Guardian",
-      "glyph": "◆",
-      "summary": "Keep permissions, evidence, execution and external handoffs safe and inspectable.",
+      "glyph": "⬡",
+      "summary": "Protect local ownership, permissions, provenance, truthfulness, evaluation integrity, and every boundary where information could leave the machine.",
       "nodes": [
         {
           "id": "local-first",
           "name": "Local-first boundary",
-          "description": "Bind locally and reject remote model endpoints unless a future consent system exists.",
+          "description": "Bind locally, reject remote model configuration, keep private data out of Git, and disable cloud transmission by default.",
           "dependencies": [],
           "criteria": [
             {
               "id": "local-first-1",
-              "text": "Loopback enforcement",
+              "text": "Application and model endpoints enforce loopback-only defaults",
               "state": "verified",
               "evidence": [
                 "pr-50"
@@ -1121,15 +1413,16 @@
             },
             {
               "id": "local-first-2",
-              "text": "Private data Git-ignored",
+              "text": "Chats, databases, documents, embeddings, credentials, and private evaluation outputs remain ignored",
               "state": "verified",
               "evidence": [
-                "pr-15"
+                "pr-15",
+                "pr-50"
               ]
             },
             {
               "id": "local-first-3",
-              "text": "Cloud mode disabled by default",
+              "text": "Cloud and external handoff remain disabled without explicit approval design",
               "state": "verified",
               "evidence": [
                 "pr-1",
@@ -1137,379 +1430,282 @@
               ]
             }
           ],
-          "backlog": "Keep the boundary covered as tools expand"
+          "backlog": "Repeat the privacy scan for every release candidate"
         },
         {
-          "id": "permissions",
+          "id": "permission-centre",
           "name": "Permission centre",
-          "description": "Show and revoke every repository, web, file, connector and execution permission.",
+          "description": "Unify approved repositories, data, folders, models, packs, and future services into inspectable scopes with immediate revocation.",
           "dependencies": [
             "local-first"
           ],
           "criteria": [
             {
-              "id": "permissions-1",
-              "text": "One inspectable local registry",
-              "state": "partial",
-              "evidence": [
-                "pr-36"
-              ]
-            },
-            {
-              "id": "permissions-2",
-              "text": "Scope and expiry visible",
-              "state": "partial",
-              "evidence": [
-                "pr-36"
-              ]
-            },
-            {
-              "id": "permissions-3",
-              "text": "Revocation immediate",
+              "id": "permission-centre-1",
+              "text": "Repository and dataset approvals are explicit, persistent, and revocable",
               "state": "verified",
               "evidence": [
-                "pr-36"
+                "pr-36",
+                "pr-73",
+                "pr-82"
               ]
+            },
+            {
+              "id": "permission-centre-2",
+              "text": "One user-facing registry shows purpose, scope, origin, use, and expiry",
+              "state": "partial",
+              "evidence": [
+                "pr-36",
+                "pr-75"
+              ],
+              "note": "Approvals exist in separate surfaces and do not yet share one complete registry."
+            },
+            {
+              "id": "permission-centre-3",
+              "text": "Material writes always require a final confirmation",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "permission-centre-4",
+              "text": "Network binding remains disabled until authentication and request protections pass",
+              "state": "planned",
+              "evidence": []
             }
           ],
-          "backlog": "Generalize repository approval into capability permissions"
+          "backlog": "Design the unified local permission centre"
         },
         {
-          "id": "provenance",
-          "name": "Evidence provenance",
-          "description": "Distinguish vault evidence, model background, executed results and web sources.",
+          "id": "evidence-provenance",
+          "name": "Evidence & provenance",
+          "description": "Make sources, calculations, assumptions, model contributions, and limitations visible while preventing invented citations or tool claims.",
           "dependencies": [
-            "self-review",
+            "local-first",
+            "self-review"
+          ],
+          "criteria": [
+            {
+              "id": "evidence-provenance-1",
+              "text": "Knowledge passages and analytical receipts carry inspectable source metadata",
+              "state": "verified",
+              "evidence": [
+                "pr-42",
+                "pr-49",
+                "pr-78"
+              ]
+            },
+            {
+              "id": "evidence-provenance-2",
+              "text": "Evidence and model background are separated in grounded teaching",
+              "state": "partial",
+              "evidence": [
+                "pr-47",
+                "pr-50"
+              ]
+            },
+            {
+              "id": "evidence-provenance-3",
+              "text": "Analytical answers cannot mutate verified cells, filters, units, or bounds",
+              "state": "verified",
+              "evidence": [
+                "pr-90"
+              ]
+            },
+            {
+              "id": "evidence-provenance-4",
+              "text": "General answers pass a cross-domain no-invented-citation audit",
+              "state": "planned",
+              "evidence": []
+            }
+          ],
+          "backlog": "Build the general answer provenance audit"
+        },
+        {
+          "id": "evaluation-governance",
+          "name": "Evaluation governance",
+          "description": "Freeze representative suites, preserve failures, version rubric changes, keep private outputs local, and never optimize by weakening the test.",
+          "dependencies": [
             "local-first"
           ],
           "criteria": [
             {
-              "id": "provenance-1",
-              "text": "Every factual evidence class visible",
+              "id": "evaluation-governance-1",
+              "text": "Balanced versioned public fixtures cover conversation, memory, retrieval, and analysis",
               "state": "verified",
               "evidence": [
-                "pr-49"
+                "pr-46",
+                "pr-64",
+                "pr-80",
+                "pr-90"
               ]
             },
             {
-              "id": "provenance-2",
-              "text": "No invented citations",
+              "id": "evaluation-governance-2",
+              "text": "Private answers, real chats, memories, datasets, and books remain ignored",
+              "state": "verified",
+              "evidence": [
+                "pr-64",
+                "pr-80"
+              ]
+            },
+            {
+              "id": "evaluation-governance-3",
+              "text": "Rubric repairs, rescoring, checkpoints, and first-run holdouts are documented",
+              "state": "verified",
+              "evidence": [
+                "pr-48",
+                "pr-70",
+                "pr-89"
+              ]
+            },
+            {
+              "id": "evaluation-governance-4",
+              "text": "Final core release gates include repeated critical and blinded human review",
               "state": "partial",
               "evidence": [
-                "pr-47"
-              ]
-            },
-            {
-              "id": "provenance-3",
-              "text": "Contradiction checks pass",
-              "state": "verified",
-              "evidence": [
-                "pr-48"
-              ]
-            }
-          ],
-          "backlog": "Add entailment-aware verification"
-        },
-        {
-          "id": "evaluation",
-          "name": "Quality evaluation",
-          "description": "Measure retrieval, answers, grounding, regressions and latency using local fixtures.",
-          "dependencies": [
-            "local-first"
-          ],
-          "criteria": [
-            {
-              "id": "evaluation-1",
-              "text": "Balanced public fixtures",
-              "state": "verified",
-              "evidence": [
-                "pr-64"
-              ]
-            },
-            {
-              "id": "evaluation-2",
-              "text": "Private fixtures remain ignored",
-              "state": "verified",
-              "evidence": [
-                "pr-64"
-              ]
-            },
-            {
-              "id": "evaluation-3",
-              "text": "Checkpointed repeatable reports",
-              "state": "verified",
-              "evidence": [
-                "pr-48"
-              ]
-            },
-            {
-              "id": "evaluation-4",
-              "text": "Core conversation release gates pass without rubric weakening",
-              "state": "failed",
-              "evidence": [
-                "pr-64"
+                "pr-93"
               ],
-              "note": "Core conversation quality and critical trust remain below frozen release gates."
+              "note": "The clean candidate passes one full run; repetitions and blind review remain open."
             }
           ],
-          "backlog": "Add external and adversarial validation",
-          "previouslyUnlocked": true
+          "backlog": "Complete the exact-candidate release review"
         },
         {
-          "id": "authentication",
-          "name": "Local authentication",
-          "description": "Prevent other local processes from freely invoking sensitive Rangabot APIs.",
+          "id": "external-boundary",
+          "name": "Permissioned external boundary",
+          "description": "Use the web or connected services only after local insufficiency, visible query and data preview, persistent allowlisting, and explicit approval.",
           "dependencies": [
-            "permissions"
+            "permission-centre",
+            "evidence-provenance"
           ],
           "criteria": [
             {
-              "id": "authentication-1",
-              "text": "Authenticated session",
+              "id": "external-boundary-1",
+              "text": "Persistent domain allowlist has editable capability scopes and immediate revocation",
               "state": "planned",
               "evidence": []
             },
             {
-              "id": "authentication-2",
-              "text": "CSRF protections",
+              "id": "external-boundary-2",
+              "text": "Users preview the exact query and private context leaving the device",
               "state": "planned",
               "evidence": []
             },
             {
-              "id": "authentication-3",
-              "text": "Network binding remains disabled until complete",
+              "id": "external-boundary-3",
+              "text": "Results show source, retrieval date, and whether they enter the local vault",
+              "state": "planned",
+              "evidence": []
+            },
+            {
+              "id": "external-boundary-4",
+              "text": "No email, calendar, publishing, deployment, or purchase occurs without final confirmation",
               "state": "planned",
               "evidence": []
             }
           ],
-          "backlog": "Required before any network exposure"
-        }
-      ]
-    },
-    {
-      "id": "companion",
-      "name": "Companion",
-      "glyph": "◌",
-      "summary": "Make private intelligence calm, beautiful, accessible and easy to understand.",
-      "nodes": [
-        {
-          "id": "chat-experience",
-          "name": "Chat experience",
-          "description": "Responsive chat, themes, Markdown, replies, thinking states and scroll control.",
-          "dependencies": [
-            "local-conversation"
-          ],
-          "criteria": [
-            {
-              "id": "chat-experience-1",
-              "text": "Light and dark themes",
-              "state": "verified",
-              "evidence": [
-                "pr-9"
-              ]
-            },
-            {
-              "id": "chat-experience-2",
-              "text": "Keyboard flows",
-              "state": "partial",
-              "evidence": [
-                "pr-31",
-                "pr-60"
-              ]
-            },
-            {
-              "id": "chat-experience-3",
-              "text": "Responsive layout",
-              "state": "partial",
-              "evidence": [
-                "pr-4",
-                "pr-60"
-              ]
-            },
-            {
-              "id": "chat-experience-4",
-              "text": "Reduced-motion support",
-              "state": "partial",
-              "evidence": [
-                "pr-7"
-              ]
-            }
-          ],
-          "backlog": "Run broader accessibility and device testing"
-        },
-        {
-          "id": "ranga-personality",
-          "name": "Ranga personality",
-          "description": "A restrained golden-retriever identity with helpful, non-intrusive personality.",
-          "dependencies": [
-            "chat-experience"
-          ],
-          "criteria": [
-            {
-              "id": "ranga-personality-1",
-              "text": "Animation respects reduced motion",
-              "state": "partial",
-              "evidence": [
-                "pr-7"
-              ]
-            },
-            {
-              "id": "ranga-personality-2",
-              "text": "Personality never obscures work",
-              "state": "partial",
-              "evidence": [
-                "pr-60"
-              ]
-            },
-            {
-              "id": "ranga-personality-3",
-              "text": "Theme contrast passes",
-              "state": "partial",
-              "evidence": [
-                "pr-9"
-              ]
-            }
-          ],
-          "backlog": "Test personality with users"
-        },
-        {
-          "id": "mastery-tree",
-          "name": "Path to Mastery",
-          "description": "A public evidence-backed skill tree that doubles as the contributor backlog.",
-          "dependencies": [
-            "evaluation"
-          ],
-          "criteria": [
-            {
-              "id": "mastery-tree-1",
-              "text": "Generated from one canonical file",
-              "state": "verified",
-              "evidence": [
-                "pr-52"
-              ]
-            },
-            {
-              "id": "mastery-tree-2",
-              "text": "Every node has dependencies and acceptance criteria",
-              "state": "partial",
-              "evidence": [
-                "pr-52"
-              ],
-              "note": "The v1 schema lists criteria but does not attach criterion-level proof."
-            },
-            {
-              "id": "mastery-tree-3",
-              "text": "Daily changes use PRs",
-              "state": "verified",
-              "evidence": [
-                "pr-53"
-              ]
-            },
-            {
-              "id": "mastery-tree-4",
-              "text": "No private evidence published",
-              "state": "verified",
-              "evidence": [
-                "pr-53"
-              ]
-            },
-            {
-              "id": "mastery-tree-5",
-              "text": "Every program-level epic is represented and reviewed",
-              "state": "failed",
-              "evidence": [
-                "pr-52"
-              ],
-              "note": "The v1 map omits platform and release operations as a program-level epic."
-            }
-          ],
-          "backlog": "Add governed contributor claims and automated status evidence",
-          "previouslyUnlocked": true
-        },
-        {
-          "id": "skill-discovery",
-          "name": "Skill discovery",
-          "description": "Help users understand what Rangabot can do now and which abilities are still training.",
-          "dependencies": [
-            "mastery-tree"
-          ],
-          "criteria": [
-            {
-              "id": "skill-discovery-1",
-              "text": "Capabilities reflect live status",
-              "state": "failed",
-              "evidence": [
-                "pr-64"
-              ],
-              "note": "The public capability map has stale and manually assigned states."
-            },
-            {
-              "id": "skill-discovery-2",
-              "text": "Suggested tasks never advertise locked skills",
-              "state": "partial",
-              "evidence": [
-                "pr-65"
-              ]
-            },
-            {
-              "id": "skill-discovery-3",
-              "text": "Accessible explanations",
-              "state": "partial",
-              "evidence": [
-                "pr-60"
-              ]
-            }
-          ],
-          "backlog": "Connect starters to mastery status"
-        },
-        {
-          "id": "community-growth",
-          "name": "Community growth",
-          "description": "Let contributors claim well-scoped nodes with public acceptance criteria and evidence.",
-          "dependencies": [
-            "mastery-tree"
-          ],
-          "criteria": [
-            {
-              "id": "community-growth-1",
-              "text": "Every claim maps to an issue",
-              "state": "verified",
-              "evidence": [
-                "pr-53"
-              ]
-            },
-            {
-              "id": "community-growth-2",
-              "text": "Contributor guidance is clear",
-              "state": "verified",
-              "evidence": [
-                "pr-30",
-                "pr-53"
-              ]
-            },
-            {
-              "id": "community-growth-3",
-              "text": "Unlock evidence reviewed in PR",
-              "state": "verified",
-              "evidence": [
-                "pr-53"
-              ]
-            }
-          ],
-          "backlog": "Generate claimable GitHub issue links"
+          "backlog": "Implement the domain allowlist before web research"
         }
       ]
     },
     {
       "id": "platform",
-      "name": "Platform & Release",
-      "glyph": "▣",
-      "summary": "Keep installation, governance, CI, maintenance, and releases dependable for every contributor and user.",
+      "name": "Open Platform",
+      "glyph": "⌂",
+      "summary": "Make capable local AI installable, testable, collaborative, maintainable, and honest on the ordinary machines people already own.",
       "nodes": [
+        {
+          "id": "everyday-machine",
+          "name": "Everyday-machine setup",
+          "description": "Guide people from a fresh clone to a working local model, private vault, diagnostics, and realistic hardware expectations.",
+          "dependencies": [
+            "local-first",
+            "model-registry"
+          ],
+          "criteria": [
+            {
+              "id": "everyday-machine-1",
+              "text": "Guided and non-interactive setup paths pass",
+              "state": "verified",
+              "evidence": [
+                "pr-15"
+              ]
+            },
+            {
+              "id": "everyday-machine-2",
+              "text": "Doctor reports model, storage, compatibility, and large-vault problems without hanging",
+              "state": "verified",
+              "evidence": [
+                "pr-57"
+              ]
+            },
+            {
+              "id": "everyday-machine-3",
+              "text": "Defaults are centralized and optional heavy UI is loaded only when needed",
+              "state": "verified",
+              "evidence": [
+                "pr-63",
+                "pr-65"
+              ]
+            },
+            {
+              "id": "everyday-machine-4",
+              "text": "Published machine profiles prove usable quality and latency across low, medium, and high consumer tiers",
+              "state": "planned",
+              "evidence": []
+            }
+          ],
+          "backlog": "Publish reproducible consumer-hardware profiles"
+        },
+        {
+          "id": "cross-platform-ci",
+          "name": "Cross-platform reliability",
+          "description": "Keep supported macOS, Ubuntu, and Windows development and validation paths dependable.",
+          "dependencies": [
+            "everyday-machine"
+          ],
+          "criteria": [
+            {
+              "id": "cross-platform-ci-1",
+              "text": "Ubuntu and Windows run the complete validation suite",
+              "state": "verified",
+              "evidence": [
+                "pr-15"
+              ]
+            },
+            {
+              "id": "cross-platform-ci-2",
+              "text": "macOS development avoids the verified watcher crash",
+              "state": "verified",
+              "evidence": [
+                "pr-77"
+              ]
+            },
+            {
+              "id": "cross-platform-ci-3",
+              "text": "Protected main requires validation and resolved review conversations",
+              "state": "verified",
+              "evidence": [
+                "pr-15"
+              ]
+            },
+            {
+              "id": "cross-platform-ci-4",
+              "text": "Lifecycle, model, and resource profiles are exercised on all supported operating systems",
+              "state": "partial",
+              "evidence": [
+                "pr-85",
+                "pr-93"
+              ],
+              "note": "Deterministic tests and CI pass; real model and resource profiles are not complete across every OS."
+            }
+          ],
+          "backlog": "Add cross-platform real-model smoke profiles"
+        },
         {
           "id": "open-source-governance",
           "name": "Open-source governance",
-          "description": "Maintain clear licensing, contribution, conduct, support, and security rules.",
+          "description": "Maintain clear licensing, contribution, conduct, support, security, privacy, and community trust rules.",
           "dependencies": [
             "local-first"
           ],
@@ -1532,92 +1728,29 @@
             },
             {
               "id": "open-source-governance-3",
-              "text": "Community issues and discussions use privacy-safe templates",
+              "text": "Issue and claim templates protect private user data",
               "state": "verified",
               "evidence": [
-                "pr-30"
+                "pr-30",
+                "pr-53"
               ]
+            },
+            {
+              "id": "open-source-governance-4",
+              "text": "Third-party expert pack and model trust policy is approved",
+              "state": "planned",
+              "evidence": []
             }
           ],
-          "backlog": "Keep governance synchronized with every new external capability"
-        },
-        {
-          "id": "cross-platform-ci",
-          "name": "Cross-platform CI",
-          "description": "Protect main with reproducible Linux and Windows validation.",
-          "dependencies": [
-            "open-source-governance"
-          ],
-          "criteria": [
-            {
-              "id": "cross-platform-ci-1",
-              "text": "Ubuntu and Windows run the complete validation suite",
-              "state": "verified",
-              "evidence": [
-                "pr-15"
-              ]
-            },
-            {
-              "id": "cross-platform-ci-2",
-              "text": "Protected main requires both checks and resolved conversations",
-              "state": "verified",
-              "evidence": [
-                "pr-15"
-              ]
-            },
-            {
-              "id": "cross-platform-ci-3",
-              "text": "Production dependency audit has no known vulnerability",
-              "state": "verified",
-              "evidence": [
-                "pr-63"
-              ]
-            }
-          ],
-          "backlog": "Add a scheduled clean-clone macOS release rehearsal"
-        },
-        {
-          "id": "setup-diagnostics",
-          "name": "Setup & diagnostics",
-          "description": "Help contributors select a model, initialize private storage, and diagnose failures locally.",
-          "dependencies": [
-            "local-first"
-          ],
-          "criteria": [
-            {
-              "id": "setup-diagnostics-1",
-              "text": "Guided and non-interactive setup paths pass",
-              "state": "verified",
-              "evidence": [
-                "pr-15"
-              ]
-            },
-            {
-              "id": "setup-diagnostics-2",
-              "text": "Doctor reports model, storage, and compatibility problems without hanging",
-              "state": "verified",
-              "evidence": [
-                "pr-57"
-              ]
-            },
-            {
-              "id": "setup-diagnostics-3",
-              "text": "Product and model defaults have one reviewed configuration source",
-              "state": "verified",
-              "evidence": [
-                "pr-63"
-              ]
-            }
-          ],
-          "backlog": "Complete the documented Windows first-run path"
+          "backlog": "Define third-party pack and model trust policy"
         },
         {
           "id": "release-management",
           "name": "Release management",
-          "description": "Publish reproducible releases whose notes and binaries match verified main.",
+          "description": "Ship reproducible versions whose documentation, capabilities, security, and limitations match the exact released source.",
           "dependencies": [
             "cross-platform-ci",
-            "setup-diagnostics"
+            "open-source-governance"
           ],
           "criteria": [
             {
@@ -1630,60 +1763,79 @@
             },
             {
               "id": "release-management-2",
-              "text": "Latest release contains current verified capabilities",
+              "text": "Latest release contains the current verified capabilities",
               "state": "failed",
               "evidence": [
                 "pr-63"
               ],
-              "note": "v0.1.0 trails the current main branch."
+              "note": "v0.1.0 trails current main."
             },
             {
               "id": "release-management-3",
-              "text": "Changelog and release notes distinguish product progress from private data",
+              "text": "Changelog and release notes distinguish product work from private data",
               "state": "verified",
               "evidence": [
-                "pr-64"
+                "pr-64",
+                "pr-93"
               ]
+            },
+            {
+              "id": "release-management-4",
+              "text": "Production dependencies, privacy scan, build, and release evidence pass on the exact candidate",
+              "state": "partial",
+              "evidence": [
+                "pr-93"
+              ],
+              "note": "PR #93 passed project checks; a new tagged release candidate has not been issued."
             }
           ],
-          "backlog": "Prepare the post-reliability release candidate"
+          "backlog": "Prepare the next evidence-backed public release",
+          "previouslyUnlocked": true
         },
         {
-          "id": "maintainability",
-          "name": "Maintainability & efficiency",
-          "description": "Control configuration drift, dead assets, bundle weight, dependencies, and code hotspots.",
+          "id": "public-roadmap",
+          "name": "Charter, mastery & community",
+          "description": "Keep the north star, public website, GitHub documentation, evidence-backed roadmap, contributor recognition, and backlog synchronized.",
           "dependencies": [
-            "cross-platform-ci"
+            "evaluation-governance",
+            "open-source-governance"
           ],
           "criteria": [
             {
-              "id": "maintainability-1",
-              "text": "Runtime product and model defaults are centralized",
+              "id": "public-roadmap-1",
+              "text": "One governed source generates criterion-level mastery with calculated states and no manual scores",
               "state": "verified",
               "evidence": [
-                "pr-63"
+                "pr-66",
+                "pr-67"
               ]
             },
             {
-              "id": "maintainability-2",
-              "text": "Heavy optional UI code is loaded on demand and stale assets are removed",
+              "id": "public-roadmap-2",
+              "text": "Official contributor claims require opt-in, merged evidence, and owner review",
               "state": "verified",
               "evidence": [
-                "pr-63",
-                "pr-65"
+                "pr-53",
+                "pr-66"
               ]
             },
             {
-              "id": "maintainability-3",
-              "text": "Known route and module hotspots are below the agreed maintainability threshold",
-              "state": "failed",
+              "id": "public-roadmap-3",
+              "text": "Every merged program increment through PR #93 is present in the evidence registry and mapped where relevant",
+              "state": "verified",
               "evidence": [
-                "pr-63"
-              ],
-              "note": "app/page.tsx, app/api/chat/route.ts, and lib/knowledge.ts remain explicit hotspots."
+                "pr-93"
+              ]
+            },
+            {
+              "id": "public-roadmap-4",
+              "text": "The canonical charter and website source live on main and are validated together",
+              "state": "planned",
+              "evidence": [],
+              "note": "This branch implements the requirement, but unmerged work cannot certify itself."
             }
           ],
-          "backlog": "Split the documented hotspots without changing behavior"
+          "backlog": "Merge and deploy the canonical charter website page"
         }
       ]
     }

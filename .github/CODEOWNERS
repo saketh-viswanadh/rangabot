@@ -1,4 +1,6 @@
 # Official mastery scores and contributor recognition require maintainer review.
+/content/rangabot-charter.json @saketh-viswanadh
+/docs/RANGABOT_CHARTER.md @saketh-viswanadh
 /content/path-to-mastery.json @saketh-viswanadh
 /content/mastery-contributors.json @saketh-viswanadh
 /content/mastery-evidence.json @saketh-viswanadh
@@ -6,4 +8,5 @@
 /lib/mastery-tree.ts @saketh-viswanadh
 /lib/mastery-contributors.ts @saketh-viswanadh
 /scripts/check-mastery-evidence.ts @saketh-viswanadh
+/scripts/generate-charter.ts @saketh-viswanadh
 /scripts/generate-mastery-tree.ts @saketh-viswanadh

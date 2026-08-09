@@ -13,6 +13,13 @@ body:
     id: approach
     attributes:
       label: Suggested approach
+  - type: textarea
+    id: charter
+    attributes:
+      label: Charter and mastery alignment
+      description: Name the north-star principle and Path to Mastery node this proposal advances.
+    validations:
+      required: true
   - type: dropdown
     id: network
     attributes:

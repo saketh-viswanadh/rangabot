@@ -2,6 +2,12 @@
 
 ## Why
 
+## Charter and mastery alignment
+
+- Charter principle(s):
+- Mastery node and acceptance criterion:
+- Supported model and ordinary-hardware assumptions:
+
 ## Validation
 
 - [ ] `npm run check`

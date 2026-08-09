@@ -1,33 +1,38 @@
 # Rangabot roadmap
 
-## Current execution order
+## Charter-aligned execution order
 
-From 2026-08-02 through 2026-08-08, the broader order below is frozen. The only
-active product priority is the versioned Core Conversation Reliability plan in
-[`docs/CORE_CONVERSATION_CONTRACT.md`](docs/CORE_CONVERSATION_CONTRACT.md).
-On 2026-08-07 the user explicitly approved beginning the already-designed Expert
-Pack foundation without weakening any Core Conversation release gate. Analytics
-is therefore an experimental reference slice, not a replacement release score.
+The canonical [Rangabot charter](docs/RANGABOT_CHARTER.md) is the north star.
+The generated [Path to Mastery](docs/PATH_TO_MASTERY.md) is the evidence-backed
+program map and backlog. Work is organized into nine paths: **Mind & Memory,
+Scholar, Analyst, Builder, Creator, Personal Companion, Model Steward, Guardian,
+and Open Platform**.
 
-The completed foundation remains documented below. New work follows this order
-unless user feedback exposes a more urgent defect:
+Current execution order:
 
-1. **Learning Core foundation** — hierarchical ingestion plus source-aware,
-   multi-book retrieval.
-2. **Knowledge synthesis** — conversation-aware planning, comparison across
-   sources, disagreement handling, and original explanations that combine cited
-   vault evidence with clearly labelled downloaded-model background.
-3. **Inspectable local learning** — preferences, proficiency, progress,
-   corrections, and approved conclusions with provenance and user controls.
-4. **Quality engine** — draft, grounding review, revision, feedback capture, and
-   regression evaluation across teaching, coding, research, and writing.
-5. **Cross-book knowledge layer** — rebuildable concept summaries and
-   relationships that update when the vault changes.
-6. **Artifact expansion** — existing Word editing, then PDF, email drafting,
-   long-form writing, technical documentation and diagrams, presentations, and
-   spreadsheets, each using the shared gold-standard validation contract.
-7. **Deferred platform work** — installed-model management, optional local
-   encryption, and any cloud/Codex handoff design.
+1. **Focused conversation release gates** — repeat all critical trust cases on
+   the exact merged lifecycle candidate and complete a blinded human usefulness
+   review. Better prose is not enough if truth, memory, or recovery regresses.
+2. **Mind-level orchestration** — make intent, correction, memory, retrieval,
+   tools, and expert routing inspectable and model-independent.
+3. **Model Steward foundation** — record routing decisions, saved per-pack model
+   assignments, qualification evidence, and consumer-machine fit. Prefer the
+   smallest qualified path rather than a large default model.
+4. **Scholar reliability** — improve Teacher Mode synthesis and latency while
+   preserving citation and evidence-background separation.
+5. **Analyst breadth** — freeze a structurally diverse semantic holdout, qualify
+   richer interpretation, then add bounded Python statistics and modelling.
+6. **Builder and Creator quality** — close repository-grounded documentation and
+   Word quality gates before expanding to autonomous edits, PDF, presentations,
+   or spreadsheets.
+7. **Permissioned assistance** — design a persistent web-domain allowlist and
+   exact outbound preview before any web, email, calendar, or cloud capability.
+8. **Ordinary-machine proof** — publish reproducible quality, latency, RAM, and
+   compatibility profiles across low, medium, and high consumer hardware.
+
+The strict current score is **7/45 fully unlocked capabilities (16%)**. The 52%
+weighted development figure includes half-credit for partial work and must not
+be presented as product readiness.
 
 Automatic model-weight mutation is not part of this sequence. A reviewed
 fine-tuning dataset and rollback workflow remain a later proposal.
@@ -231,9 +236,10 @@ qualified local model, if any, powers each workflow.
 - [x] Govern official mastery attribution through evidence-backed claims,
   CODEOWNER approval and node-level contributor recognition.
 
-- [x] Path to Mastery v2: 9 program epics, criterion-level merged evidence,
-  calculated readiness, interactive audit details, and governed attribution
-- [ ] Close the failed and partial criteria exposed by the v2 audit; readiness
+- [x] Path to Mastery v3: the 9 charter-aligned paths, 45 capability nodes,
+  161 criterion-level assessments, calculated readiness, interactive audit
+  details, and governed attribution
+- [ ] Close the failed and partial criteria exposed by the v3 audit; readiness
   changes only when the exact listed criterion gains new evidence
 - [ ] Persistent local web-domain allowlist with editable capability scopes,
   query previews and immediate revocation

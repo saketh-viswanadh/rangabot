@@ -14,7 +14,9 @@ The demo mode is presentation-only: it does not persist the synthetic messages
 or transmit them to Ollama. Regenerate media after material UI changes and
 review every frame before publishing it.
 
-`rangabot-social-preview.png` is the 1280×640 public repository sharing card.
+`rangabot-social-preview-charter.png` is the current 1200×630 public repository
+sharing card. It carries the canonical Charter promise. The earlier
+`rangabot-social-preview.png` remains only as historical brand-source material.
 
 The current product showcase uses three 1280×720 privacy-safe captures:
 
