@@ -232,15 +232,17 @@ p { color: var(--ink-soft); line-height: 1.7; }
 .trace { padding: 15px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); font: 10px/1.6 var(--font-geist-mono), monospace; }
 
 .mastery-overview { padding-bottom: 120px; }
-.mastery-summary-grid { display: grid; grid-template-columns: .6fr 1.4fr; gap: 70px; }
-.readiness-disc { aspect-ratio: 1; display: grid; place-items: center; text-align: center; border: 1px solid var(--gold); border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--gold) 18%, transparent), transparent 66%); }
-.readiness-disc strong { color: var(--gold); font: 500 110px var(--font-editorial), serif; line-height: .8; }
+.mastery-summary-grid { display: grid; grid-template-columns: minmax(190px, 240px) minmax(0, 1fr); align-items: start; gap: clamp(38px, 5vw, 70px); }
+.readiness-disc { width: min(100%, 220px); aspect-ratio: 1; align-self: start; justify-self: center; display: grid; place-items: center; text-align: center; border: 1px solid var(--gold); border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--gold) 18%, transparent), transparent 66%); }
+.readiness-disc > div { padding: 20px; display: grid; gap: 12px; }
+.readiness-disc strong { color: var(--gold); font: 500 clamp(62px, 6vw, 78px) var(--font-editorial), serif; line-height: .8; }
 .readiness-disc span { display: block; color: var(--muted); font-size: 10px; letter-spacing: .13em; text-transform: uppercase; }
-.mastery-path-list { display: grid; gap: 12px; }
-.mastery-path { padding: 23px 25px; display: grid; grid-template-columns: 1fr auto; gap: 14px 30px; border: 1px solid var(--line); border-radius: 16px; }
+.mastery-path-list { min-width: 0; width: 100%; display: grid; gap: 12px; }
+.mastery-path { min-width: 0; padding: 23px 25px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 14px 30px; border: 1px solid var(--line); border-radius: 16px; }
+.mastery-path > div { min-width: 0; }
 .mastery-path h3 { margin: 0; font: 500 25px var(--font-editorial), serif; }
 .mastery-path p { margin: 2px 0 0; font-size: 11px; }
-.mastery-path strong { color: var(--gold); font: 500 23px var(--font-editorial), serif; }
+.mastery-path strong { align-self: start; color: var(--gold); font: 500 23px var(--font-editorial), serif; line-height: 1; white-space: nowrap; }
 .progress-track { height: 3px; grid-column: 1 / -1; background: var(--paper-deep); }
 .progress-track i { height: 100%; display: block; background: var(--gold); }
 .mastery-principles { padding: 100px 0; color: #efe7da; background: #121a16; }
@@ -327,8 +329,8 @@ p { color: var(--ink-soft); line-height: 1.7; }
   .identity-grid { grid-template-columns: repeat(2, 1fr); }
   .community-grid article:first-child { grid-column: auto; }
   .privacy-column:last-child { grid-column: span 2; }
-  .mastery-summary-grid { grid-template-columns: 1fr; }
-  .readiness-disc { width: min(420px, 85vw); margin-inline: auto; }
+  .mastery-summary-grid { grid-template-columns: 1fr; gap: 42px; }
+  .readiness-disc { width: 190px; margin-inline: auto; }
   .contribution-steps { grid-template-columns: repeat(3, 1fr); }
   .docs-aside { position: static; }
 }
@@ -373,6 +375,16 @@ p { color: var(--ink-soft); line-height: 1.7; }
   .process-list article { grid-template-columns: 50px 1fr; gap: 12px; }
   .process-list p { grid-column: 2; }
   .showcase-story { gap: 85px; }
+  .mastery-overview { padding-bottom: 90px; }
+  .mastery-summary-grid { gap: 34px; }
+  .readiness-disc { width: 160px; }
+  .readiness-disc > div { padding: 15px; gap: 8px; }
+  .readiness-disc strong { font-size: 56px; }
+  .readiness-disc span { font-size: 8px; letter-spacing: .1em; }
+  .mastery-path { padding: 20px 18px; gap: 12px 18px; }
+  .mastery-path h3 { font-size: 23px; }
+  .mastery-path p { font-size: 12px; line-height: 1.55; }
+  .mastery-path strong { font-size: 20px; }
   .score-row { grid-template-columns: 1fr auto; }
   .score-row p, .score-row > span:nth-child(4) { grid-column: 1 / -1; }
   .score-head { display: none; }
