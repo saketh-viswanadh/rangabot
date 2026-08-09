@@ -27,7 +27,10 @@
   exposed one Windows-only website script defect: POSIX inline environment
   assignment. A dependency-free Node launcher now sets the same log path and
   invokes the platform's vinext executable; a focused regression test locks the
-  cross-platform command contract.
+  cross-platform command contract. The next CI run reached the dependency audit
+  on both platforms and exposed a newly published high-severity advisory in the
+  transitive Next.js/PostCSS `nanoid` 3.3.16 path. Rangabot now pins patched
+  3.3.17 instead of suppressing the audit.
 
 ## 2026-08-07 — Core Turn Lifecycle v2
 

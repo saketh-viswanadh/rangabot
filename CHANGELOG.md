@@ -39,6 +39,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - Replaced the website's POSIX-only inline environment commands with a small
   Node launcher so development, build, and start use the same Sites-compatible
   vinext process on macOS, Linux, and Windows.
+- Pinned the transitive production `nanoid` dependency to patched version
+  3.3.17 after a new high-severity advisory began failing both CI platforms;
+  the vulnerable code path arrived through Next.js's PostCSS dependency.
 
 ### Improved
 
