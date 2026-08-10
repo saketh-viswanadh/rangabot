@@ -119,9 +119,10 @@ async function executeWorkflowScript(options: {
 }
 
 test("mastery governance runs trusted metadata only with one receipt-scoped write permission", () => {
+  const normalizedWorkflow = workflow.replace(/\r\n?/g, "\n");
   assert.equal(
-    extractWorkflowScript(workflow.replace(/\n/g, "\r\n")),
-    extractWorkflowScript(workflow),
+    extractWorkflowScript(normalizedWorkflow.replace(/\n/g, "\r\n")),
+    extractWorkflowScript(normalizedWorkflow),
     "workflow extraction must be identical after a Windows CRLF checkout",
   );
   assert.match(workflow, /^\s*pull_request_target:\s*$/m);

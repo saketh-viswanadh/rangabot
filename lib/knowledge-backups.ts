@@ -59,7 +59,10 @@ function sha256File(path: string) {
 }
 
 function syncFile(path: string) {
-  const descriptor = openSync(path, "r");
+  // Windows requires a write-capable handle for FlushFileBuffers/fsync.
+  // Opening an already-complete file with r+ preserves its bytes while
+  // keeping the durability barrier equivalent across supported platforms.
+  const descriptor = openSync(path, "r+");
   try { fsyncSync(descriptor); }
   finally { closeSync(descriptor); }
 }

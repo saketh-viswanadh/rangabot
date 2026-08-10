@@ -13,8 +13,9 @@ test("issues unforgeable per-launch local session capabilities", () => {
   const token = issueLocalSessionToken(secret);
   assert.equal(verifyLocalSessionToken(token, secret), true);
   assert.equal(verifyLocalSessionToken(token, createLocalSessionSecret()), false);
-  const replacement = token.endsWith("x") ? "y" : "x";
-  assert.equal(verifyLocalSessionToken(`${token.slice(0, -1)}${replacement}`, secret), false);
+  const [nonce, signature] = token.split(".");
+  const replacement = signature.startsWith("x") ? "y" : "x";
+  assert.equal(verifyLocalSessionToken(`${nonce}.${replacement}${signature.slice(1)}`, secret), false);
   assert.equal(verifyLocalSessionToken(undefined, secret), false);
 });
 
