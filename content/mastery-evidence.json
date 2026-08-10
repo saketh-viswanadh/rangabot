@@ -1,7 +1,7 @@
 {
   "version": 1,
   "repository": "saketh-viswanadh/rangabot",
-  "verifiedAt": "2026-08-08",
+  "verifiedAt": "2026-08-10",
   "entries": [
     {
       "id": "pr-1",
@@ -753,6 +753,26 @@
       "url": "https://github.com/saketh-viswanadh/rangabot/pull/93",
       "mergeCommit": "0a594fc6fd636f092782b7d9b4bc8b92bb8d908a",
       "mergedAt": "2026-08-07T18:52:51Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-94",
+      "kind": "pull_request",
+      "reference": "#94",
+      "title": "Align Rangabot charter and Path to Mastery v3",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/94",
+      "mergeCommit": "2a40d173547c06f947b357a8f1956215fab9cd27",
+      "mergedAt": "2026-08-09T05:54:27Z",
+      "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-99",
+      "kind": "pull_request",
+      "reference": "#99",
+      "title": "Fix Mastery page layout",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/99",
+      "mergeCommit": "a7dce17230ad023cab5d73995c319d539caaeb92",
+      "mergedAt": "2026-08-09T06:39:29Z",
       "contributors": ["saketh-viswanadh"]
     }
   ]

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { compileAnswerContract } from "../lib/conversation-contract.ts";
 import { reviewConversationAnswer, shouldReviewConversationAnswer } from "../lib/conversation-quality.ts";
+import { ProviderError } from "../lib/providers/types.ts";
 
 test("reviews substantive answers but leaves casual and deterministic formats alone", () => {
   const explain = [{ role: "user" as const, content: "Explain p-values simply." }];
@@ -61,4 +62,22 @@ test("rejects a revision that worsens explicit contract compliance", async () =>
   });
   assert.equal(result.status, "rejected-revision");
   assert.equal(result.answer, "Indexes make lookups faster.");
+});
+
+test("surfaces a reviewer response resource limit instead of hiding or retrying it", async () => {
+  let calls = 0;
+  const messages = [{ role: "user" as const, content: "Explain this result." }];
+  const contract = compileAnswerContract(messages);
+  await assert.rejects(reviewConversationAnswer({
+    messages,
+    contractMessages: messages,
+    contract,
+    draft: "A bounded draft.",
+    force: true,
+    completeJson: async () => {
+      calls += 1;
+      throw new ProviderError("resource-limit", "The local model response exceeded the safe output limit.");
+    },
+  }), (error: unknown) => error instanceof ProviderError && error.code === "resource-limit");
+  assert.equal(calls, 1);
 });

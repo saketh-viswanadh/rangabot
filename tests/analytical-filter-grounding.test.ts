@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
-import { existsSync, rmSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { compileResolvedAdvancedAnalyticalPlan, groundAdvancedAnalyticalFilters } from "../lib/analytical-filter-grounding.ts";
 import type { AdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
 import { inspectDatasetSchema } from "../lib/sql-runtime.ts";
 
-const databasePath = resolve("data/filter-grounding-test.duckdb");
-
 async function fixture() {
-  if (existsSync(databasePath)) rmSync(databasePath);
+  const root = mkdtempSync(join(tmpdir(), "rangabot-filter-grounding-"));
+  const databasePath = join(root, "fixture.duckdb");
   const instance = await DuckDBInstance.create(databasePath);
   const connection = await instance.connect();
   try {
@@ -27,9 +27,10 @@ async function fixture() {
       INSERT INTO entry_logs VALUES (1, 1, 'Complete');
       CREATE TABLE members(member_id INTEGER, tier VARCHAR, status VARCHAR, active BOOLEAN);
       INSERT INTO members VALUES (1, 'Gold', 'Complete', TRUE), (2, 'Gold', 'Pending', FALSE), (3, 'Silver', 'Complete', TRUE);
+      CHECKPOINT;
     `);
   } finally { connection.closeSync(); instance.closeSync(); }
-  return inspectDatasetSchema(databasePath);
+  return { columns: await inspectDatasetSchema(databasePath), databasePath, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
 function plan(value: string): AdvancedAnalyticalPlan {
@@ -42,78 +43,81 @@ function plan(value: string): AdvancedAnalyticalPlan {
 }
 
 test("grounds explicit categorical filters in approved local values", async () => {
-  const columns = await fixture();
-  const repaired = await groundAdvancedAnalyticalFilters(plan("Robotics"), "How many people used Robotics?", columns, databasePath);
-  assert.equal(repaired.plan.filters[0]?.column, "topics.label");
-  assert.equal(repaired.decisions[0]?.action, "replaced");
+  const { columns, databasePath, cleanup } = await fixture();
+  try {
+    const repaired = await groundAdvancedAnalyticalFilters(plan("Robotics"), "How many people used Robotics?", columns, databasePath);
+    assert.equal(repaired.plan.filters[0]?.column, "topics.label");
+    assert.equal(repaired.decisions[0]?.action, "replaced");
 
-  const missing = plan("Robotics");
-  missing.filters = [];
-  const added = await groundAdvancedAnalyticalFilters(missing, "How many people used Robotics?", columns, databasePath);
-  assert.deepEqual(added.plan.filters, [{ column: "topics.label", operator: "eq", value: "Robotics" }]);
-  assert.ok(added.decisions.some((decision) => decision.action === "added"));
+    const missing = plan("Robotics");
+    missing.filters = [];
+    const added = await groundAdvancedAnalyticalFilters(missing, "How many people used Robotics?", columns, databasePath);
+    assert.deepEqual(added.plan.filters, [{ column: "topics.label", operator: "eq", value: "Robotics" }]);
+    assert.ok(added.decisions.some((decision) => decision.action === "added"));
 
-  const absent = await groundAdvancedAnalyticalFilters(plan("Unseen"), "How many people used Unseen?", columns, databasePath);
-  assert.equal(absent.plan.action, "query");
-  assert.equal(absent.plan.filters[0]?.column, "people.display_name");
+    const absent = await groundAdvancedAnalyticalFilters(plan("Unseen"), "How many people used Unseen?", columns, databasePath);
+    assert.equal(absent.plan.action, "query");
+    assert.equal(absent.plan.filters[0]?.column, "people.display_name");
 
-  const ambiguous = await groundAdvancedAnalyticalFilters(plan("Shared"), "How many people used Shared?", columns, databasePath);
-  assert.equal(ambiguous.plan.action, "clarify");
-  assert.match(ambiguous.plan.explanation, /multiple fields/i);
-  rmSync(databasePath, { force: true });
+    const ambiguous = await groundAdvancedAnalyticalFilters(plan("Shared"), "How many people used Shared?", columns, databasePath);
+    assert.equal(ambiguous.plan.action, "clarify");
+    assert.match(ambiguous.plan.explanation, /multiple fields/i);
+  } finally { cleanup(); }
 });
 
 test("compiles fully resolved requests without a model plan", async () => {
-  const columns = await fixture();
-  const resolved = await compileResolvedAdvancedAnalyticalPlan("What is the average duration between opened at and closed at in hours?", columns, databasePath);
-  assert.equal(resolved?.plan.operation, "duration_average");
-  assert.match(resolved?.proposal.query ?? "", /DATE_DIFF\('minute', "sessions"\."opened_at", "sessions"\."closed_at"\)/);
-  const ambiguous = await compileResolvedAdvancedAnalyticalPlan("What is the average duration?", columns, databasePath);
-  assert.equal(ambiguous, null);
+  const { columns, databasePath, cleanup } = await fixture();
+  try {
+    const resolved = await compileResolvedAdvancedAnalyticalPlan("What is the average duration between opened at and closed at in hours?", columns, databasePath);
+    assert.equal(resolved?.plan.operation, "duration_average");
+    assert.match(resolved?.proposal.query ?? "", /DATE_DIFF\('minute', "sessions"\."opened_at", "sessions"\."closed_at"\)/);
+    const ambiguous = await compileResolvedAdvancedAnalyticalPlan("What is the average duration?", columns, databasePath);
+    assert.equal(ambiguous, null);
 
-  const rate = await compileResolvedAdvancedAnalyticalPlan("What percentage of entries have Complete outcome?", columns, databasePath);
-  assert.equal(rate?.plan.operation, "conditional_rate");
-  assert.equal(rate?.plan.source, "entries");
-  assert.deepEqual(rate?.plan.numeratorFilters, [{ column: "entries.outcome", operator: "eq", value: "Complete" }]);
-  assert.deepEqual(rate?.plan.denominatorFilters, []);
-  assert.match(rate?.proposal.query ?? "", /COUNT\(\*\) FILTER \(WHERE "entries"\."outcome" = 'Complete'\)/);
+    const rate = await compileResolvedAdvancedAnalyticalPlan("What percentage of entries have Complete outcome?", columns, databasePath);
+    assert.equal(rate?.plan.operation, "conditional_rate");
+    assert.equal(rate?.plan.source, "entries");
+    assert.deepEqual(rate?.plan.numeratorFilters, [{ column: "entries.outcome", operator: "eq", value: "Complete" }]);
+    assert.deepEqual(rate?.plan.denominatorFilters, []);
+    assert.match(rate?.proposal.query ?? "", /COUNT\(\*\) FILTER \(WHERE "entries"\."outcome" = 'Complete'\)/);
 
-  const booleanRate = await compileResolvedAdvancedAnalyticalPlan("What percentage of members are active?", columns, databasePath);
-  assert.equal(booleanRate?.plan.operation, "conditional_rate");
-  assert.deepEqual(booleanRate?.plan.numeratorFilters, [{ column: "members.active", operator: "eq", value: "true" }]);
-  assert.match(booleanRate?.proposal.query ?? "", /COUNT\(\*\) FILTER \(WHERE "members"\."active" = TRUE\)/);
+    const booleanRate = await compileResolvedAdvancedAnalyticalPlan("What percentage of members are active?", columns, databasePath);
+    assert.equal(booleanRate?.plan.operation, "conditional_rate");
+    assert.deepEqual(booleanRate?.plan.numeratorFilters, [{ column: "members.active", operator: "eq", value: "true" }]);
+    assert.match(booleanRate?.proposal.query ?? "", /COUNT\(\*\) FILTER \(WHERE "members"\."active" = TRUE\)/);
 
-  for (const request of [
-    "What percentage of members are active or inactive?",
-    "What percentage of members are active and inactive?",
-    "What percentage of members are active/inactive?",
-  ]) {
-    const booleanAlternative = await compileResolvedAdvancedAnalyticalPlan(request, columns, databasePath);
-    assert.equal(booleanAlternative?.plan.action, "clarify");
-    assert.equal(booleanAlternative?.proposal.query, "");
-  }
+    for (const request of [
+      "What percentage of members are active or inactive?",
+      "What percentage of members are active and inactive?",
+      "What percentage of members are active/inactive?",
+    ]) {
+      const booleanAlternative = await compileResolvedAdvancedAnalyticalPlan(request, columns, databasePath);
+      assert.equal(booleanAlternative?.plan.action, "clarify");
+      assert.equal(booleanAlternative?.proposal.query, "");
+    }
 
-  const crossRelation = await compileResolvedAdvancedAnalyticalPlan("What percentage of entries have Robotics outcome?", columns, databasePath);
-  assert.equal(crossRelation?.plan.action, "clarify");
-  assert.equal(crossRelation?.proposal.query, "");
+    const crossRelation = await compileResolvedAdvancedAnalyticalPlan("What percentage of entries have Robotics outcome?", columns, databasePath);
+    assert.equal(crossRelation?.plan.action, "clarify");
+    assert.equal(crossRelation?.proposal.query, "");
 
-  const scoped = await compileResolvedAdvancedAnalyticalPlan("What percentage of non Complete entries have Pending outcome?", columns, databasePath);
-  assert.equal(scoped, null);
-  rmSync(databasePath, { force: true });
+    const scoped = await compileResolvedAdvancedAnalyticalPlan("What percentage of non Complete entries have Pending outcome?", columns, databasePath);
+    assert.equal(scoped, null);
+  } finally { cleanup(); }
 });
 
 test("does not reinterpret already assigned numerator and denominator values", async () => {
-  const columns = await fixture();
-  const rate: AdvancedAnalyticalPlan = {
-    ...plan(""), operation: "conditional_rate", source: "members", entity: "", filters: [],
-    numeratorFilters: [{ column: "members.status", operator: "eq", value: "Complete" }],
-    denominatorFilters: [{ column: "members.tier", operator: "eq", value: "Gold" }], decimals: 2,
-  };
-  const grounded = await groundAdvancedAnalyticalFilters(rate, "Among Gold members, what percentage have Complete status?", columns, databasePath);
-  assert.equal(grounded.plan.action, "query");
-  assert.deepEqual(grounded.plan.numeratorFilters, rate.numeratorFilters);
-  assert.deepEqual(grounded.plan.denominatorFilters, rate.denominatorFilters);
-  rmSync(databasePath, { force: true });
+  const { columns, databasePath, cleanup } = await fixture();
+  try {
+    const rate: AdvancedAnalyticalPlan = {
+      ...plan(""), operation: "conditional_rate", source: "members", entity: "", filters: [],
+      numeratorFilters: [{ column: "members.status", operator: "eq", value: "Complete" }],
+      denominatorFilters: [{ column: "members.tier", operator: "eq", value: "Gold" }], decimals: 2,
+    };
+    const grounded = await groundAdvancedAnalyticalFilters(rate, "Among Gold members, what percentage have Complete status?", columns, databasePath);
+    assert.equal(grounded.plan.action, "query");
+    assert.deepEqual(grounded.plan.numeratorFilters, rate.numeratorFilters);
+    assert.deepEqual(grounded.plan.denominatorFilters, rate.denominatorFilters);
+  } finally { cleanup(); }
 });
 
 test("routes every categorical grounding read through the authorized executor", async () => {

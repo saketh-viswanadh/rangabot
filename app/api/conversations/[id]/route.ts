@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import {
   getConversationDatabase,
-  isConversationLifecycleManaged,
   setConversationDataset,
   setConversationPinned,
-  updateConversation,
 } from "@/lib/conversations";
 import { getConversationTimeline, recoverExpiredConversationTurns } from "@/lib/conversation-turns";
 import { deleteConversationWhenIdle } from "@/lib/conversation-mutation-guards";
-import { isValidChatMessages } from "@/lib/chat-validation";
 import { getApprovedDataset } from "@/lib/datasets";
 
 export const runtime = "nodejs";
@@ -55,21 +52,6 @@ export async function GET(_request: Request, context: RouteContext) {
     : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
 }
 
-export async function PUT(request: Request, context: RouteContext) {
-  const id = (await context.params).id;
-  if (isConversationLifecycleManaged(id)) {
-    return NextResponse.json({ error: "This conversation uses the server-owned turn lifecycle.", code: "lifecycle-managed" }, { status: 409 });
-  }
-  const body = (await request.json()) as { messages?: unknown };
-  if (!isValidChatMessages(body.messages, { allowEmpty: true })) {
-    return NextResponse.json({ error: "Valid messages are required." }, { status: 400 });
-  }
-  const conversation = updateConversation(id, body.messages);
-  return conversation
-    ? NextResponse.json({ conversation })
-    : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
-}
-
 export async function DELETE(_request: Request, context: RouteContext) {
   const result = deleteConversationWhenIdle((await context.params).id);
   if (result === "turn-in-progress") {
@@ -77,6 +59,20 @@ export async function DELETE(_request: Request, context: RouteContext) {
       error: "Stop or finish the active turn before deleting this conversation.",
       code: "turn-in-progress",
     }, { status: 409 });
+  }
+  if (result === "artifact-cleanup-failed") {
+    return NextResponse.json({
+      error: "This conversation was not deleted because one or more of its local Word artifacts could not be removed. Check local file permissions, then try again.",
+      code: "artifact-cleanup-failed",
+      retriable: true,
+    }, { status: 503 });
+  }
+  if (result === "deleted-cleanup-pending") {
+    return NextResponse.json({
+      warning: "The conversation was deleted, but its private artifact quarantine could not be fully purged. Restart Rangabot to retry cleanup safely.",
+      code: "deleted-cleanup-pending",
+      retriableOnRestart: true,
+    }, { status: 202 });
   }
   return result === "deleted"
     ? new Response(null, { status: 204 })

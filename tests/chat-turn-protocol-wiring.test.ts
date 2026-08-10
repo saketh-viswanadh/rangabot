@@ -16,13 +16,13 @@ const stopFlow = page.slice(page.indexOf("async function stopGenerating"), page.
 
 test("the browser starts one versioned turn and never replaces a whole transcript", () => {
   assert.match(page, /import \{ CONVERSATION_TURN_PROTOCOL_VERSION \} from "@\/lib\/conversation-turn-contract"/);
-  assert.match(turnStartFlow, /fetch\("\/api\/conversation-turns"/);
+  assert.match(turnStartFlow, /localApiFetch\("\/api\/conversation-turns"/);
   assert.match(turnStartFlow, /attempt < 2/);
   assert.match(turnStartFlow, /parseTurnStartResult\(await response\.json\(\), response, expectedTurnId\)/);
   assert.match(page, /turn\?\.id !== expectedTurnId/);
   assert.match(sendFlow, /startConversationTurn\(startPayload, turnId, abortController\.signal\)/);
   assert.doesNotMatch(sendFlow, /startResponse\.json\(\)/);
-  assert.match(sendFlow, /fetch\("\/api\/chat"/);
+  assert.match(sendFlow, /localApiFetch\("\/api\/chat"/);
   assert.match(sendFlow, /protocolVersion:\s*CONVERSATION_TURN_PROTOCOL_VERSION,[\s\S]*?conversationId,[\s\S]*?turnId/);
   assert.doesNotMatch(sendFlow, /method:\s*"PUT"/);
   assert.doesNotMatch(sendFlow, /messages:\s*(?:nextMessages|storedMessages)/);
@@ -54,9 +54,12 @@ test("the server owns history, options, replay, and terminal settlement", () => 
   assert.match(chatRoute, /messages:\s*claim\.messages/);
   assert.match(chatRoute, /mode:\s*claim\.turn\.options\.mode/);
   assert.match(chatRoute, /responseFromCompletedAssistant\(claim\.turn\.assistantMessage\)/);
-  assert.match(chatRoute, /AbortSignal\.any\(\[request\.signal, AbortSignal\.timeout\(getConversationTurnTimeoutMs\(\)\)\]\)/);
+  assert.match(chatRoute, /registerActiveConversationTurn\(body\.turnId/);
+  assert.match(chatRoute, /request\.signal,[\s\S]*AbortSignal\.timeout\(getConversationTurnTimeoutMs\(\)\)/);
+  assert.match(chatRoute, /releaseActiveTurn = activeTurn\.release/);
   assert.match(chatRoute, /wrapSuccessfulTurnResponse\(response, callbacks, turnSignal\)/);
-  assert.match(chatRoute, /body\.messages\.some\(\(message\) => message\.role === "system"\)/);
+  assert.doesNotMatch(chatRoute, /handleLegacyChat|isValidChatMessages/);
+  assert.match(chatRoute, /A valid versioned conversation turn is required/);
 });
 
 test("request aborts cannot cancel replayed turns and timeout setup remains terminalizable", () => {
@@ -64,7 +67,7 @@ test("request aborts cannot cancel replayed turns and timeout setup remains term
 
   const versionedFlow = chatRoute.slice(
     chatRoute.indexOf("async function handleVersionedChat"),
-    chatRoute.indexOf("async function handleLegacyChat"),
+    chatRoute.indexOf("export async function POST"),
   );
   const callbacksStart = versionedFlow.indexOf("const callbacks = lifecycleCallbacks");
   const protectedStart = versionedFlow.indexOf("try {", callbacksStart);
@@ -79,10 +82,10 @@ test("request aborts cannot cancel replayed turns and timeout setup remains term
 
 test("timeline reads expose failures while legacy transcript replacement is locked", () => {
   assert.match(conversationRoute, /getConversationTimeline/);
-  assert.match(conversationRoute, /isConversationLifecycleManaged\(id\)/);
-  assert.match(conversationRoute, /status:\s*409/);
+  assert.doesNotMatch(conversationRoute, /export async function PUT/);
   assert.match(cancelRoute, /turn\.conversationId !== body\.conversationId/);
   assert.match(cancelRoute, /cancelConversationTurn\(id\)/);
+  assert.match(cancelRoute, /abortActiveConversationTurn\(id/);
 });
 
 test("the protocol version has one browser-safe source of truth", () => {

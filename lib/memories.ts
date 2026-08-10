@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import type { DatabaseSync as Database } from "node:sqlite";
 import { memoryConflictsWithContract, type AnswerContract } from "./conversation-contract.ts";
+import { hardenPrivateSqliteFiles, preparePrivateSqliteStorage } from "./private-storage.ts";
 
 const serverRequire = createRequire(resolve(process.cwd(), "package.json"));
 const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sqlite");
@@ -40,21 +40,30 @@ let database: Database | undefined;
 
 function getDatabase() {
   if (database) return database;
-  mkdirSync(dirname(databasePath), { recursive: true });
+  preparePrivateSqliteStorage(databasePath);
   database = new DatabaseSync(databasePath);
-  database.exec(`
-    PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS memories (
-      id TEXT PRIMARY KEY,
-      content TEXT NOT NULL,
-      kind TEXT NOT NULL CHECK (kind IN ('preference', 'fact', 'instruction')),
-      origin TEXT NOT NULL DEFAULT 'user-approved',
-      confidence REAL NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-  `);
-  return database;
+  try {
+    database.exec(`
+      PRAGMA secure_delete = ON;
+      PRAGMA journal_mode = WAL;
+      CREATE TABLE IF NOT EXISTS memories (
+        id TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('preference', 'fact', 'instruction')),
+        origin TEXT NOT NULL DEFAULT 'user-approved',
+        confidence REAL NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    hardenPrivateSqliteFiles(databasePath);
+    return database;
+  } catch (error) {
+    try { database.close(); } catch { /* Preserve the initialization error. */ }
+    database = undefined;
+    hardenPrivateSqliteFiles(databasePath);
+    throw error;
+  }
 }
 
 type MemoryRow = { id: string; content: string; kind: MemoryKind; origin: "user-approved"; confidence: number; createdAt: string; updatedAt: string };
@@ -353,3 +362,4 @@ export function applyMemoryImport(payload: unknown, replaceSourceIds: unknown) {
 
 export function closeMemoryDatabaseForTests() { database?.close(); database = undefined; }
 export function setMemoryDatabasePathForTests(path: string) { closeMemoryDatabaseForTests(); databasePath = path; }
+export function getMemoryDatabaseForTests() { return getDatabase(); }

@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CONVERSATION_TURN_PROTOCOL_VERSION } from "@/lib/conversation-turn-contract";
+import { localApiFetch } from "@/lib/local-api-client";
 import type { ChatMessage, ConversationTurnStatus, ProviderStatus } from "@/lib/providers/types";
 import { appendWelcomeHistory, chooseWelcomeIndex, parseWelcomeHistory, WELCOME_HISTORY_STORAGE_KEY, welcomeLines } from "@/lib/welcome-content";
 import { chooseGreetingIndex, formatWelcomeGreeting } from "@/lib/welcome-greeting";
@@ -109,7 +110,7 @@ async function requestTurnCancellation(turn: ActiveConversationTurn, keepalive =
   const timeout = new AbortController();
   const timer = window.setTimeout(() => timeout.abort(), TURN_CANCELLATION_TIMEOUT_MS);
   try {
-    const response = await fetch(`/api/conversation-turns/${turn.turnId}/cancel`, {
+    const response = await localApiFetch(`/api/conversation-turns/${turn.turnId}/cancel`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ conversationId: turn.conversationId }),
@@ -149,7 +150,7 @@ async function startConversationTurn(payload: string, expectedTurnId: string, si
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const response = await fetch("/api/conversation-turns", {
+      const response = await localApiFetch("/api/conversation-turns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: payload,
@@ -257,7 +258,7 @@ export default function Home() {
   }, []);
   const reconcileTurnFromServer = useCallback(async (conversationId: string, turnId: string, signal?: AbortSignal): Promise<ConversationTurnStatus | null> => {
     try {
-      const response = await fetch(`/api/conversations/${conversationId}`, { cache: "no-store", signal });
+      const response = await localApiFetch(`/api/conversations/${conversationId}`, { cache: "no-store", signal });
       if (!response.ok) return null;
       const data = (await response.json()) as { conversation?: { messages?: ChatMessage[] } };
       if (!Array.isArray(data.conversation?.messages)) return null;
@@ -297,7 +298,7 @@ export default function Home() {
     const parameters = new URLSearchParams();
     if (recent.length) parameters.set("exclude", recent.join(","));
     try {
-      const response = await fetch(`/api/knowledge/welcome${parameters.size ? `?${parameters}` : ""}`, {
+      const response = await localApiFetch(`/api/knowledge/welcome${parameters.size ? `?${parameters}` : ""}`, {
         cache: "no-store",
         signal: controller.signal,
       });
@@ -318,7 +319,7 @@ export default function Home() {
 
   async function refreshStatus() {
     try {
-      const response = await fetch("/api/status", { cache: "no-store" });
+      const response = await localApiFetch("/api/status", { cache: "no-store" });
       setStatus(await response.json());
     } catch {
       setStatus(null);
@@ -329,7 +330,7 @@ export default function Home() {
     const parameters = new URLSearchParams();
     if (query.trim()) parameters.set("query", query.trim());
     if (projectId) parameters.set("projectId", projectId);
-    const response = await fetch(`/api/conversations${parameters.size ? `?${parameters}` : ""}`, { cache: "no-store" });
+    const response = await localApiFetch(`/api/conversations${parameters.size ? `?${parameters}` : ""}`, { cache: "no-store" });
     if (response.ok) {
       const data = (await response.json()) as { conversations: ConversationSummary[] };
       setConversations(data.conversations);
@@ -337,12 +338,12 @@ export default function Home() {
   }
 
   async function refreshProjects() {
-    const response = await fetch("/api/projects", { cache: "no-store" });
+    const response = await localApiFetch("/api/projects", { cache: "no-store" });
     if (response.ok) setProjects(((await response.json()) as { projects: ProjectSummary[] }).projects);
   }
 
   async function refreshRepositories() {
-    const response = await fetch("/api/repositories", { cache: "no-store" });
+    const response = await localApiFetch("/api/repositories", { cache: "no-store" });
     const data = (await response.json()) as { repositories?: AllowedRepository[]; error?: string };
     if (response.ok && data.repositories) setAllowedRepositories(data.repositories);
     else setRepositoryMessage(data.error ?? "Could not read allowed folders.");
@@ -352,7 +353,7 @@ export default function Home() {
     event.preventDefault();
     const path = repositoryPath.trim();
     if (!path) return;
-    const response = await fetch("/api/repositories", {
+    const response = await localApiFetch("/api/repositories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path }),
@@ -368,7 +369,7 @@ export default function Home() {
   }
 
   async function revokeLocalRepository(repository: AllowedRepository) {
-    const response = await fetch(`/api/repositories/${repository.id}`, { method: "DELETE" });
+    const response = await localApiFetch(`/api/repositories/${repository.id}`, { method: "DELETE" });
     if (!response.ok) {
       setRepositoryMessage("Could not revoke this folder.");
       return;
@@ -397,7 +398,7 @@ export default function Home() {
     setCodePreview(null);
     setCodeSearchMessage("");
     const parameters = new URLSearchParams({ query: codeQuery.trim() });
-    const response = await fetch(`/api/repositories/${selectedRepository.id}/search?${parameters}`, { cache: "no-store" });
+    const response = await localApiFetch(`/api/repositories/${selectedRepository.id}/search?${parameters}`, { cache: "no-store" });
     const data = (await response.json()) as { results?: CodeSearchResult[]; error?: string };
     setCodeSearching(false);
     if (!response.ok || !data.results) {
@@ -412,7 +413,7 @@ export default function Home() {
   async function openCodePreview(result: CodeSearchResult) {
     if (!selectedRepository) return;
     const parameters = new URLSearchParams({ path: result.path, line: String(result.line) });
-    const response = await fetch(`/api/repositories/${selectedRepository.id}/preview?${parameters}`, { cache: "no-store" });
+    const response = await localApiFetch(`/api/repositories/${selectedRepository.id}/preview?${parameters}`, { cache: "no-store" });
     const data = (await response.json()) as { preview?: CodePreview; error?: string };
     if (response.ok && data.preview) setCodePreview(data.preview);
     else setCodeSearchMessage(data.error ?? "Could not preview this file.");
@@ -434,7 +435,7 @@ export default function Home() {
   }
 
   async function refreshKnowledge() {
-    const [statusResponse, updatesResponse] = await Promise.all([fetch("/api/knowledge/status", { cache: "no-store" }), fetch("/api/knowledge/updates", { cache: "no-store" })]);
+    const [statusResponse, updatesResponse] = await Promise.all([localApiFetch("/api/knowledge/status", { cache: "no-store" }), localApiFetch("/api/knowledge/updates", { cache: "no-store" })]);
     if (statusResponse.ok) setKnowledgeStatus(await statusResponse.json());
     if (updatesResponse.ok) setKnowledgeUpdates(await updatesResponse.json());
   }
@@ -443,7 +444,7 @@ export default function Home() {
     event.preventDefault();
     const name = newProjectName.trim();
     if (!name) return;
-    const response = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+    const response = await localApiFetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
     if (!response.ok) return;
     const project = ((await response.json()) as { project: ProjectSummary }).project;
     setProjects((current) => [project, ...current]);
@@ -455,7 +456,7 @@ export default function Home() {
   async function renameProject(project: ProjectSummary) {
     const name = window.prompt("Rename project", project.name)?.trim();
     if (!name || name === project.name) return;
-    const response = await fetch(`/api/projects/${project.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+    const response = await localApiFetch(`/api/projects/${project.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
     if (response.ok) await refreshProjects();
   }
 
@@ -465,7 +466,7 @@ export default function Home() {
     if (sendingRef.current && (activeProjectId === project.id || activeConversation?.projectId === project.id)) {
       await abandonActiveTurn();
     }
-    const response = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
+    const response = await localApiFetch(`/api/projects/${project.id}`, { method: "DELETE" });
     if (!response.ok) return;
     if (activeProjectId === project.id) setActiveProjectId(null);
     await Promise.all([refreshProjects(), refreshConversations()]);
@@ -478,7 +479,7 @@ export default function Home() {
     try {
       if (sendingRef.current) await abandonActiveTurn();
       if (openEpoch !== conversationOpenEpochRef.current) return;
-      const response = await fetch(`/api/conversations/${id}`, { cache: "no-store" });
+      const response = await localApiFetch(`/api/conversations/${id}`, { cache: "no-store" });
       if (!response.ok || openEpoch !== conversationOpenEpochRef.current) return;
       const data = (await response.json()) as { conversation: { messages: ChatMessage[] }; attachedDataset: AttachedDataset | null };
       if (openEpoch !== conversationOpenEpochRef.current) return;
@@ -518,7 +519,7 @@ export default function Home() {
       setAttachedDataset(dataset);
       return;
     }
-    const response = await fetch(`/api/conversations/${activeConversationId}`, {
+    const response = await localApiFetch(`/api/conversations/${activeConversationId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ datasetId: dataset?.id ?? null }),
@@ -528,14 +529,31 @@ export default function Home() {
 
   async function removeConversation(id: string) {
     if (sendingRef.current && activeConversationId === id) await abandonActiveTurn();
-    const response = await fetch(`/api/conversations/${id}`, { method: "DELETE" });
-    if (!response.ok) return;
-    if (activeConversationId === id) startNewChat();
-    await refreshConversations();
+    setConversationTransferMessage("");
+    try {
+      const response = await localApiFetch(`/api/conversations/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: unknown } | null;
+        setConversationTransferMessage(typeof data?.error === "string"
+          ? `${data.error} Use the delete button to retry.`
+          : "The conversation was not deleted. Use the delete button to retry.");
+        return;
+      }
+      if (response.status === 202) {
+        const data = await response.json().catch(() => null) as { warning?: unknown } | null;
+        setConversationTransferMessage(typeof data?.warning === "string"
+          ? data.warning
+          : "The conversation was deleted, but private artifact cleanup will retry when Rangabot restarts.");
+      }
+      if (activeConversationId === id) startNewChat();
+      await refreshConversations();
+    } catch {
+      setConversationTransferMessage("The conversation was not deleted because the local request failed. Use the delete button to retry.");
+    }
   }
 
   async function toggleConversationPin(conversation: ConversationSummary) {
-    const response = await fetch(`/api/conversations/${conversation.id}`, {
+    const response = await localApiFetch(`/api/conversations/${conversation.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pinned: !conversation.pinned }),
@@ -551,7 +569,7 @@ export default function Home() {
       setConversationTransferMessage("Import failed: the file is larger than 2 MB.");
       return;
     }
-    const response = await fetch("/api/conversations/import", {
+    const response = await localApiFetch("/api/conversations/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ markdown: await file.text(), projectId: activeProjectId }),
@@ -674,7 +692,7 @@ export default function Home() {
       const parameters = new URLSearchParams();
       if (conversationSearch.trim()) parameters.set("query", conversationSearch.trim());
       if (activeProjectId) parameters.set("projectId", activeProjectId);
-      const response = await fetch(`/api/conversations${parameters.size ? `?${parameters}` : ""}`, {
+      const response = await localApiFetch(`/api/conversations${parameters.size ? `?${parameters}` : ""}`, {
         cache: "no-store",
         signal: controller.signal,
       }).catch(() => null);
@@ -825,7 +843,7 @@ export default function Home() {
       setActiveConversationId(conversationId);
       setMessages((current) => [...current, userMessage, assistantMessage]);
       void refreshConversations();
-      const response = await fetch("/api/chat", {
+      const response = await localApiFetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: abortController.signal,

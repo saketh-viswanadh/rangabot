@@ -4,6 +4,7 @@ import test from "node:test";
 
 const conversationRoute = readFileSync("app/api/conversations/[id]/route.ts", "utf8");
 const projectRoute = readFileSync("app/api/projects/[id]/route.ts", "utf8");
+const chatPage = readFileSync("app/page.tsx", "utf8");
 
 test("dataset binding changes are serialized against pending lifecycle turns", () => {
   assert.match(conversationRoute, /recoverExpiredConversationTurns\(\)/);
@@ -29,6 +30,13 @@ test("non-binding pin changes remain available while a turn is active", () => {
 test("destructive conversation and project mutations use pending-turn guards", () => {
   assert.match(conversationRoute, /deleteConversationWhenIdle\(\(await context\.params\)\.id\)/);
   assert.match(conversationRoute, /Stop or finish the active turn before deleting this conversation/);
+  assert.match(conversationRoute, /result === "artifact-cleanup-failed"/);
+  assert.match(conversationRoute, /code: "artifact-cleanup-failed"[\s\S]*retriable: true[\s\S]*status: 503/);
   assert.match(projectRoute, /deleteProjectWhenIdle\(\(await context\.params\)\.id\)/);
   assert.match(projectRoute, /Stop or finish active turns before deleting this project/);
+});
+
+test("artifact cleanup failures remain visible and retriable in the chat UI", () => {
+  assert.match(chatPage, /setConversationTransferMessage\(typeof data\?\.error === "string"/);
+  assert.match(chatPage, /Use the delete button to retry/);
 });

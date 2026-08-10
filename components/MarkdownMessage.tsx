@@ -49,6 +49,9 @@ export function MarkdownMessage({ content }: { content: string }) {
             const external = href?.startsWith("http://") || href?.startsWith("https://");
             return <a href={href} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined} {...props}>{children}</a>;
           },
+          img({ alt }) {
+            return <span className="blocked-markdown-image" role="note">Image blocked{alt ? `: ${alt}` : ""}</span>;
+          },
         }}
       >
         {content}

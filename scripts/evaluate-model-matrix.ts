@@ -1,8 +1,9 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { totalmem } from "node:os";
 import { resolve } from "node:path";
 import modelRegistry from "../config/models.json" with { type: "json" };
+import { ensurePrivateDirectory, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
 
 type Profile = (typeof modelRegistry.models)[number];
 type ConversationSummary = {
@@ -73,9 +74,9 @@ for (const profile of profiles) {
 }
 
 const outputDirectory = resolve("data/evaluations/results");
-mkdirSync(outputDirectory, { recursive: true });
+ensurePrivateDirectory(outputDirectory);
 const output = resolve(outputDirectory, `model-matrix-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
-writeFileSync(output, `${JSON.stringify({
+writePrivateJsonFileAtomic(output, {
   schemaVersion: 1,
   suiteMode: full ? "full" : requestedCaseIds.length ? "selected" : "critical-only",
   requestedCaseIds,
@@ -84,6 +85,6 @@ writeFileSync(output, `${JSON.stringify({
   startedAt: matrixStartedAt,
   completedAt: new Date().toISOString(),
   models: matrix,
-}, null, 2)}\n`);
+});
 console.log(`\nPrivate matrix result: ${output}`);
 if (matrix.some((entry) => entry.exitCode !== 0 || !entry.summary)) process.exitCode = 1;

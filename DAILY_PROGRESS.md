@@ -1,5 +1,93 @@
 # Daily progress
 
+## 2026-08-10 — Privacy release-candidate closure
+
+- Closed a stale mastery-approval gap: the persistent label alone is no longer
+  sufficient. The trusted metadata-only workflow verifies the latest label
+  actor has write/admin permission and records a receipt for the exact current
+  head SHA; every push requires an authorized remove-and-reapply cycle.
+- Closed the loopback self-bootstrap gap: ordinary page visits can no longer
+  mint a browser session. Each launcher now prints a fresh signed startup URL;
+  its token remains in the fragment, is removed from browser history before an
+  exact same-origin exchange, and is purpose-separated from the resulting
+  session capability.
+- Closed the remaining high-risk boundaries from the hostile audit instead of
+  limiting the fix to browser CSRF. Dataset approvals now bind filesystem
+  identity and SHA-256, reject symlinks and replacements, and execute only an
+  owner-only immutable snapshot of the exact validated bytes. Legacy approvals
+  remain visible only after an explicit reapproval.
+- Added hard response limits around buffered and streamed Ollama output,
+  including no-newline streams. Exceeding a bound cancels the local reader and
+  surfaces a typed resource-limit result; it is never hidden by retry or an
+  alternate free-text path.
+- Made chat deletion safe across SQLite and the filesystem. Exclusively owned
+  Word artifacts move into a private quarantine before database commit, roll
+  back with the conversation on database failure, and purge only after commit.
+  On an interrupted delete, database references decide whether pending files are
+  restored or purged; unresolved cleanup is shown to the user. Shared references
+  are preserved and unknown historical orphans are not guessed at or deleted.
+- Hardened private evaluator files and checkpoints through shared owner-only
+  atomic writers. Knowledge index database backup now uses SQLite's online backup API,
+  validates structure and SHA-256 before restore, keeps bounded retention, and
+  shares a cross-process lease with the app so rollback cannot race live use.
+  Original source/inbox books are explicitly outside that backup.
+- Ran the permission repair over existing app-managed storage without opening
+  its content. No non-private mode remained in the checked managed trees; exact
+  environment counts remain local. Nested symbolic links were skipped rather
+  than followed.
+- Rebuilt dependencies from the lockfile, updated patched transitive packages,
+  and completed the full deterministic suite at 470/470 on the frozen local
+  candidate. Lint, typecheck,
+  production build, privacy/history scan, diff validation, and both production-
+  only and complete dependency audits pass locally; both GitHub CI platforms
+  remain required before merge.
+- Verified the public site remains available while its current source is absent
+  from the open-source index and repository CI. Historical website objects and
+  one redacted personal commit-metadata email remain recoverable in existing Git
+  history. The bounded current-tree/patch-history scanner and a separate
+  read-only all-blob pattern audit found no credential-shaped secret or tracked
+  private database, chat, memory, Knowledge Vault file, or local evaluation
+  result. Pattern scans are safeguards, not proof against unknown secret formats.
+
+## 2026-08-09 — Public-site separation and privacy boundary
+
+- Separated the product and publishing surfaces: the Rangabot application,
+  contributor tooling, tests, and evidence stay open source; `website/` is
+  removed from the current Git tree and ignored locally. The already deployed
+  `rangabot.com` site remains publicly viewable from the maintainer-controlled,
+  Git-ignored local Sites workspace. Repository CI no longer installs or
+  validates website-only dependencies; a durable private source repository is
+  still a follow-up.
+- Added a signed per-launch local browser capability with strict loopback Host,
+  same-origin, Fetch Metadata, content-type, body-size, and no-store controls.
+  Remote model-authored images are blocked, the CSP has no general external
+  connection or WebSocket source, and browser API helpers refuse to send the
+  capability outside the exact local origin.
+- Removed the unused raw-passage Knowledge Vault API and the legacy stateless
+  chat path. Browser DTOs no longer disclose vault roots, inbox locations,
+  dataset paths, or repository device/inode identity.
+- Bounded Ollama work to one active generation per resolved model with a small
+  abort-aware queue. Stop now aborts the server-owned in-flight model request;
+  busy, timeout, cancellation, malformed stream, and empty output remain typed
+  rather than hanging or silently retrying.
+- Enforced owner-only app-managed storage permissions on POSIX systems, enabled
+  SQLite `secure_delete`, added a non-destructive `npm run privacy:repair`
+  upgrade path, and bound repository approvals to canonical filesystem identity
+  with no-follow descriptor checks immediately before reads.
+- Began guarded deletion for exclusively owned Word artifacts. The final
+  transaction-aware quarantine and rollback behavior is recorded in the
+  2026-08-10 closure above. Existing unreferenced folders are not silently swept
+  because ownership cannot be proven retrospectively.
+- Expanded the privacy scanner to cover common provider tokens, authenticated
+  URLs, key/credential filenames, private registries, and Git history. Pinned
+  CI Actions to reviewed immutable SHAs and configured future repository commits
+  to use GitHub's noreply identity.
+- Current-tree removal does not erase the website source or personal author
+  metadata already present in public Git history. A coordinated history rewrite
+  is intentionally not included because it rewrites commit IDs, disrupts clones
+  and open pull requests, and cannot retract prior copies.
+
+
 ## 2026-08-08 — Canonical Charter and Path to Mastery v3
 
 - Converted the agreed vision and mission into one canonical Charter with a
@@ -987,7 +1075,9 @@ quality evaluation, and it can be validated without changing model weights.
 
 - Added a persistent answer-level receipt showing when approved Local memory was
   supplied to the model and when deterministic direct recall answered instead.
-- Preserved the receipt across conversation reopen and Markdown backup/restore.
+- Preserved the receipt across conversation reopen. Portable Markdown
+  export/import intentionally omits memory receipts and other machine-local
+  provenance, so it is a transcript format rather than a full backup.
 - Added strict metadata validation so imported or API-supplied messages cannot
   invent arbitrary memory-use states.
 

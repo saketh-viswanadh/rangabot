@@ -1,11 +1,13 @@
-# Critical code and repository review
+# Archived 2026-08-02 critical code and repository review
 
 Last reviewed: 2026-08-02
 
-This is a release-blocking review of the tracked source tree, runtime boundaries,
+This is the preserved 2026-08-02 release-blocking review of the tracked source tree, runtime boundaries,
 dependencies, tests, documentation, and public GitHub configuration. Private
 Knowledge Vault content and generated evaluation answers were not read or
 published. Findings are kept here so cleanup is measurable rather than implied.
+It is not the current privacy-candidate audit; later controls and residual risks
+are recorded in `SECURITY.md`, `CHANGELOG.md`, and `DAILY_PROGRESS.md`.
 
 ## Verified strengths
 
@@ -16,11 +18,12 @@ published. Findings are kept here so cleanup is measurable rather than implied.
   embeddings, backups, and evaluation results are Git-ignored.
 - Repository access is explicit, canonicalized, bounded, symlink-safe, and now
   blocks both common secret-bearing filenames and high-confidence secret content.
-- GitHub `main` is protected, requires Linux and Windows CI, requires resolved
+- At the review date, GitHub `main` was protected, required Linux and Windows CI, required resolved
   conversations, blocks force pushes and deletion, and enforces administrators.
-- GitHub secret scanning, push protection, Dependabot security updates,
+- At the review date, GitHub secret scanning, push protection, Dependabot security updates,
   Discussions, Issues, and private vulnerability reporting are enabled.
-- Production dependency audit currently reports zero vulnerabilities.
+- The exact reviewed lockfile's production dependency audit reported zero
+  vulnerabilities; that historical result is not a live GitHub alert status.
 
 ## Fixed in this review
 

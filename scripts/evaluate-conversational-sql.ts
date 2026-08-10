@@ -1,11 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { conversationalSqlCases, type ConversationalSqlCase } from "./conversational-sql-fixtures.ts";
 import type { ApprovedDataset } from "../lib/datasets.ts";
 import type { ChatMessage } from "../lib/providers/types.ts";
 import { completeJsonWithOllama, completeTextWithOllama } from "../lib/providers/ollama.ts";
-import { inspectDatasetSchema, executeReadOnlySql, type SqlExecutionResult } from "../lib/sql-runtime.ts";
+import { inspectDatasetIdentity, inspectDatasetSchema, executeReadOnlySql, type SqlExecutionResult } from "../lib/sql-runtime.ts";
 import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalyticalPlan, normalizeAnalyticalPlan, parseAnalyticalPlan, resolveAnalyticalBoundary } from "../lib/analytical-plan.ts";
 import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
 import { ANALYTICAL_EVALUATION_TOLERANCE, compareSqlResults } from "../lib/analytical-result-comparison.ts";
@@ -14,6 +14,7 @@ import { auditVerifiedAnalyticalNarration, compileVerifiedAnalyticalNarration, t
 import { shouldRunSqlAnalysis } from "../lib/conversational-analysis.ts";
 import { buildConversationMessages } from "../lib/conversation-orchestration.ts";
 import type { SqlProposal } from "../lib/sql-proposals.ts";
+import { ensurePrivateDirectory, ensurePrivateFile, writePrivateJsonFileAtomic, writePrivateTextFileAtomic } from "../lib/private-storage.ts";
 
 type Evaluation = {
   id: string;
@@ -34,7 +35,7 @@ type Evaluation = {
 const resultsDirectory = resolve("data/evaluations/results");
 const databasePath = resolve(resultsDirectory, "rangabot-multitable-benchmark.duckdb");
 const checkpointPath = resolve(resultsDirectory, "conversational-sql-checkpoint.json");
-mkdirSync(resultsDirectory, { recursive: true });
+ensurePrivateDirectory(resultsDirectory);
 
 async function createDatabase() {
   if (existsSync(databasePath)) rmSync(databasePath);
@@ -118,6 +119,7 @@ async function createDatabase() {
     `);
   } finally {
     connection.closeSync(); instance.closeSync();
+    ensurePrivateFile(databasePath);
   }
 }
 
@@ -239,7 +241,11 @@ const selectedCases = conversationalSqlCases.filter((item) => (!caseArg || item.
 if (!selectedCases.length) throw new Error("No conversational SQL cases matched the requested filter.");
 
 await createDatabase();
-const dataset: ApprovedDataset = { id: "synthetic-multitable", name: "rangabot-multitable-benchmark.duckdb", path: databasePath, format: "duckdb", sizeBytes: 0, addedAt: new Date().toISOString() };
+const datasetIdentity = await inspectDatasetIdentity(databasePath);
+const dataset: ApprovedDataset = {
+  id: "synthetic-multitable", name: "rangabot-multitable-benchmark.duckdb", path: databasePath, format: "duckdb",
+  sizeBytes: datasetIdentity.sizeBytes, addedAt: new Date().toISOString(), approvalVersion: 2, fileIdentity: datasetIdentity.fileIdentity,
+};
 const schema = await inspectDatasetSchema(databasePath);
 if (process.argv.includes("--validate-only")) {
   for (const testCase of conversationalSqlCases) if (testCase.goldSql) await executeReadOnlySql({ approvedDatasetPath: databasePath, query: testCase.goldSql });
@@ -253,14 +259,14 @@ for (const testCase of selectedCases) {
   if (results.some((result) => result.id === testCase.id)) { console.log(`SKIP ${testCase.id} (checkpointed)`); continue; }
   const result = await runCase(testCase, dataset, schema);
   results.push(result);
-  writeFileSync(checkpointPath, `${JSON.stringify(results, null, 2)}\n`);
+  writePrivateJsonFileAtomic(checkpointPath, results);
   console.log(`${result.passed ? "PASS" : "FAIL"} ${testCase.id} ${testCase.difficulty}/${testCase.context} (${(result.latencyMs / 1000).toFixed(1)}s)${result.error ? `: ${result.error}` : ""}`);
 }
 const outputJson = resolve(resultsDirectory, `conversational-sql-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
 const outputMarkdown = outputJson.replace(/\.json$/, ".md");
 const summary = { suite: { name: "rangabot-conversational-sql", version: "1.0.0" }, database: { synthetic: true, tables: new Set(schema.map((column) => column.table)).size, columns: schema.length }, total: results.length, passed: results.filter((result) => result.passed).length, byDifficulty: aggregate(results, "difficulty"), byContext: aggregate(results, "context"), results };
-writeFileSync(outputJson, `${JSON.stringify(summary, null, 2)}\n`);
-writeFileSync(outputMarkdown, markdownReport(results));
+writePrivateJsonFileAtomic(outputJson, summary);
+writePrivateTextFileAtomic(outputMarkdown, markdownReport(results));
 console.log(`\nPass rate: ${summary.passed}/${summary.total} (${(100 * summary.passed / summary.total).toFixed(1)}%)`);
 console.log(`Private JSON: ${outputJson}`);
 console.log(`Private report: ${outputMarkdown}`);

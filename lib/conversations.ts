@@ -1,9 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import type { DatabaseSync as Database } from "node:sqlite";
 import type { ChatMessage } from "./providers/types";
+import { hardenPrivateSqliteFiles, preparePrivateSqliteStorage } from "./private-storage.ts";
+import {
+  ConversationArtifactCleanupError,
+  ConversationArtifactReferenceError,
+  deleteConversationRecordWithArtifacts,
+  recoverArtifactDeletionQuarantine,
+  stageOwnedWordArtifactDirectories,
+  type StagedArtifactDeletion,
+} from "./conversation-artifacts.ts";
 
 const serverRequire = createRequire(resolve(process.cwd(), "package.json"));
 const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sqlite");
@@ -35,12 +43,13 @@ let database: Database | undefined;
 
 export function getConversationDatabase() {
   if (database) return database;
-  mkdirSync(dirname(databasePath), { recursive: true });
+  preparePrivateSqliteStorage(databasePath);
   database = new DatabaseSync(databasePath);
   let transactionStarted = false;
   try {
     database.exec(`
     PRAGMA foreign_keys = ON;
+    PRAGMA secure_delete = ON;
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY,
@@ -113,6 +122,8 @@ export function getConversationDatabase() {
     }
     database.exec("COMMIT");
     transactionStarted = false;
+    recoverArtifactDeletionQuarantine(database);
+    hardenPrivateSqliteFiles(databasePath);
     return database;
   } catch (error) {
     if (transactionStarted) {
@@ -120,6 +131,7 @@ export function getConversationDatabase() {
     }
     try { database.close(); } catch { /* Preserve the initialization error. */ }
     database = undefined;
+    hardenPrivateSqliteFiles(databasePath);
     throw error;
   }
 }
@@ -294,7 +306,33 @@ export function isConversationLifecycleManaged(id: string) {
 }
 
 export function deleteConversation(id: string): boolean {
-  return getConversationDatabase().prepare("DELETE FROM conversations WHERE id = ?").run(id).changes > 0;
+  const database = getConversationDatabase();
+  database.exec("BEGIN IMMEDIATE");
+  let transactionStarted = true;
+  let stagedDeletion: StagedArtifactDeletion | undefined;
+  try {
+    const result = deleteConversationRecordWithArtifacts(database, id, stageOwnedWordArtifactDirectories);
+    if (result.kind === "artifact-cleanup-failed") {
+      database.exec("ROLLBACK");
+      transactionStarted = false;
+      throw new ConversationArtifactCleanupError();
+    }
+    if (result.kind === "deleted") stagedDeletion = result.stagedDeletion;
+    database.exec("COMMIT");
+    transactionStarted = false;
+    if (stagedDeletion && !stagedDeletion.finalize()) {
+      try { recoverArtifactDeletionQuarantine(database); }
+      catch { throw new ConversationArtifactCleanupError("deleted-cleanup-pending"); }
+    }
+    return result.kind === "deleted";
+  } catch (error) {
+    if (transactionStarted) {
+      try { database.exec("ROLLBACK"); }
+      finally { stagedDeletion?.rollback(); }
+    }
+    if (error instanceof ConversationArtifactReferenceError) throw new ConversationArtifactCleanupError();
+    throw error;
+  }
 }
 
 export function setConversationPinned(id: string, pinned: boolean): ConversationSummary | null {

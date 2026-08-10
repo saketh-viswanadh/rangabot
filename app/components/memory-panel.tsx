@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { localApiFetch } from "@/lib/local-api-client";
 import { CraftIcon } from "./craft-icon";
 
 type MemoryKind = "preference" | "fact" | "instruction";
@@ -25,14 +26,14 @@ export function MemoryPanel({ open, onClose }: { open: boolean; onClose: () => v
   const importRef = useRef<HTMLInputElement>(null);
 
   async function refresh() {
-    const response = await fetch("/api/memories", { cache: "no-store" });
+    const response = await localApiFetch("/api/memories", { cache: "no-store" });
     if (response.ok) setMemories(((await response.json()) as { memories: LocalMemory[] }).memories);
   }
 
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
-    void fetch("/api/memories", { cache: "no-store", signal: controller.signal }).then(async (response) => {
+    void localApiFetch("/api/memories", { cache: "no-store", signal: controller.signal }).then(async (response) => {
       if (response.ok) setMemories(((await response.json()) as { memories: LocalMemory[] }).memories);
     }).catch(() => undefined);
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
@@ -45,7 +46,7 @@ export function MemoryPanel({ open, onClose }: { open: boolean; onClose: () => v
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    const response = await fetch(editingId ? `/api/memories/${editingId}` : "/api/memories", {
+    const response = await localApiFetch(editingId ? `/api/memories/${editingId}` : "/api/memories", {
       method: editingId ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content, kind }),
@@ -59,7 +60,7 @@ export function MemoryPanel({ open, onClose }: { open: boolean; onClose: () => v
   function edit(memory: LocalMemory) { setEditingId(memory.id); setContent(memory.content); setKind(memory.kind); setMessage(""); }
 
   async function remove(id: string) {
-    const response = await fetch(`/api/memories/${id}`, { method: "DELETE" });
+    const response = await localApiFetch(`/api/memories/${id}`, { method: "DELETE" });
     if (response.ok) { if (editingId === id) { setEditingId(null); setContent(""); } await refresh(); }
   }
 
@@ -70,7 +71,7 @@ export function MemoryPanel({ open, onClose }: { open: boolean; onClose: () => v
     if (file.size > 300_000) { setMessage("Memory import exceeds the 300 KB limit."); return; }
     try {
       const payload = JSON.parse(await file.text()) as unknown;
-      const response = await fetch("/api/memories/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "preview", export: payload }) });
+      const response = await localApiFetch("/api/memories/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "preview", export: payload }) });
       const data = await response.json() as { preview?: MemoryImportPreview; error?: string };
       if (!response.ok || !data.preview) throw new Error(data.error ?? "Could not review the memory import.");
       setImportPayload(payload); setImportPreview(data.preview); setReplaceSourceIds([]);
@@ -87,7 +88,7 @@ export function MemoryPanel({ open, onClose }: { open: boolean; onClose: () => v
 
   async function applyImport() {
     if (!importPreview || !importPayload) return;
-    const response = await fetch("/api/memories/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "apply", export: importPayload, replaceSourceIds }) });
+    const response = await localApiFetch("/api/memories/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "apply", export: importPayload, replaceSourceIds }) });
     const data = await response.json() as { result?: { imported: number; replaced: number; skippedDuplicates: number; keptExisting: number }; error?: string };
     if (!response.ok || !data.result) { setMessage(data.error ?? "Memory import failed."); return; }
     setMessage(`Imported ${data.result.imported}, replaced ${data.result.replaced}, skipped ${data.result.skippedDuplicates} duplicate${data.result.skippedDuplicates === 1 ? "" : "s"}, and kept ${data.result.keptExisting} existing.`);

@@ -1,0 +1,281 @@
+name: Mastery governance
+
+# Security boundary: pull_request_target loads this workflow from the trusted
+# base branch. This job must never check out, import, or execute pull-request
+# code. It may inspect only GitHub-owned pull-request metadata.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: mastery-governance-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  approval:
+    name: mastery-governance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - name: Check protected mastery changes
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const APPROVAL_LABEL = "mastery-approved";
+            const APPROVAL_STATUS_CONTEXT = "rangabot/mastery-approval";
+            const MAX_GITHUB_PR_FILES = 3000;
+            const MAX_GITHUB_METADATA_RECORDS = 3000;
+            const PAGE_SIZE = 100;
+            const AUTHORIZED_PERMISSIONS = new Set(["admin", "write"]);
+            const protectedExactPaths = new Set([
+              ".github/CODEOWNERS",
+              ".github/ISSUE_TEMPLATE/mastery-claim.yml",
+              ".github/PULL_REQUEST_TEMPLATE.md",
+              "content/rangabot-charter.json",
+              "content/path-to-mastery.json",
+              "content/mastery-contributors.json",
+              "content/mastery-evidence.json",
+              "docs/RANGABOT_CHARTER.md",
+              "docs/PATH_TO_MASTERY.md",
+              "docs/mastery-claims.md",
+              "lib/mastery-tree.ts",
+              "lib/mastery-contributors.ts",
+              "lib/mastery-governance.ts",
+              "scripts/check-mastery-evidence.ts",
+              "scripts/check-mastery-governance.ts",
+              "scripts/generate-charter.ts",
+              "scripts/generate-mastery-tree.ts",
+              "tests/mastery-governance-workflow.test.ts",
+            ]);
+            const protectedPrefixes = [".github/workflows/"];
+
+            function normalizeRepositoryPath(value) {
+              if (typeof value !== "string" || value.length === 0 || value.includes("\0")) {
+                throw new Error("Mastery governance received an invalid changed-file path.");
+              }
+              const normalized = value.replaceAll("\\", "/");
+              if (normalized.startsWith("/") || normalized.startsWith("../") || normalized.includes("/../")) {
+                throw new Error(`Mastery governance received a non-repository path: ${JSON.stringify(value)}`);
+              }
+              return normalized;
+            }
+
+            function isProtectedPath(value) {
+              const normalized = normalizeRepositoryPath(value);
+              return protectedExactPaths.has(normalized) || protectedPrefixes.some((prefix) => normalized.startsWith(prefix));
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullNumber = context.payload.pull_request?.number;
+            if (!Number.isSafeInteger(pullNumber) || pullNumber <= 0) {
+              throw new Error("Mastery governance could not identify a valid pull request.");
+            }
+
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pullNumber,
+            });
+            const headSha = pullRequest.head?.sha;
+            if (typeof headSha !== "string" || !/^[0-9a-f]{40}$/i.test(headSha)) {
+              throw new Error("Mastery governance received an invalid current pull-request head SHA.");
+            }
+            const expectedFileCount = pullRequest.changed_files;
+            if (!Number.isSafeInteger(expectedFileCount) || expectedFileCount < 0) {
+              throw new Error("Mastery governance received an invalid changed-file count.");
+            }
+            if (expectedFileCount > MAX_GITHUB_PR_FILES) {
+              throw new Error(
+                `Mastery governance cannot prove completeness for ${expectedFileCount} changed files; GitHub exposes at most ${MAX_GITHUB_PR_FILES}. Split the pull request.`,
+              );
+            }
+
+            const changedPaths = [];
+            let fetchedFileCount = 0;
+            const pageCount = Math.ceil(expectedFileCount / PAGE_SIZE);
+            for (let page = 1; page <= pageCount; page += 1) {
+              const { data: entries } = await github.rest.pulls.listFiles({
+                owner,
+                repo,
+                pull_number: pullNumber,
+                per_page: PAGE_SIZE,
+                page,
+              });
+              if (!Array.isArray(entries)) {
+                throw new Error(`Mastery governance received an invalid file page ${page}.`);
+              }
+              const expectedPageSize = Math.min(PAGE_SIZE, expectedFileCount - fetchedFileCount);
+              if (entries.length !== expectedPageSize) {
+                throw new Error(
+                  `Mastery governance file pagination was incomplete on page ${page}: expected ${expectedPageSize}, received ${entries.length}.`,
+                );
+              }
+              fetchedFileCount += entries.length;
+              for (const entry of entries) {
+                changedPaths.push(normalizeRepositoryPath(entry.filename));
+                if (entry.previous_filename !== undefined) {
+                  changedPaths.push(normalizeRepositoryPath(entry.previous_filename));
+                }
+              }
+            }
+            if (fetchedFileCount !== expectedFileCount) {
+              throw new Error(
+                `Mastery governance file pagination was incomplete: expected ${expectedFileCount}, received ${fetchedFileCount}.`,
+              );
+            }
+
+            // Renames contribute both their current and previous paths so a
+            // protected file cannot escape the gate by moving elsewhere.
+            const protectedChanges = [...new Set(changedPaths.filter(isProtectedPath))].sort();
+            if (protectedChanges.length === 0) {
+              console.log(`Mastery governance: inspected all ${expectedFileCount} changed files; no protected paths changed.`);
+              return;
+            }
+
+            if (!Array.isArray(pullRequest.labels)) {
+              throw new Error("Mastery governance could not inspect current pull-request labels.");
+            }
+            const labels = pullRequest.labels.map((label) => {
+              if (typeof label?.name !== "string") throw new Error("Mastery governance received an invalid label record.");
+              return label.name.toLowerCase();
+            });
+            if (!labels.includes(APPROVAL_LABEL)) {
+              throw new Error(
+                `Protected mastery governance paths changed without the owner-controlled '${APPROVAL_LABEL}' label: ${protectedChanges.join(", ")}`,
+              );
+            }
+
+            async function listCompleteMetadataPages(listPage, recordName) {
+              const records = [];
+              for (let page = 1; page <= Math.ceil(MAX_GITHUB_METADATA_RECORDS / PAGE_SIZE); page += 1) {
+                const { data: entries } = await listPage(page);
+                if (!Array.isArray(entries)) {
+                  throw new Error(`Mastery governance received an invalid ${recordName} page ${page}.`);
+                }
+                records.push(...entries);
+                if (entries.length < PAGE_SIZE) return records;
+              }
+              throw new Error(
+                `Mastery governance cannot prove complete ${recordName} metadata beyond ${MAX_GITHUB_METADATA_RECORDS} records. Reapply approval after reducing pull-request metadata.`,
+              );
+            }
+
+            const issueEvents = await listCompleteMetadataPages(
+              (page) => github.rest.issues.listEvents({
+                owner,
+                repo,
+                issue_number: pullNumber,
+                per_page: PAGE_SIZE,
+                page,
+              }),
+              "issue-event",
+            );
+            const approvalLabelEvents = issueEvents.filter((entry) => {
+              if (!entry || typeof entry !== "object") {
+                throw new Error("Mastery governance received an invalid issue-event record.");
+              }
+              if (entry.event !== "labeled" && entry.event !== "unlabeled") return false;
+              if (typeof entry.label?.name !== "string") {
+                throw new Error("Mastery governance received an invalid label lifecycle event.");
+              }
+              return entry.label.name.toLowerCase() === APPROVAL_LABEL;
+            });
+            for (const entry of approvalLabelEvents) {
+              if (!Number.isSafeInteger(entry.id) || entry.id <= 0 || Number.isNaN(Date.parse(entry.created_at))) {
+                throw new Error("Mastery governance received an invalid approval label event identity or timestamp.");
+              }
+            }
+            const latestApprovalLabelEvent = approvalLabelEvents
+              .sort((left, right) => Date.parse(left.created_at) - Date.parse(right.created_at) || left.id - right.id)
+              .at(-1);
+            if (!latestApprovalLabelEvent || latestApprovalLabelEvent.event !== "labeled") {
+              throw new Error(
+                `Protected mastery paths require a current '${APPROVAL_LABEL}' label event from an authorized maintainer. Remove and reapply the label.`,
+              );
+            }
+            const approvingActor = latestApprovalLabelEvent.actor?.login;
+            if (typeof approvingActor !== "string" || approvingActor.length === 0) {
+              throw new Error("Mastery governance could not identify who applied the approval label.");
+            }
+            const { data: actorPermission } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner,
+              repo,
+              username: approvingActor,
+            });
+            const normalizedActorPermission = typeof actorPermission?.permission === "string"
+              ? actorPermission.permission.toLowerCase()
+              : "";
+            if (!AUTHORIZED_PERMISSIONS.has(normalizedActorPermission)) {
+              throw new Error(
+                `The latest '${APPROVAL_LABEL}' label actor is not an authorized write or admin maintainer.`,
+              );
+            }
+
+            let approvalReceipt;
+            let approvalReceiptHeadSha;
+            const isApprovalLabelRun = context.payload.action === "labeled"
+              && typeof context.payload.label?.name === "string"
+              && context.payload.label.name.toLowerCase() === APPROVAL_LABEL;
+            if (isApprovalLabelRun) {
+              const eventHeadSha = context.payload.pull_request?.head?.sha;
+              const eventActor = context.payload.sender?.login;
+              if (eventHeadSha !== headSha) {
+                throw new Error(
+                  `The '${APPROVAL_LABEL}' event targeted a stale pull-request head. Remove and reapply the label to the current head.`,
+                );
+              }
+              if (typeof eventActor !== "string" || eventActor.toLowerCase() !== approvingActor.toLowerCase()) {
+                throw new Error("The latest approval label event does not match the triggering actor.");
+              }
+              const { data: createdStatus } = await github.rest.repos.createCommitStatus({
+                owner,
+                repo,
+                sha: headSha,
+                state: "success",
+                context: APPROVAL_STATUS_CONTEXT,
+                description: `Mastery approved for this head by ${approvingActor}`.slice(0, 140),
+              });
+              approvalReceipt = createdStatus;
+              approvalReceiptHeadSha = headSha;
+            } else {
+              const statuses = await listCompleteMetadataPages(
+                (page) => github.rest.repos.listCommitStatusesForRef({
+                  owner,
+                  repo,
+                  ref: headSha,
+                  per_page: PAGE_SIZE,
+                  page,
+                }),
+                "commit-status",
+              );
+              const approvalStatuses = statuses.filter((status) => status?.context === APPROVAL_STATUS_CONTEXT);
+              for (const status of approvalStatuses) {
+                if (!Number.isSafeInteger(status.id) || status.id <= 0) {
+                  throw new Error("Mastery governance received an invalid approval commit-status identity.");
+                }
+              }
+              approvalReceipt = approvalStatuses.sort((left, right) => right.id - left.id)[0];
+              if (approvalReceipt) approvalReceiptHeadSha = headSha;
+            }
+            if (
+              !approvalReceipt
+              || approvalReceipt.context !== APPROVAL_STATUS_CONTEXT
+              || approvalReceipt.state !== "success"
+              || approvalReceiptHeadSha !== headSha
+            ) {
+              throw new Error(
+                `The '${APPROVAL_LABEL}' label is not approved for current head ${headSha}. Remove and reapply it after every push.`,
+              );
+            }
+
+            console.log(
+              `Mastery governance: inspected all ${expectedFileCount} changed files and found authorized current-head approval for ${protectedChanges.length} protected path(s).`,
+            );

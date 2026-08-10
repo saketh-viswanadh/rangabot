@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadKnowledgeEvaluationCases, scoreKnowledgeRetrieval, summarizeKnowledgeEvaluation } from "../lib/knowledge-evaluation.ts";
 import { knowledgeRoot, searchKnowledge } from "../lib/knowledge.ts";
+import { ensurePrivateDirectory, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
 
 const requestedPath = process.argv.find((argument) => argument.startsWith("--file="))?.slice("--file=".length);
 const fixturePath = requestedPath ? resolve(requestedPath) : resolve(knowledgeRoot, "evaluations", "starter.json");
@@ -21,10 +22,10 @@ for (const [index, item] of cases.entries()) {
 
 const summary = summarizeKnowledgeEvaluation(results);
 const outputRoot = resolve(knowledgeRoot, "evaluations", "results");
-mkdirSync(outputRoot, { recursive: true });
+ensurePrivateDirectory(outputRoot);
 const stamp = new Date().toISOString().replaceAll(/[:.]/g, "-");
 const outputPath = resolve(outputRoot, `retrieval-${stamp}.json`);
-writeFileSync(outputPath, `${JSON.stringify({ generatedAt: new Date().toISOString(), fixturePath, summary, results }, null, 2)}\n`);
+writePrivateJsonFileAtomic(outputPath, { generatedAt: new Date().toISOString(), fixturePath, summary, results });
 
 console.log("\nRetrieval quality summary");
 console.log(`Pass rate: ${(summary.passRate * 100).toFixed(1)}% (${summary.passed}/${summary.cases})`);

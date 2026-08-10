@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cancelConversationTurn, getConversationTurn, isValidConversationTurnId } from "@/lib/conversation-turns";
+import { abortActiveConversationTurn } from "@/lib/active-conversation-turns";
 
 export const runtime = "nodejs";
 type RouteContext = { params: Promise<{ id: string }> };
@@ -19,8 +20,10 @@ export async function POST(request: Request, context: RouteContext) {
   }
   try {
     const terminal = cancelConversationTurn(id);
+    abortActiveConversationTurn(id, new DOMException("Generation was stopped.", "AbortError"));
     return NextResponse.json({ turn: { id: terminal.id, status: terminal.status } });
   } catch {
+    abortActiveConversationTurn(id, new DOMException("Generation was stopped.", "AbortError"));
     return NextResponse.json({ error: "The local turn could not be stopped safely.", code: "internal" }, { status: 500 });
   }
 }

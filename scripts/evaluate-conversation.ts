@@ -1,4 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { arch, cpus, hostname, platform, release, totalmem } from "node:os";
@@ -9,6 +8,7 @@ import { selectRelevantMemoriesFrom } from "../lib/memories.ts";
 import { answerDeterministicConversationRequest, buildConversationMessages, buildSemanticRepairMessages } from "../lib/conversation-orchestration.ts";
 import { getConfiguredChatModel, getLocalOllamaBaseUrl } from "../lib/local-runtime-config.ts";
 import { applySelectedMemoryToContract, chooseSemanticRepair, compileAnswerContract, enforceReasoningInvariants } from "../lib/conversation-contract.ts";
+import { ensurePrivateDirectory, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
 
 type Rule = { any?: string[]; allAny?: string[][]; all?: string[]; none?: string[]; matches?: string[]; notMatches?: string[]; maxWords?: number; minWords?: number; numberedItems?: number; bulletItems?: number; outlineItems?: number };
 type Capability = "direct-usefulness" | "format-adherence" | "continuity" | "correction-precedence" | "honest-uncertainty" | "reasoning" | "adaptation" | "memory-use" | "memory-privacy" | "memory-precedence" | "unavailable-actions" | "scope-judgment";
@@ -214,9 +214,9 @@ const summary = {
   results,
 };
 const outputDirectory = resolve("data/evaluations/results");
-await mkdir(outputDirectory, { recursive: true });
+ensurePrivateDirectory(outputDirectory);
 const output = resolve(outputDirectory, `conversation-${mode}-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
-await writeFile(output, `${JSON.stringify(summary, null, 2)}\n`);
+writePrivateJsonFileAtomic(output, summary);
 console.log(`\nPass rate: ${(summary.totals.passRate * 100).toFixed(1)}% (${passed}/${selectedCases.length})`);
 console.log(`Critical trust pass rate: ${summary.critical.passRate === null ? "n/a" : `${(summary.critical.passRate * 100).toFixed(1)}% (${summary.critical.passed}/${summary.critical.total})`}`);
 console.log(`Average latency: ${summary.averageLatencyMs === null ? "n/a" : `${(summary.averageLatencyMs / 1000).toFixed(1)}s`}`);

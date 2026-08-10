@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { ensurePrivateDirectory, ensurePrivateFile } from "./private-storage.ts";
 import {
   AlignmentType,
   Document,
@@ -272,7 +273,7 @@ export async function createWordArtifact(brief: WordDocumentBrief, draft: WordDr
   validateWordDraftForBrief(brief, draft);
   const id = randomUUID();
   const directory = resolve(artifactsRoot, id);
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  ensurePrivateDirectory(directory);
   try {
   options.signal?.throwIfAborted();
   const children: Array<Paragraph | Table> = [
@@ -376,22 +377,31 @@ export async function runPreviewCommand(command: string, args: string[], signal?
 
 async function renderPreview(documentPath: string, directory: string, checks: QualityCheck[], signal?: AbortSignal) {
   const renderHome = resolve(directory, "render-home");
-  mkdirSync(renderHome, { recursive: true });
-  const officeStatus = await runPreviewCommand("soffice", [`-env:UserInstallation=${pathToFileURL(renderHome).href}`, "--headless", "--convert-to", "pdf", "--outdir", directory, documentPath], signal);
   const pdfPath = resolve(directory, `${basename(documentPath, ".docx")}.pdf`);
-  if (officeStatus !== 0 || !existsSync(/* turbopackIgnore: true */ pdfPath)) {
-    checks.push({ id: "visual-review", label: "Visual preview", status: "warning", detail: "LibreOffice rendering is unavailable; inspect the DOCX in Word before final use." });
-    return 0;
+  ensurePrivateDirectory(renderHome);
+  try {
+    const officeStatus = await runPreviewCommand("soffice", [`-env:UserInstallation=${pathToFileURL(renderHome).href}`, "--headless", "--convert-to", "pdf", "--outdir", directory, documentPath], signal);
+    if (officeStatus !== 0 || !existsSync(/* turbopackIgnore: true */ pdfPath)) {
+      checks.push({ id: "visual-review", label: "Visual preview", status: "warning", detail: "LibreOffice rendering is unavailable; inspect the DOCX in Word before final use." });
+      return 0;
+    }
+    ensurePrivateFile(pdfPath);
+    const rasterStatus = await runPreviewCommand("pdftoppm", ["-png", "-r", "110", pdfPath, resolve(directory, "preview")], signal);
+    if (rasterStatus !== 0) {
+      checks.push({ id: "visual-review", label: "Visual preview", status: "warning", detail: "The PDF rendered, but page images could not be created." });
+      return 0;
+    }
+    let pages = 0;
+    while (existsSync(/* turbopackIgnore: true */ resolve(directory, `preview-${pages + 1}.png`))) {
+      pages += 1;
+      ensurePrivateFile(resolve(directory, `preview-${pages}.png`));
+    }
+    checks.push({ id: "visual-review", label: "Rendered preview", status: pages ? "passed" : "warning", detail: pages ? `${pages} page${pages === 1 ? "" : "s"} rendered locally for review.` : "No preview pages were produced." });
+    return pages;
+  } finally {
+    rmSync(renderHome, { recursive: true, force: true });
+    rmSync(pdfPath, { force: true });
   }
-  const rasterStatus = await runPreviewCommand("pdftoppm", ["-png", "-r", "110", pdfPath, resolve(directory, "preview")], signal);
-  if (rasterStatus !== 0) {
-    checks.push({ id: "visual-review", label: "Visual preview", status: "warning", detail: "The PDF rendered, but page images could not be created." });
-    return 0;
-  }
-  let pages = 0;
-  while (existsSync(/* turbopackIgnore: true */ resolve(directory, `preview-${pages + 1}.png`))) pages += 1;
-  checks.push({ id: "visual-review", label: "Rendered preview", status: pages ? "passed" : "warning", detail: pages ? `${pages} page${pages === 1 ? "" : "s"} rendered locally for review.` : "No preview pages were produced." });
-  return pages;
 }
 
 export function removeWordArtifact(id: string) {

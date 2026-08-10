@@ -207,6 +207,22 @@ test("HTTP failures terminalize a turn without treating the error body as an ans
   assert.deepEqual(conversations.getConversation(conversation.id)?.messages, []);
 });
 
+test("persists a visible model response resource limit as its typed terminal failure", async () => {
+  const { conversation, turnId } = startTurn("Keep oversized local output bounded.");
+  const response = Response.json({
+    error: "The local model response exceeded Rangabot's safe output limit.",
+    code: "resource-limit",
+  }, { status: 502 });
+  await recordFailedTurnResponse(response, databaseCallbacks(turnId));
+
+  const turn = turns.getConversationTurn(turnId);
+  assert.equal(turn?.status, "failed");
+  assert.equal(turn?.failureCode, "resource-limit");
+  assert.match(turn?.failureMessage ?? "", /safe output limit/);
+  assert.equal(turn?.assistantMessage, null);
+  assert.deepEqual(conversations.getConversation(conversation.id)?.messages, []);
+});
+
 test("an aborted HTTP failure preserves the absolute deadline as a timeout", async () => {
   const { conversation, turnId } = startTurn("Preserve this deadline failure.");
   const timeout = new AbortController();

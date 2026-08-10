@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { arch, cpus, platform, totalmem } from "node:os";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { issueAuthorizedAnalyticsRequest } from "../lib/analytics-pack-control.ts";
 import { runAnalyticsExpertPack } from "../lib/analytics-expert-pack.ts";
@@ -17,6 +17,7 @@ import { completeJsonWithOllama } from "../lib/providers/ollama.ts";
 import type { ChatMessage } from "../lib/providers/types.ts";
 import type { SqlProposal } from "../lib/sql-proposals.ts";
 import { executeReadOnlySql, inspectDatasetIdentity, inspectDatasetSchema, type SqlExecutionResult } from "../lib/sql-runtime.ts";
+import { ensurePrivateDirectory, ensurePrivateFile, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
 
 export type ExpectedAnalyticalPlan = {
   operation?: string;
@@ -192,10 +193,14 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
     },
   };
   const outputDirectory = resolve(definition.outputDirectory ?? "data/evaluations/results"); const databasePath = resolve(outputDirectory, definition.databaseName);
-  mkdirSync(dirname(databasePath), { recursive: true }); if (existsSync(databasePath)) unlinkSync(databasePath);
+  ensurePrivateDirectory(outputDirectory); if (existsSync(databasePath)) unlinkSync(databasePath);
   const instance = await DuckDBInstance.create(databasePath); const connection = await instance.connect();
-  try { await connection.run(definition.setupSql); } finally { connection.closeSync(); instance.closeSync(); }
-  const dataset: ApprovedDataset = { id: definition.suite, name: definition.databaseName, path: databasePath, format: "duckdb", sizeBytes: 0, addedAt: new Date().toISOString() };
+  try { await connection.run(definition.setupSql); } finally { connection.closeSync(); instance.closeSync(); ensurePrivateFile(databasePath); }
+  const datasetIdentity = await inspectDatasetIdentity(databasePath);
+  const dataset: ApprovedDataset = {
+    id: definition.suite, name: definition.databaseName, path: databasePath, format: "duckdb",
+    sizeBytes: datasetIdentity.sizeBytes, addedAt: new Date().toISOString(), approvalVersion: 2, fileIdentity: datasetIdentity.fileIdentity,
+  };
   const schema = await inspectDatasetSchema(databasePath); const results = [];
   // Validate every reference calculation before invoking the model. A broken
   // evaluator must fail the suite, never count as a Rangabot failure.
@@ -308,7 +313,7 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
       };
     })(),
   };
-  writeFileSync(outputPath, JSON.stringify({ schemaVersion: 3, suite: definition.suite, frozenAt: definition.frozenAt, mode, startedAt, completedAt, provenance, summary, cases: results }, null, 2));
+  writePrivateJsonFileAtomic(outputPath, { schemaVersion: 3, suite: definition.suite, frozenAt: definition.frozenAt, mode, startedAt, completedAt, provenance, summary, cases: results });
   const passed = summary.passed;
   const label = definition.evidenceKind === "development" ? "Development suite" : "Frozen holdout";
   console.log(`\n${label} (${mode}): ${passed}/${results.length} passed.`); console.log(`Private result: ${outputPath}`);

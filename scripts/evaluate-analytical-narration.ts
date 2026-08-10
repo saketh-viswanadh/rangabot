@@ -1,4 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { AdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
 import type { AnalyticalPlan } from "../lib/analytical-plan.ts";
@@ -11,6 +10,7 @@ import {
   type VerifiedAnalyticalNarrationAudit,
 } from "../lib/analytical-narration.ts";
 import type { SqlExecutionResult } from "../lib/sql-runtime.ts";
+import { ensurePrivateDirectory, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
 
 const suite = "analytical-narration-frozen-v1";
 const runnerVersion = "1.0.0";
@@ -644,9 +644,9 @@ const report = {
   negative: { passed: negativePassed, total: negativeResults.length, mutations, results: negativeResults },
 };
 
-await mkdir(outputDirectory, { recursive: true });
+ensurePrivateDirectory(outputDirectory);
 const outputPath = resolve(outputDirectory, `${suite}-${completedAt.replace(/[:.]/g, "-")}.json`);
-await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+writePrivateJsonFileAtomic(outputPath, report);
 
 console.log(`Frozen analytical narration evaluator ${suite} (${cases.length} canonical cases + ${invalidShapeCases.length} invalid-shape cases, 0 model calls)`);
 console.log(`Positive canonical checks: ${positivePassed}/${positiveResults.length}`);

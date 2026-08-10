@@ -1,12 +1,21 @@
-# Official mastery scores and contributor recognition require maintainer review.
+# Official mastery files request maintainer review; the trusted metadata gate
+# enforces the owner-controlled label once its check is required on main.
+/.github/CODEOWNERS @saketh-viswanadh
+/.github/workflows/ @saketh-viswanadh
+/.github/ISSUE_TEMPLATE/mastery-claim.yml @saketh-viswanadh
+/.github/PULL_REQUEST_TEMPLATE.md @saketh-viswanadh
 /content/rangabot-charter.json @saketh-viswanadh
 /docs/RANGABOT_CHARTER.md @saketh-viswanadh
 /content/path-to-mastery.json @saketh-viswanadh
 /content/mastery-contributors.json @saketh-viswanadh
 /content/mastery-evidence.json @saketh-viswanadh
 /docs/PATH_TO_MASTERY.md @saketh-viswanadh
+/docs/mastery-claims.md @saketh-viswanadh
 /lib/mastery-tree.ts @saketh-viswanadh
 /lib/mastery-contributors.ts @saketh-viswanadh
+/lib/mastery-governance.ts @saketh-viswanadh
 /scripts/check-mastery-evidence.ts @saketh-viswanadh
+/scripts/check-mastery-governance.ts @saketh-viswanadh
 /scripts/generate-charter.ts @saketh-viswanadh
 /scripts/generate-mastery-tree.ts @saketh-viswanadh
+/tests/mastery-governance-workflow.test.ts @saketh-viswanadh

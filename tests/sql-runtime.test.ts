@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -36,6 +36,52 @@ test("caps result rows and records truncation", async () => {
   assert.equal(result.rows.length, 200);
   assert.equal(result.receipt.truncated, true);
   assert.equal(result.receipt.rowLimit, 200);
+});
+
+test("fails visibly when SQL result dimensions or values exceed transfer budgets", async (context) => {
+  const path = fixture("resource-limits.csv", "value\n1\n");
+  const isResourceLimit = (error: unknown) => error instanceof SqlRuntimeError && error.code === "resource-limit";
+
+  await context.test("column count", async () => {
+    const columns = Array.from({ length: 65 }, (_, index) => `${index} AS c${index}`).join(", ");
+    await assert.rejects(() => executeReadOnlySql({ approvedDatasetPath: path, query: `SELECT ${columns}` }), isResourceLimit);
+  });
+  await context.test("string cell", async () => {
+    await assert.rejects(() => executeReadOnlySql({ approvedDatasetPath: path, query: "SELECT repeat('x', 70000) AS payload" }), isResourceLimit);
+  });
+  await context.test("blob cell", async () => {
+    await assert.rejects(() => executeReadOnlySql({ approvedDatasetPath: path, query: "SELECT CAST(repeat('x', 70000) AS BLOB) AS payload" }), isResourceLimit);
+  });
+  await context.test("total result bytes", async () => {
+    await assert.rejects(() => executeReadOnlySql({ approvedDatasetPath: path, query: "SELECT repeat('x', 6000) AS payload FROM range(200)" }), isResourceLimit);
+  });
+});
+
+test("fails visibly instead of silently hiding a schema beyond its column budget", async () => {
+  const root = mkdtempSync(join(tmpdir(), "rangabot-wide-schema-"));
+  const path = join(root, "wide.duckdb");
+  const writer = await DuckDBInstance.create(path);
+  const connection = await writer.connect();
+  try {
+    const columns = Array.from({ length: 501 }, (_, index) => `c${index} INTEGER`).join(", ");
+    await connection.run(`CREATE TABLE wide (${columns})`);
+  } finally {
+    connection.closeSync(); writer.closeSync();
+  }
+  try {
+    await assert.rejects(
+      () => inspectDatasetSchema(path),
+      (error: unknown) => error instanceof SqlRuntimeError && error.code === "resource-limit",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runs the isolated SQL worker with a bounded JavaScript heap and JSON IPC", () => {
+  const runtime = readFileSync(new URL("../lib/sql-runtime.ts", import.meta.url), "utf8");
+  assert.match(runtime, /execArgv:\s*\[`--max-old-space-size=\$\{workerHeapMb\}`\]/);
+  assert.match(runtime, /serialization:\s*"json"/);
 });
 
 test("validates the approved dataset boundary", () => {
