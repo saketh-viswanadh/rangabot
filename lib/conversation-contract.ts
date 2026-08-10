@@ -1,4 +1,5 @@
 import type { ChatMessage } from "./providers/types.ts";
+import { deriveSemanticTaskFrame } from "./conversation-task-frame.ts";
 
 export type ListConstraint = { count: number; style: "numbered" | "bullets" | "outline" };
 export type VerifiedReasoningFact = { statement: string; requiredTerms: string[] };
@@ -22,6 +23,7 @@ export type AnswerContract = {
   premiseVerification: boolean;
   falseCausalPremise: boolean;
   missingSourceMaterial: boolean;
+  finishedTextOnly: boolean;
   requiredSubject?: string;
   verifiedReasoningFacts: VerifiedReasoningFact[];
 };
@@ -48,10 +50,15 @@ export function deriveVerifiedReasoningFacts(request: string): VerifiedReasoning
       facts.push({ statement: `Verified speedup calculation: ${compactNumber(original)} / ${compactNumber(factor)} = ${result} ${speedup[2].toLowerCase()}.`, requiredTerms: [result] });
     }
   }
-  const imbalance = request.match(/\b(\d+(?:\.\d+)?)%\s+accuracy[\s\S]{0,100}?\b(\d+(?:\.\d+)?)%\s+(?:of\s+)?(?:the\s+)?(?:cases?\s+are\s+)?negative\b/i);
-  if (imbalance && Number(imbalance[1]) === Number(imbalance[2])) {
-    const baseline = compactNumber(Number(imbalance[2]));
-    facts.push({ statement: `Verified class-baseline check: predicting every case as negative also gives ${baseline}% accuracy, so assess the positive class with precision and recall.`, requiredTerms: [baseline, "negative", "precision", "recall"] });
+  const accuracy = request.match(/\b(\d+(?:\.\d+)?)%\s+accuracy\b/i);
+  const classShare = request.match(/\b(\d+(?:\.\d+)?)%\s+(?:of\s+)?(?:the\s+)?(?:cases?|examples?|records?|observations?)\s+(?:are|is)\s+([\p{L}][\p{L}\p{N}_-]{0,40})\b/iu);
+  const explicitlyBinary = /\b(?:binary|two[- ]class)\b/i.test(request);
+  if (accuracy && classShare && explicitlyBinary) {
+    const share = Number(classShare[1]);
+    if (Number.isFinite(share) && share >= 0 && share <= 100) {
+      const baseline = compactNumber(Math.max(share, 100 - share));
+      facts.push({ statement: `Verified majority-class baseline: always predicting the majority class yields ${baseline}% accuracy; compare the stated ${compactNumber(Number(accuracy[1]))}% accuracy against that baseline and inspect class-specific errors.`, requiredTerms: [baseline, "baseline"] });
+    }
   }
   return facts;
 }
@@ -63,6 +70,7 @@ export function latestUserRequest(messages: ChatMessage[]) {
 export function compileAnswerContract(messages: ChatMessage[]): AnswerContract {
   const latestRequest = latestUserRequest(messages);
   const lower = latestRequest.toLowerCase();
+  const taskFrame = deriveSemanticTaskFrame(latestRequest);
   const explicitMaxWords = count(lower.match(/(?:at most|under|in under|no more than|maximum of)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+words?/)?.[1]);
   const qualitativeMax = /\bone\s+(?:warm[, ]+)?practical\s+(?:thing|suggestion)\b|\bone short analogy\b/.test(lower) ? 90
     : /\bsingle most useful next question\b/.test(lower) ? 35
@@ -79,7 +87,7 @@ export function compileAnswerContract(messages: ChatMessage[]): AnswerContract {
   const exactLiteral = latestRequest.match(/(?:reply|respond|answer)(?:\s+with)?\s+exactly\s+one\s+word\s*:\s*([\p{L}\p{N}_-]+)[.!?]*$/iu)?.[1];
   const forbiddenTerms = [...latestRequest.matchAll(/(?:do not|don't)\s+(?:use|include|mention)\s+(?:the\s+word\s+)?["']?([\p{L}\p{N}_-]+)["']?/giu)].map((match) => match[1]);
   const currentLanguage = lower.match(/\buse\s+(python|sql|javascript|typescript|pyspark|r|java)\b/)?.[1];
-  const currentTone = lower.match(/\b(sober|formal|friendly|playful|professional|technical|warm|concise|brief)\b/)?.[1];
+  const currentTone = taskFrame?.tone?.toLowerCase() ?? lower.match(/\b(sober|formal|friendly|playful|professional|technical|warm|concise|brief)\b/)?.[1];
   const choiceMatch = latestRequest.match(/(?:answer|reply)(?:\s+with)?\s+only\s+([\p{L}\p{N}_-]+)\s+or\s+([\p{L}\p{N}_-]+)\s*:/iu);
   const requiredSubject = lower.match(/\bexplain\s+(?:the\s+)?(.+?)(?:\s+to\b|\s+for\b|\s+in\b|[,.?:]|$)/)?.[1]?.trim();
   const premiseVerification = /^(?:since|because|given that|assuming that|as)\b[\s\S]{0,220}\b(?:explain|tell me|show|prove|why)\b/.test(lower);
@@ -104,6 +112,7 @@ export function compileAnswerContract(messages: ChatMessage[]): AnswerContract {
     outlineOnly: /\b(?:only|for now)\b[\s\S]{0,30}\boutline\b/.test(lower),
     premiseVerification,
     falseCausalPremise,
+    finishedTextOnly: taskFrame?.intent === "compose",
     verifiedReasoningFacts,
     missingSourceMaterial: /\b(?:have not|haven't|not)\s+(?:shared|provided|attached|uploaded)\b[\s\S]{0,40}\b(?:data|file|document|values|logs?)\b/.test(lower),
     ...(requiredSubject && !falseCausalPremise && !/^(?:it|this|that|this relationship|that relationship)$/.test(requiredSubject) && requiredSubject.split(/\s+/).length <= 4 ? { requiredSubject } : {}),
@@ -118,7 +127,7 @@ export function semanticContractRepairs(answer: string, contract: AnswerContract
     if (!/\bcorrelation\b[\s\S]{0,30}\b(?:does not|doesn't|cannot|can't|never)\b[\s\S]{0,20}\b(?:prove|establish|show|imply|mean)\b[\s\S]{0,15}\bcaus/i.test(answer)) {
       repairs.push("State explicitly that correlation does not prove causation");
     }
-    if (!/\b(?:confound\w*|common cause|shared (?:cause|factor)|third (?:factor|variable)|temperature|weather|season|summer|heat)\b/i.test(answer)) {
+    if (!/\b(?:confound\w*|common cause|shared (?:cause|factor)|third (?:factor|variable))\b/i.test(answer)) {
       repairs.push("Name a plausible confounder or common cause instead of stopping after rejecting the premise");
     }
   }
@@ -160,6 +169,7 @@ export function formatAnswerContract(contract: AnswerContract): string | null {
   if (contract.falseCausalPremise) rules.push("Correct the premise explicitly: correlation does not prove causation; name a plausible confounder or common cause");
   for (const fact of contract.verifiedReasoningFacts) rules.push(fact.statement);
   if (contract.missingSourceMaterial) rules.push("Ask for the missing source material first; do not ask optional presentation preferences before it is available");
+  if (contract.finishedTextOnly) rules.push("Return only the finished text; no label, wrapper, surrounding quotation marks, preface, explanation, or follow-up offer unless explicitly requested");
   if (!rules.length) return null;
   return `CURRENT-TURN OUTPUT CONTRACT (higher priority than history and memory):\n${rules.map((rule) => `- ${rule}`).join("\n")}\nSilently verify every rule before returning the answer.`;
 }
@@ -183,11 +193,16 @@ export function deterministicContractAnswer(contract: AnswerContract): string | 
 }
 
 export function needsBufferedConformance(contract: AnswerContract) {
-  return Boolean(contract.maxWords || contract.sentenceCount || contract.outlineOnly || contract.allowedLiterals || contract.premiseVerification || contract.falseCausalPremise || contract.verifiedReasoningFacts.length || contract.missingSourceMaterial || (contract.exactWords && contract.commaSeparatedOnly));
+  return Boolean(contract.maxWords || contract.sentenceCount || contract.outlineOnly || contract.allowedLiterals || contract.premiseVerification || contract.falseCausalPremise || contract.verifiedReasoningFacts.length || contract.missingSourceMaterial || contract.finishedTextOnly || (contract.exactWords && contract.commaSeparatedOnly));
 }
 
 export function normalizeContractAnswer(answer: string, contract: AnswerContract): string {
   let trimmed = answer.trim().replace(/^(?:assistant|answer|response)\s*:?\s*(?:\r?\n)+/i, "");
+  const requestedQuotation = /\b(?:quote|quotation|quoted|verbatim)\b/i.test(contract.latestRequest);
+  if (!requestedQuotation && trimmed.startsWith('"') && !trimmed.slice(1).includes('"')) trimmed = trimmed.slice(1).trimStart();
+  if (!requestedQuotation && trimmed.startsWith("“") && !trimmed.slice(1).includes("”")) trimmed = trimmed.slice(1).trimStart();
+  if (!requestedQuotation && trimmed.endsWith('"') && !trimmed.slice(0, -1).includes('"')) trimmed = trimmed.slice(0, -1).trimEnd();
+  if (!requestedQuotation && trimmed.endsWith("”") && !trimmed.slice(0, -1).includes("“")) trimmed = trimmed.slice(0, -1).trimEnd();
   if (contract.allowedLiterals) {
     const match = contract.allowedLiterals.find((literal) => new RegExp(`^${literal}\\b`, "i").test(trimmed));
     if (match) return match;

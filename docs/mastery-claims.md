@@ -42,13 +42,14 @@ SHA and therefore invalidates the old receipt until an authorized maintainer
 removes and reapplies the label. All workflow files, `CODEOWNERS`, and the
 governance checker are themselves protected paths.
 
-This source change does **not** modify GitHub branch protection. After this
-workflow is merged and has run once, the repository owner must add
+PR #100 merged this trusted workflow without executing pull-request code. A
+2026-08-10 repository-settings audit observed
 `Mastery governance / mastery-governance` as a required status check on `main`.
-Until that setting is applied, the workflow is visible audit evidence rather
-than a guaranteed merge gate. CODEOWNERS requests a review, but the GitHub
-branch currently requires zero approving reviews. Requiring a CODEOWNER approval
-remains a future decision after a second trusted maintainer exists.
+GitHub settings are mutable and are not yet represented by durable external-
+audit evidence in the mastery ledger, so current enforcement must be reverified
+independently. CODEOWNERS requests a review, but the GitHub branch currently
+requires zero approving reviews. Requiring a CODEOWNER approval remains a future
+decision after a second trusted maintainer exists.
 
 Contributor handles and optional portraits are stored in the repository; the
 local app never requests profile images from GitHub.

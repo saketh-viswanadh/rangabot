@@ -62,7 +62,7 @@ ${tree.vision}
 
 **Recognized contributors:** ${contributors.contributors.length} · **Merged, attributable node claims:** ${claimCount}
 
-Achievement credit is separate from readiness. It recognizes authored merged work and remains even when a capability is partial or regressed. Official changes use opt-in consent, attributable evidence and an authorized **mastery-approved** label event bound to the exact current pull-request head. Every push invalidates the prior receipt. The trusted metadata-only workflow is not an enforced merge gate until its check is added to main branch protection after merge. CODEOWNERS requests review; an approving review is not enforced by GitHub.
+Achievement credit is separate from readiness. It recognizes authored merged work and remains even when a capability is partial or regressed. Official changes use opt-in consent, attributable evidence and an authorized **mastery-approved** label event bound to the exact current pull-request head. Every push invalidates the prior receipt. A 2026-08-10 settings audit observed the trusted metadata-only workflow's named check as required on main; because GitHub settings are mutable, current enforcement must be reverified independently. CODEOWNERS requests review; an approving review is not enforced by GitHub.
 
 ${sections}
 `;

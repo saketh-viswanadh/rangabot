@@ -4,12 +4,17 @@ import { totalmem } from "node:os";
 import { resolve } from "node:path";
 import modelRegistry from "../config/models.json" with { type: "json" };
 import { ensurePrivateDirectory, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
+import {
+  assessConversationEvaluation,
+  type ConversationEvaluationAssessment,
+  type ConversationEvaluationAssessmentInput,
+} from "../lib/conversation-evaluation-assessment.ts";
 
 type Profile = (typeof modelRegistry.models)[number];
-type ConversationSummary = {
+type ConversationSummary = ConversationEvaluationAssessmentInput & {
   suite: { name: string; version: string };
-  totals: { passed: number; total: number; passRate: number; errors: number };
-  critical: { passed: number; total: number; passRate: number | null };
+  totals: ConversationEvaluationAssessmentInput["totals"] & { passRate: number };
+  critical: ConversationEvaluationAssessmentInput["critical"] & { passRate: number | null };
   averageLatencyMs: number | null;
 };
 
@@ -46,7 +51,7 @@ if (undersized.length && !allowUndersizedMemory) {
 }
 
 const matrixStartedAt = new Date().toISOString();
-const matrix: Array<{ model: string; contextTokens: number; result: string; exitCode: number; summary?: ConversationSummary }> = [];
+const matrix: Array<{ model: string; contextTokens: number; result: string; exitCode: number; summary?: ConversationSummary; assessment?: ConversationEvaluationAssessment }> = [];
 for (const profile of profiles) {
   console.log(`\n=== ${profile.label} (${profile.id}) ===`);
   spawnSync("ollama", ["stop", profile.id], { stdio: "ignore" });
@@ -63,13 +68,16 @@ for (const profile of profiles) {
   process.stderr.write(run.stderr ?? "");
   spawnSync("ollama", ["stop", profile.id], { stdio: "ignore" });
   const result = /Private result:\s*(.+)\s*$/m.exec(run.stdout ?? "")?.[1]?.trim() ?? "";
-  const entry: { model: string; contextTokens: number; result: string; exitCode: number; summary?: ConversationSummary } = {
+  const entry: { model: string; contextTokens: number; result: string; exitCode: number; summary?: ConversationSummary; assessment?: ConversationEvaluationAssessment } = {
     model: profile.id,
     contextTokens: profile.recommendedContextTokens,
     result,
     exitCode: run.status ?? 1,
   };
-  if (result) entry.summary = JSON.parse(readFileSync(result, "utf8")) as ConversationSummary;
+  if (result) {
+    entry.summary = JSON.parse(readFileSync(result, "utf8")) as ConversationSummary;
+    entry.assessment = assessConversationEvaluation(entry.summary);
+  }
   matrix.push(entry);
 }
 
@@ -87,4 +95,4 @@ writePrivateJsonFileAtomic(output, {
   models: matrix,
 });
 console.log(`\nPrivate matrix result: ${output}`);
-if (matrix.some((entry) => entry.exitCode !== 0 || !entry.summary)) process.exitCode = 1;
+if (matrix.some((entry) => entry.exitCode !== 0 || !entry.summary || !entry.assessment?.passed)) process.exitCode = 1;

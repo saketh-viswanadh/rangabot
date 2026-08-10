@@ -37,6 +37,7 @@ data/knowledge/LOCAL_*
 data/knowledge/evaluations/*.private.json
 data/knowledge/evaluations/results/
 data/evaluations/results/
+data/evaluations/reviews/
 work/
 outputs/
 # The public rangabot.com site is maintained in a maintainer-controlled local

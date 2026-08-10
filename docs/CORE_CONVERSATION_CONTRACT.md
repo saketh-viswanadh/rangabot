@@ -1,8 +1,9 @@
 # Core Conversation Contract
 
-Version: 1.2.0
+Version: 1.3.0
 Frozen benchmark: 2026-08-02
 Lifecycle amendment: 2026-08-07
+Semantic task-frame amendment: 2026-08-10
 
 This contract defines what ordinary Rangabot conversation must do regardless of
 which supported local Ollama model is selected. It is an orchestration and
@@ -24,6 +25,12 @@ enter the prompt or answer.
 The model-independent implementation is defined in the
 [Mind & Memory release architecture](MIND_MEMORY_ARCHITECTURE.md). The contract
 is assembled identically for ordinary chat and transformed Scholar prompts.
+
+Before generation, a deterministic semantic task frame may preserve the current
+turn's intent, exact named subject, audience, tone, depth, diagnostic context,
+and directional count change. It treats extracted values as untrusted data and
+adds only broad execution constraints. It must not encode benchmark answers,
+invent domain knowledge, or override the precedence order above.
 
 ## Answer standard
 
@@ -65,7 +72,7 @@ model but do not make a weak model's answer semantically correct.
 
 ## Frozen v1 benchmark
 
-The tracked v1.0.11 suite contains 60 synthetic cases: five cases in each of twelve
+The tracked v1.0.12 suite contains 60 synthetic cases: five cases in each of twelve
 capability groups.
 
 1. Direct usefulness

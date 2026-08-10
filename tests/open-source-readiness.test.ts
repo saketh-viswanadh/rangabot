@@ -49,10 +49,11 @@ test("keeps public demo content synthetic and free of local paths", () => {
 
 test("showcases the current product with privacy-safe maintained captures", () => {
   const readme = readFileSync("README.md", "utf8");
-  for (const image of ["rangabot-product-home.png", "rangabot-product-brief.png", "rangabot-product-mastery.png"]) {
+  for (const image of ["rangabot-product-home.png", "rangabot-product-brief.png"]) {
     assert.match(readme, new RegExp(`docs/media/${image.replace(".", "\\.")}`));
     assert.ok(statSync(`docs/media/${image}`).size > 10_000, `${image} must be a real product capture`);
   }
+  assert.doesNotMatch(readme, /docs\/media\/rangabot-product-mastery\.png/);
   assert.doesNotMatch(readme, /rangabot-dark-teacher\.png/);
 });
 

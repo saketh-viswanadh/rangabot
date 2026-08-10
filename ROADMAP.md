@@ -30,7 +30,7 @@ Current execution order:
 8. **Ordinary-machine proof** — publish reproducible quality, latency, RAM, and
    compatibility profiles across low, medium, and high consumer hardware.
 
-The strict current score is **6/45 fully unlocked capabilities (13%)**. The 51%
+The strict current score is **7/45 fully unlocked capabilities (16%)**. The 52%
 weighted development figure includes half-credit for partial work and must not
 be presented as product readiness.
 
@@ -131,7 +131,7 @@ qualified local model, if any, powers each workflow.
 
 ## Approved
 
-- [ ] Complete the privacy-boundary release candidate: signed same-origin local
+- [x] Complete the privacy-boundary release candidate: signed same-origin local
   API capability, strict loopback Host validation, bounded JSON requests,
   blocked remote model resources, one-generation-per-model scheduling,
   server-owned cancellation, owner-only managed storage, secure SQLite deletes,
@@ -139,15 +139,16 @@ qualified local model, if any, powers each workflow.
   output, crash-recoverable transaction-aware artifact deletion, validated
   staged index-database restore,
   minimized browser DTOs, expanded current-tree/history privacy scanning, and
-  immutable CI action pins are implemented on the candidate branch. The combined
-  deterministic suite passes 470/470 and local lint, typecheck, production
-  build, privacy scan, and complete dependency audit pass; both CI platforms,
-  merge, and the final residual-risk sign-off remain before release.
-- [ ] Finish separating the informational website from the open-source app. The
-  public site remains at `rangabot.com`; current-tree source removal and
-  app-independent CI are implemented on the candidate branch. Merge and verify
-  a durable private website review/deployment workflow before closing this item. A
-  disruptive historical Git rewrite remains a separate maintainer decision.
+  immutable CI action pins merged in PR #100. The combined deterministic suite
+  passed 470/470 with local lint, typecheck, production build, privacy scan, and
+  complete dependency audits; required Ubuntu and Windows checks also passed.
+- [x] Remove the informational website source and dependencies from the current
+  open-source app tree while keeping public `rangabot.com` available. PR #100
+  merged the separation and repository CI is app-independent.
+- [ ] Establish a durable private website source, review, backup, and deployment
+  workflow. The Git-ignored maintainer-local workspace is not a sufficient
+  long-term source-of-truth. A disruptive historical Git rewrite remains a
+  separate maintainer decision.
 
 - [x] Establish a versioned, balanced 60-case synthetic Mind & Memory benchmark and a shared
   model-independent conversation contract for directness, truthfulness,
@@ -161,10 +162,11 @@ qualified local model, if any, powers each workflow.
   guarded bindings/deletion, strict additive migration, and portable text-only
   Markdown. This improves execution integrity for every model; it is not an
   answer-quality score.
-- [ ] Complete the remaining frozen v1.0.11 release gates. The verified-ledger
-  candidate reached 59/60 overall, 22/22 critical, 5/5 reasoning, and 6.5-second
-  mean latency with every category at least 4/5. Repeat all critical cases for
-  this exact candidate and complete blinded human usefulness review.
+- [ ] Complete the frozen v1.0.12 release gates on one exact clean candidate.
+  The 59/60 overall, 22/22 critical, 5/5 reasoning, and 6.5-second result is
+  historical v1.0.11 evidence only. Run the complete v1.0.12 suite, repeat all
+  22 critical cases three times on the same commit/model/context profile, and
+  complete the bound twelve-answer blind-human usefulness review.
 - [x] Add deterministic provider and lifecycle simulations for missing models,
   partial/malformed streams, empty output, cancellation, timeout, ambiguous
   start replay, persistence rollback, duplicate prevention, reload adoption,

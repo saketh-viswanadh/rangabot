@@ -5,6 +5,7 @@ import test from "node:test";
 
 const evaluationScripts = [
   "scripts/analytical-holdout-runner.ts",
+  "scripts/conversation-human-review.ts",
   "scripts/evaluate-analytical-holdout.ts",
   "scripts/evaluate-analytical-narration.ts",
   "scripts/evaluate-conversation.ts",

@@ -774,6 +774,16 @@
       "mergeCommit": "a7dce17230ad023cab5d73995c319d539caaeb92",
       "mergedAt": "2026-08-09T06:39:29Z",
       "contributors": ["saketh-viswanadh"]
+    },
+    {
+      "id": "pr-100",
+      "kind": "pull_request",
+      "reference": "#100",
+      "title": "Secure Rangabot's local privacy boundary and separate website source",
+      "url": "https://github.com/saketh-viswanadh/rangabot/pull/100",
+      "mergeCommit": "a599d8a26ea7a46f7a355b23a2779c9b096ce37d",
+      "mergedAt": "2026-08-10T04:07:14Z",
+      "contributors": ["saketh-viswanadh"]
     }
   ]
 }

@@ -6,8 +6,8 @@ This is the preserved 2026-08-02 release-blocking review of the tracked source t
 dependencies, tests, documentation, and public GitHub configuration. Private
 Knowledge Vault content and generated evaluation answers were not read or
 published. Findings are kept here so cleanup is measurable rather than implied.
-It is not the current privacy-candidate audit; later controls and residual risks
-are recorded in `SECURITY.md`, `CHANGELOG.md`, and `DAILY_PROGRESS.md`.
+It is not the current merged privacy-boundary audit; later controls and residual
+risks are recorded in `SECURITY.md`, `CHANGELOG.md`, and `DAILY_PROGRESS.md`.
 
 ## Verified strengths
 

@@ -4,6 +4,21 @@ Rubric changes are versioned separately from production behavior. A rubric
 repair must explain its effect on comparability; it must never conceal a real
 model or orchestration failure.
 
+## 1.0.12 — 2026-08-10
+
+- `adaptation-04` now accepts “can you” as the same conventional polite request
+  form as “could you”, “would you”, or “please”. The preserved v1.0.11 answer
+  was cooperative and did not use either forbidden unkind term, so the previous
+  vocabulary list was a semantic false negative.
+- The same case now independently requires balanced straight or smart wrapping
+  quotation marks. The preserved answer began with an unmatched quote, so it
+  remains a product-formatting failure after the politeness repair. The retained
+  v1.0.11 complete result therefore still scores 57/60; neither its aggregate nor
+  its release verdict changes.
+- The prompt, category, limits, critical designation, and every acceptance gate
+  are unchanged. Preserved outputs can be rescored under v1.0.12; comparison
+  remains valid when the suite version and this structural check are disclosed.
+
 ## 1.0.11 — 2026-08-02
 
 - Replaced the substring exclusion `- ` in `memory-override-01` with an anchored
