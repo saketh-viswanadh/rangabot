@@ -7,7 +7,7 @@ const workflowPath = ".github/workflows/mastery-governance.yml";
 const workflow = readFileSync(workflowPath, "utf8");
 
 function extractWorkflowScript(source: string): string {
-  const lines = source.split("\n");
+  const lines = source.replace(/\r\n?/g, "\n").split("\n");
   const markerIndex = lines.findIndex((line) => /^\s+script: \|\s*$/.test(line));
   assert.notEqual(markerIndex, -1, "workflow must contain an inline metadata checker");
   const markerIndent = lines[markerIndex].match(/^\s*/)?.[0].length ?? 0;
@@ -119,6 +119,11 @@ async function executeWorkflowScript(options: {
 }
 
 test("mastery governance runs trusted metadata only with one receipt-scoped write permission", () => {
+  assert.equal(
+    extractWorkflowScript(workflow.replace(/\n/g, "\r\n")),
+    extractWorkflowScript(workflow),
+    "workflow extraction must be identical after a Windows CRLF checkout",
+  );
   assert.match(workflow, /^\s*pull_request_target:\s*$/m);
   assert.doesNotMatch(workflow, /^\s*pull_request:\s*$/m);
   assert.doesNotMatch(workflow, /actions\/checkout/i);

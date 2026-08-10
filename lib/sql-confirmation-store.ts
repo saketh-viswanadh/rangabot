@@ -59,7 +59,10 @@ export function writeSqlConfirmationStore(storePath: string, items: SqlConfirmat
   try {
     writeFileSync(/* turbopackIgnore: true */ temporary, `${JSON.stringify(items, null, 2)}\n`, { mode: 0o600 });
     ensurePrivateFile(temporary);
-    const descriptor = openSync(temporary, "r");
+    // Windows requires a write-capable handle for FlushFileBuffers/fsync.
+    // The bytes are already complete; r+ preserves them while keeping the
+    // durability barrier equivalent across supported platforms.
+    const descriptor = openSync(temporary, "r+");
     try { fsyncSync(descriptor); }
     finally { closeSync(descriptor); }
     renameSync(/* turbopackIgnore: true */ temporary, storePath);
