@@ -45,8 +45,8 @@ Answer directly, naturally, and consistently while following current instruction
 
 | Acceptance criterion | Assessment | Merged evidence | Audit note |
 |---|---:|---|---|
-| One complete frozen 60-case candidate reaches at least 90% overall and 100% on critical trust cases | Verified | [#93](https://github.com/saketh-viswanadh/rangabot/pull/93) | Historical merged v1.0.11 evidence is 59/60 overall and 22/22 critical; it does not complete the exact v1.0.12 release decision. |
-| Every capability category reaches at least 80% on that complete candidate | Verified | [#93](https://github.com/saketh-viswanadh/rangabot/pull/93) | Every category reached at least 4/5 in the historical merged v1.0.11 candidate; current v1.0.12 evidence remains open. |
+| One complete frozen 60-case candidate reaches at least 90% overall and 100% on critical trust cases | Verified | [#93](https://github.com/saketh-viswanadh/rangabot/pull/93) | Historical merged v1.0.11 evidence is 59/60 overall and 22/22 critical. The first v1.0.12 exact-candidate result contained a false-positive premise score and is invalid for release; exact v1.0.13 evidence remains open. |
+| Every capability category reaches at least 80% on that complete candidate | Verified | [#93](https://github.com/saketh-viswanadh/rangabot/pull/93) | Every category reached at least 4/5 in the historical merged v1.0.11 candidate; current v1.0.13 evidence remains open. |
 | Critical trust cases pass three complete repetitions on the exact release candidate | Planned | None | — |
 | A blinded human usefulness sample reaches at least 4/5 | Planned | None | — |
 
@@ -759,7 +759,7 @@ Freeze representative suites, preserve failures, version rubric changes, keep pr
 | Balanced versioned public fixtures cover conversation, memory, retrieval, and analysis | Verified | [#46](https://github.com/saketh-viswanadh/rangabot/pull/46) [#64](https://github.com/saketh-viswanadh/rangabot/pull/64) [#80](https://github.com/saketh-viswanadh/rangabot/pull/80) [#90](https://github.com/saketh-viswanadh/rangabot/pull/90) | — |
 | Private answers, real chats, memories, datasets, and books remain ignored | Verified | [#64](https://github.com/saketh-viswanadh/rangabot/pull/64) [#80](https://github.com/saketh-viswanadh/rangabot/pull/80) | — |
 | Rubric repairs, rescoring, checkpoints, and first-run holdouts are documented | Verified | [#48](https://github.com/saketh-viswanadh/rangabot/pull/48) [#70](https://github.com/saketh-viswanadh/rangabot/pull/70) [#89](https://github.com/saketh-viswanadh/rangabot/pull/89) | — |
-| Final core release gates include repeated critical and blinded human review | Partial | [#93](https://github.com/saketh-viswanadh/rangabot/pull/93) | The historical v1.0.11 candidate passed one full run. Exact v1.0.12 full, repeated-critical, and blind-human evidence remains open. |
+| Final core release gates include repeated critical and blinded human review | Partial | [#93](https://github.com/saketh-viswanadh/rangabot/pull/93) | The historical v1.0.11 candidate passed one full run. v1.0.12 was invalidated by a false-positive critical score; exact v1.0.13 full, repeated-critical, and blind-human evidence remains open. |
 
 <a id="external-boundary"></a>
 ### Permissioned external boundary

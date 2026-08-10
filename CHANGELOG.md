@@ -39,7 +39,15 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   separately generated nonduplicate critical runs, and the human packet from
   private source results; neither generated summaries nor a model/Codex review
   can satisfy the gate.
-- The closeout candidate passes 518/518 deterministic tests, memory-selection
+- Closed a critical semantic-governance gap in conversation evaluator v1.0.12:
+  a factually wrong premise answer passed its lexical rule. An expanded regex
+  repair still failed adversarial valid and contradictory paraphrases and was
+  discarded. v1.0.13 instead marks semantic-truth cases for mandatory human
+  review and binds their output from the full run and every critical repetition
+  into the private packet. Automated scoring is explicitly structural, the
+  earlier result is invalid standalone release evidence, and no unsafe
+  same-model rewrite was retained.
+- The closeout candidate passes 523/523 deterministic tests, memory-selection
   precision and recall at 15/15 each, lint, typecheck, production build, privacy
   scanning, and the production dependency audit. End-to-end model and human
   evidence remains pending and is not inferred from these deterministic gates.

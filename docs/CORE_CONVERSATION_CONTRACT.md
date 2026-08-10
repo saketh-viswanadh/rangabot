@@ -72,7 +72,7 @@ model but do not make a weak model's answer semantically correct.
 
 ## Frozen v1 benchmark
 
-The tracked v1.0.12 suite contains 60 synthetic cases: five cases in each of twelve
+The tracked v1.0.13 suite contains 60 synthetic cases: five cases in each of twelve
 capability groups.
 
 1. Direct usefulness
@@ -134,3 +134,6 @@ Most automatic rules are deterministic surface checks. They catch exact format,
 forbidden content, critical phrases, and known factual/calculation outcomes, but
 they do not fully judge helpfulness, nuance, or semantic truth. That is why the
 release gate also requires a blinded human sample and repeated critical cases.
+Cases whose correctness cannot be established by deterministic structural rules
+are explicitly marked for human semantic adjudication; their full-run and every
+repeated critical answer must independently pass that human gate.

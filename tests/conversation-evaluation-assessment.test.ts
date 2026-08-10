@@ -91,7 +91,7 @@ test("ambiguous, duplicate, stale-suite, and internally inconsistent evidence fa
 
   const stale = fullInput();
   stale.suite.version = "1.0.11";
-  assert.match(assessConversationEvaluation(stale).failures.join("\n"), /frozen version 1\.0\.12/);
+  assert.match(assessConversationEvaluation(stale).failures.join("\n"), /frozen version 1\.0\.13/);
 
   const inconsistent = fullInput();
   inconsistent.totals.completed = 59;

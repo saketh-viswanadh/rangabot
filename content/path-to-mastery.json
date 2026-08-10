@@ -36,7 +36,7 @@
               "evidence": [
                 "pr-93"
               ],
-              "note": "Historical merged v1.0.11 evidence is 59/60 overall and 22/22 critical; it does not complete the exact v1.0.12 release decision."
+              "note": "Historical merged v1.0.11 evidence is 59/60 overall and 22/22 critical. The first v1.0.12 exact-candidate result contained a false-positive premise score and is invalid for release; exact v1.0.13 evidence remains open."
             },
             {
               "id": "natural-conversation-2",
@@ -45,7 +45,7 @@
               "evidence": [
                 "pr-93"
               ],
-              "note": "Every category reached at least 4/5 in the historical merged v1.0.11 candidate; current v1.0.12 evidence remains open."
+              "note": "Every category reached at least 4/5 in the historical merged v1.0.11 candidate; current v1.0.13 evidence remains open."
             },
             {
               "id": "natural-conversation-3",
@@ -1567,7 +1567,7 @@
               "evidence": [
                 "pr-93"
               ],
-              "note": "The historical v1.0.11 candidate passed one full run. Exact v1.0.12 full, repeated-critical, and blind-human evidence remains open."
+              "note": "The historical v1.0.11 candidate passed one full run. v1.0.12 was invalidated by a false-positive critical score; exact v1.0.13 full, repeated-critical, and blind-human evidence remains open."
             }
           ],
           "backlog": "Complete the exact-candidate release review"

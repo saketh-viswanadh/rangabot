@@ -490,12 +490,23 @@ documented in the [Mind & Memory release architecture](docs/MIND_MEMORY_ARCHITEC
 
 The final release decision is stricter than one successful run. It requires one
 clean 60-case result from the exact candidate, three separate 22-case critical
-runs from that same commit and model profile, and a twelve-answer blind review
-completed by a person. `npm run conversation:release:gate` recomputes those
+runs from that same commit and model profile, and a fifteen-answer blind review
+completed by a person. The packet contains twelve balanced full-run answers plus
+the three repeated outputs for the case requiring semantic adjudication.
+`npm run conversation:release:gate` recomputes those
 machine and human gates rather than trusting their saved summaries. The frozen
 selection, rating rubric, private-file workflow, and exact commands are in the
 [blind-human review protocol](docs/CONVERSATION_HUMAN_REVIEW.md). No model,
 Rangabot, or Codex review counts as the human gate.
+
+The first exact-candidate v1.0.12 run exposed a critical evaluator false
+positive: a factually wrong premise answer passed its vocabulary rule. A larger
+regex repair still failed adversarial valid and contradictory paraphrases and
+was discarded. v1.0.13 marks semantic-truth cases for mandatory human review and
+binds their outputs from the full run and all three critical repetitions into
+the private packet. The automated score is structural evidence, not proof of
+factual truth; release remains failed until fresh machine evidence and every
+required human semantic rating pass.
 
 `npm run conversation:reviewer:qualify` tests whether the configured local model
 is safe to use as an answer critic. Qualification requires 12/12: six incorrect

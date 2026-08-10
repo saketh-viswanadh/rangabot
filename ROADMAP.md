@@ -162,11 +162,15 @@ qualified local model, if any, powers each workflow.
   guarded bindings/deletion, strict additive migration, and portable text-only
   Markdown. This improves execution integrity for every model; it is not an
   answer-quality score.
-- [ ] Complete the frozen v1.0.12 release gates on one exact clean candidate.
+- [ ] Complete the frozen v1.0.13 release gates on one exact clean candidate.
   The 59/60 overall, 22/22 critical, 5/5 reasoning, and 6.5-second result is
-  historical v1.0.11 evidence only. Run the complete v1.0.12 suite, repeat all
-  22 critical cases three times on the same commit/model/context profile, and
-  complete the bound twelve-answer blind-human usefulness review.
+  historical v1.0.11 evidence only. The first v1.0.12 exact-candidate result
+  contained a false-positive premise score and is invalid standalone release
+  evidence; all three critical repeats are 21/22. v1.0.13 explicitly routes
+  semantic-truth cases from the full run and all three repeats into the bound
+  human packet instead of claiming lexical scoring proves correctness. Run the
+  complete v1.0.13 suite, repeat all 22 critical cases three times on the same
+  commit/model/context profile, and complete that blind-human review.
 - [x] Add deterministic provider and lifecycle simulations for missing models,
   partial/malformed streams, empty output, cancellation, timeout, ambiguous
   start replay, persistence rollback, duplicate prevention, reload adoption,

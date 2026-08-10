@@ -15,7 +15,7 @@ import {
 import { conversationEvaluationExitPolicy } from "./conversation-evaluation-assessment.ts";
 
 export const conversationReleaseGatePolicy = {
-  version: "1.2.0",
+  version: "1.3.0",
   suiteName: conversationEvaluationSuite.name,
   suiteSchemaVersion: conversationEvaluationSuite.schemaVersion,
   suiteVersion: conversationEvaluationSuite.version,
@@ -128,11 +128,13 @@ type HumanReviewResult = {
     mean: { passed: boolean; value: number; minimum: number };
     everyItem: { passed: boolean; failures: string[]; minimum: number };
     criticalItems: { passed: boolean; failures: string[]; minimum: number };
+    humanSemanticItems: { passed: boolean; failures: string[]; minimum: number };
     materialTrust: { passed: boolean; failures: string[] };
   };
   items: Array<{
     itemId: string;
     critical: boolean;
+    humanSemanticReviewRequired: boolean;
     rating: number;
     privacyFailure: boolean;
     fabricatedAction: boolean;
@@ -389,6 +391,7 @@ function parseHumanReview(value: unknown): HumanReviewResult {
   const mean = asRecord(gates.mean, `${label}.gates.mean`);
   const everyItem = asRecord(gates.everyItem, `${label}.gates.everyItem`);
   const criticalItems = asRecord(gates.criticalItems, `${label}.gates.criticalItems`);
+  const humanSemanticItems = asRecord(gates.humanSemanticItems, `${label}.gates.humanSemanticItems`);
   const materialTrust = asRecord(gates.materialTrust, `${label}.gates.materialTrust`);
   const attestation = asRecord(root.attestation, `${label}.attestation`);
   const items = asArray(root.items, `${label}.items`).map((entry, index) => {
@@ -396,6 +399,7 @@ function parseHumanReview(value: unknown): HumanReviewResult {
     return {
       itemId: asString(item.itemId, `${label}.items[${index}].itemId`),
       critical: asBoolean(item.critical, `${label}.items[${index}].critical`),
+      humanSemanticReviewRequired: asBoolean(item.humanSemanticReviewRequired, `${label}.items[${index}].humanSemanticReviewRequired`),
       rating: asInteger(item.rating, `${label}.items[${index}].rating`),
       privacyFailure: asBoolean(item.privacyFailure, `${label}.items[${index}].privacyFailure`),
       fabricatedAction: asBoolean(item.fabricatedAction, `${label}.items[${index}].fabricatedAction`),
@@ -433,6 +437,11 @@ function parseHumanReview(value: unknown): HumanReviewResult {
         passed: asBoolean(criticalItems.passed, `${label}.gates.criticalItems.passed`),
         failures: asStringArray(criticalItems.failures, `${label}.gates.criticalItems.failures`),
         minimum: asNumber(criticalItems.minimum, `${label}.gates.criticalItems.minimum`),
+      },
+      humanSemanticItems: {
+        passed: asBoolean(humanSemanticItems.passed, `${label}.gates.humanSemanticItems.passed`),
+        failures: asStringArray(humanSemanticItems.failures, `${label}.gates.humanSemanticItems.failures`),
+        minimum: asNumber(humanSemanticItems.minimum, `${label}.gates.humanSemanticItems.minimum`),
       },
       materialTrust: {
         passed: asBoolean(materialTrust.passed, `${label}.gates.materialTrust.passed`),
@@ -560,16 +569,18 @@ function validateHumanReview(
   review: HumanReviewResult,
   currentCommit: string,
   full: EvaluationSummary,
+  criticalRuns: EvaluationSummary[],
   expectedReview: ReturnType<typeof createBlindReview>,
   failures: string[],
 ) {
   const protocol = conversationHumanReviewProtocol;
-  pushMismatch(failures, review.schemaVersion === 2, "human review: unsupported result schema.");
+  pushMismatch(failures, review.schemaVersion === 3, "human review: unsupported result schema.");
   pushMismatch(failures, review.protocolVersion === protocol.version, "human review: protocol version does not match the frozen reviewer.");
   pushMismatch(failures, review.auditedCommit === currentCommit, "human review: audited commit is not the current candidate.");
   pushMismatch(failures, review.suiteVersion === conversationReleaseGatePolicy.suiteVersion, "human review: suite version does not match the frozen release suite.");
-  pushMismatch(failures, review.packetId === expectedReview.packet.packetId, "human review: packet does not bind to the supplied full result's selected inputs and answers.");
-  pushMismatch(failures, Date.parse(review.reviewedAt) >= Date.parse(full.completedAt), "human review: review predates completion of the supplied full result.");
+  pushMismatch(failures, review.packetId === expectedReview.packet.packetId, "human review: packet does not bind to the supplied full and three critical results' inputs, answers, and provenance.");
+  const evidenceCompletedAt = Math.max(Date.parse(full.completedAt), ...criticalRuns.map((run) => Date.parse(run.completedAt)));
+  pushMismatch(failures, Date.parse(review.reviewedAt) >= evidenceCompletedAt, "human review: review predates completion of the supplied evaluation evidence.");
   pushMismatch(failures, isHumanReviewerIdentityAllowed(review.reviewer), "human review: reviewer identity names an AI, model, bot, or automated agent rather than a human.");
   pushMismatch(
     failures,
@@ -580,25 +591,33 @@ function validateHumanReview(
     "human review: exact human-only, no-automation, answer-key timing attestation is missing or false.",
   );
   pushMismatch(failures, review.passed, "human review: scorer did not pass the candidate.");
-  pushMismatch(failures, review.items.length === capabilities.length, `human review: requires exactly ${capabilities.length} rated items.`);
+  const expectedItemCount = expectedReview.key.items.length;
+  pushMismatch(failures, review.items.length === expectedItemCount, `human review: requires exactly ${expectedItemCount} rated items.`);
   const ids = review.items.map((item) => item.itemId);
   pushMismatch(failures, new Set(ids).size === ids.length, "human review: item IDs are not unique.");
-  const expectedIds = Array.from({ length: capabilities.length }, (_, index) => `R${String(index + 1).padStart(2, "0")}`);
-  pushMismatch(failures, ids.length === expectedIds.length && ids.every((id, index) => id === expectedIds[index]), "human review: item IDs must be exactly R01 through R12 in packet order.");
-  const expectedCritical = new Map(expectedReview.key.items.map((item) => [item.itemId, item.critical]));
-  pushMismatch(failures, review.items.every((item) => expectedCritical.get(item.itemId) === item.critical), "human review: item critical provenance differs from the recomputed blind packet.");
+  const expectedIds = Array.from({ length: expectedItemCount }, (_, index) => `R${String(index + 1).padStart(2, "0")}`);
+  pushMismatch(failures, ids.length === expectedIds.length && ids.every((id, index) => id === expectedIds[index]), `human review: item IDs must be exactly R01 through R${String(expectedItemCount).padStart(2, "0")} in packet order.`);
+  const expectedById = new Map(expectedReview.key.items.map((item) => [item.itemId, item]));
+  pushMismatch(failures, review.items.every((item) => expectedById.get(item.itemId)?.critical === item.critical), "human review: item critical provenance differs from the recomputed blind packet.");
+  pushMismatch(failures, review.items.every((item) => expectedById.get(item.itemId)?.humanSemanticReviewRequired === item.humanSemanticReviewRequired), "human review: semantic-review provenance differs from the recomputed blind packet.");
   const criticalItems = review.items.filter((item) => item.critical);
-  pushMismatch(failures, criticalItems.length === 6, "human review: exactly six selected items must be critical.");
+  const expectedCriticalItemCount = expectedReview.key.items.filter((item) => item.critical).length;
+  pushMismatch(failures, criticalItems.length === expectedCriticalItemCount, `human review: exactly ${expectedCriticalItemCount} selected items must be critical.`);
+  const semanticItems = review.items.filter((item) => item.humanSemanticReviewRequired);
+  const expectedSemanticItems = expectedReview.key.items.filter((item) => item.humanSemanticReviewRequired);
+  pushMismatch(failures, semanticItems.length === expectedSemanticItems.length && semanticItems.length === 4, "human review: all four full-and-repeated semantic outputs must be rated.");
   pushMismatch(failures, review.items.every((item) => item.rating >= 1 && item.rating <= 5), "human review: ratings must be integers from 1 to 5.");
   const actualMean = review.items.length ? review.items.reduce((sum, item) => sum + item.rating, 0) / review.items.length : 0;
   pushMismatch(failures, sameNumber(review.meanRating, actualMean), "human review: mean rating does not match item ratings.");
   pushMismatch(failures, review.meanRating >= protocol.minimumMeanRating, `human review: mean must be at least ${protocol.minimumMeanRating}/5.`);
   pushMismatch(failures, review.items.every((item) => item.rating >= protocol.minimumItemRating), `human review: every item must be at least ${protocol.minimumItemRating}/5.`);
   pushMismatch(failures, criticalItems.every((item) => item.rating >= protocol.minimumCriticalRating), `human review: every critical item must be at least ${protocol.minimumCriticalRating}/5.`);
+  pushMismatch(failures, semanticItems.every((item) => item.rating >= protocol.minimumHumanSemanticRating), `human review: every human-required semantic item must be at least ${protocol.minimumHumanSemanticRating}/5.`);
   pushMismatch(failures, review.items.every((item) => !item.privacyFailure && !item.fabricatedAction && !item.materialTruthFailure), "human review: a material trust failure was recorded.");
   pushMismatch(failures, review.gates.mean.passed && review.gates.mean.minimum === protocol.minimumMeanRating && sameNumber(review.gates.mean.value, review.meanRating), "human review: mean gate is missing, failed, or inconsistent.");
   pushMismatch(failures, review.gates.everyItem.passed && review.gates.everyItem.minimum === protocol.minimumItemRating && review.gates.everyItem.failures.length === 0, "human review: per-item gate is missing, failed, or inconsistent.");
   pushMismatch(failures, review.gates.criticalItems.passed && review.gates.criticalItems.minimum === protocol.minimumCriticalRating && review.gates.criticalItems.failures.length === 0, "human review: critical-item gate is missing, failed, or inconsistent.");
+  pushMismatch(failures, review.gates.humanSemanticItems.passed && review.gates.humanSemanticItems.minimum === protocol.minimumHumanSemanticRating && review.gates.humanSemanticItems.failures.length === 0, "human review: semantic-item gate is missing, failed, or inconsistent.");
   pushMismatch(failures, review.gates.materialTrust.passed && review.gates.materialTrust.failures.length === 0, "human review: material-trust gate is missing, failed, or inconsistent.");
 }
 
@@ -626,8 +645,6 @@ export function evaluateConversationReleaseGate(input: ConversationReleaseGateIn
   }
   try { full = parseEvaluation(input.full, "full"); }
   catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
-  try { expectedReview = createBlindReview(input.full as ConversationEvaluationForReview); }
-  catch (error) { failures.push(`full: cannot recompute blind-review packet: ${error instanceof Error ? error.message : String(error)}`); }
   if (input.criticalRuns.length !== conversationReleaseGatePolicy.criticalRunCount) {
     failures.push(`release gate requires exactly ${conversationReleaseGatePolicy.criticalRunCount} critical-only runs.`);
   } else {
@@ -635,6 +652,17 @@ export function evaluateConversationReleaseGate(input: ConversationReleaseGateIn
       try { return [parseEvaluation(value, `critical run ${index + 1}`)]; }
       catch (error) { failures.push(error instanceof Error ? error.message : String(error)); return []; }
     });
+  }
+  if (input.criticalRuns.length === conversationReleaseGatePolicy.criticalRunCount) {
+    try {
+      expectedReview = createBlindReview(
+        input.full as ConversationEvaluationForReview,
+        input.criticalRuns as ConversationEvaluationForReview[],
+        { full: input.sourceDigests.full, critical: input.sourceDigests.critical },
+      );
+    } catch (error) {
+      failures.push(`human review: cannot recompute four-run blind packet: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
   try { humanReview = parseHumanReview(input.humanReview); }
   catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
@@ -662,7 +690,9 @@ export function evaluateConversationReleaseGate(input: ConversationReleaseGateIn
     const runWindows = [full, ...criticalRuns].map((run) => `${run.startedAt}\0${run.completedAt}`);
     pushMismatch(failures, new Set(runWindows).size === runWindows.length, "full and repeated critical runs must have distinct run windows.");
   }
-  if (humanReview && currentCommit && full && expectedReview) validateHumanReview(humanReview, currentCommit, full, expectedReview, failures);
+  if (humanReview && currentCommit && full && criticalRuns.length === conversationReleaseGatePolicy.criticalRunCount && expectedReview) {
+    validateHumanReview(humanReview, currentCommit, full, criticalRuns, expectedReview, failures);
+  }
 
   const uniqueFailures = [...new Set(failures)];
   return {

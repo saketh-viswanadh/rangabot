@@ -4,6 +4,33 @@ Rubric changes are versioned separately from production behavior. A rubric
 repair must explain its effect on comparability; it must never conceal a real
 model or orchestration failure.
 
+## 1.0.13 — 2026-08-10
+
+- The first exact-candidate v1.0.12 run exposed a semantic false positive in
+  `false-premise-01`: an answer could use correction vocabulary and mention
+  Python and indentation while still claiming that indentation cannot affect
+  execution. The v1.0.12 full run reported 58/60 and 22/22 critical, but its
+  preserved answer was factually wrong. Three separately generated critical
+  runs each scored 21/22 and exposed the same failure cluster.
+- Adversarial work showed that a larger positive-pattern and blacklist rule was
+  not a safe repair: it still false-passed contradictory paraphrases and
+  false-failed valid ones. That draft was discarded rather than frozen.
+- v1.0.13 therefore labels semantic-truth cases that require human adjudication
+  instead of pretending lexical rules prove factual correctness. The bound
+  blind packet includes the flagged output from the complete run and each of
+  the three critical repetitions. All four must receive a human rating of at
+  least 4/5 in addition to the unchanged automated structural gates.
+- The v1.0.12 full result remains 58/60 and 22/22 under its explicitly lexical
+  scorer, while the three critical repeats are each 21/22. Its known false
+  positive makes it invalid standalone release evidence; v1.0.13 changes the
+  release evidence protocol rather than publishing a misleading rescored
+  semantic headline.
+- No production prompt, model-specific branch, or answer fact changed. A
+  lexical same-model repair was tested adversarially, shown able to replace a
+  truthful answer with a confidently false one, and fully reverted. Release
+  status remains **fail** until a fresh exact v1.0.13 full run, three critical
+  repetitions, and the bound human semantic review all pass.
+
 ## 1.0.12 — 2026-08-10
 
 - `adaptation-04` now accepts “can you” as the same conventional polite request

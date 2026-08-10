@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { basename, resolve } from "node:path";
 import {
   conversationHumanReviewAttestationStatement,
@@ -20,11 +21,27 @@ const option = (name: string) => process.argv.find((argument) => argument.starts
 const privateRoot = resolve("data/evaluations");
 const reviewRoot = resolve(privateRoot, "reviews");
 
-function readPrivateJson<T>(path: string): T {
+function rejectUnknownOptions(allowed: ReadonlySet<string>) {
+  const unknown = process.argv.slice(3).find((argument) => {
+    if (!argument.startsWith("--")) return true;
+    return !allowed.has(argument.slice(2).split("=", 1)[0]!);
+  });
+  if (unknown) throw new Error(`Unknown human-review argument: ${unknown}`);
+}
+
+function readPrivateArtifact<T>(path: string): { value: T; sha256: string } {
   const resolved = resolve(path);
   if (!existsSync(resolved)) throw new Error(`Private review input does not exist: ${basename(resolved)}`);
   ensurePrivateFile(resolved, { trustedRoot: privateRoot });
-  return JSON.parse(readFileSync(resolved, "utf8")) as T;
+  const source = readFileSync(resolved);
+  return {
+    value: JSON.parse(source.toString("utf8")) as T,
+    sha256: createHash("sha256").update(source).digest("hex"),
+  };
+}
+
+function readPrivateJson<T>(path: string): T {
+  return readPrivateArtifact<T>(path).value;
 }
 
 function indented(value: string) {
@@ -43,10 +60,19 @@ function packetMarkdown(packet: ReturnType<typeof createBlindReview>["packet"]) 
 }
 
 if (command === "prepare") {
-  const resultPath = option("result");
-  if (!resultPath) throw new Error("Use prepare --result=<complete-private-conversation-result.json>.");
-  const summary = readPrivateJson<ConversationEvaluationForReview>(resultPath);
-  const { packet, key, ratings } = createBlindReview(summary);
+  rejectUnknownOptions(new Set(["full", "critical"]));
+  const fullPaths = process.argv.filter((argument) => argument.startsWith("--full=")).map((argument) => argument.slice(7));
+  const criticalPaths = process.argv.filter((argument) => argument.startsWith("--critical=")).map((argument) => argument.slice(11));
+  if (fullPaths.length !== 1 || criticalPaths.length !== 3) {
+    throw new Error("Use prepare --full=<complete-result.json> --critical=<run-1.json> --critical=<run-2.json> --critical=<run-3.json> in chronological order.");
+  }
+  const full = readPrivateArtifact<ConversationEvaluationForReview>(fullPaths[0]!);
+  const critical = criticalPaths.map((path) => readPrivateArtifact<ConversationEvaluationForReview>(path));
+  const { packet, key, ratings } = createBlindReview(
+    full.value,
+    critical.map((artifact) => artifact.value),
+    { full: full.sha256, critical: critical.map((artifact) => artifact.sha256) },
+  );
   ensurePrivateDirectory(reviewRoot, { trustedRoot: privateRoot });
   const prefix = resolve(reviewRoot, `conversation-blind-${packet.packetId}`);
   writePrivateTextFileAtomic(`${prefix}.md`, packetMarkdown(packet), { trustedRoot: privateRoot });
@@ -56,6 +82,7 @@ if (command === "prepare") {
   console.log(`Ratings template: ${prefix}.ratings.json`);
   console.log(`Private answer key (do not open before rating): ${prefix}.key.json`);
 } else if (command === "score") {
+  rejectUnknownOptions(new Set(["key", "ratings"]));
   const keyPath = option("key");
   const ratingsPath = option("ratings");
   if (!keyPath || !ratingsPath) throw new Error("Use score --key=<private-key.json> --ratings=<completed-ratings.json>.");

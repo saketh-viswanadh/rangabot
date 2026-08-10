@@ -6,17 +6,31 @@
   preserves current-turn intent, exact named subject, audience, tone, depth,
   and diagnostic direction, then supplies broad causal, composition, choice,
   and calculation rules without embedding benchmark answers or domain facts.
-- Versioned the frozen evaluator to v1.0.12. The politeness rule now accepts the
-  conventional phrase “can you”, while an independent balanced-quotation check
-  preserves the genuine formatting failure in the retained answer. No case,
-  critical designation, count, or acceptance threshold was weakened.
-- Added blind-human protocol 1.2.0 and release-gate policy 1.2.0. The gate binds
+- Versioned the frozen evaluator through v1.0.13. v1.0.12 repaired a politeness
+  false negative while preserving the genuine unbalanced-quotation failure.
+  The first exact-candidate run then exposed a more serious false positive:
+  `false-premise-01` passed an answer that still denied indentation can affect
+  execution. An expanded regex repair still failed adversarial valid and
+  contradictory paraphrases and was discarded. v1.0.13 instead requires human
+  semantic ratings for that output from the full run and all three critical
+  repetitions; lexical scoring is no longer presented as factual proof.
+- The v1.0.12 full run remains 58/60 and 22/22 under its structural scorer, but
+  its known false positive makes it invalid standalone release evidence; its
+  three critical repetitions are each 21/22. An attempted lexical same-model
+  production repair was adversarially shown to replace a truthful draft with a
+  confidently false one and was fully reverted. No premise answer was
+  hardcoded, no failing run was hidden, and release status is **fail** pending
+  fresh v1.0.13 machine and human evidence.
+- Added blind-human protocol 1.3.0 and release-gate policy 1.3.0. The gate binds
   the exact commit, suite, model/context profile, full result, three separately
-  generated nonduplicate critical runs, and twelve-answer human packet; it
+  generated nonduplicate critical runs, and fifteen-answer human packet. Twelve
+  items balance the full-run capabilities; three append the required semantic
+  case from each repetition. The gate
   recomputes row-level results
   and packet provenance instead of trusting stored summaries. Final machine and
-  human evidence remains pending until the clean candidate is frozen and run.
-- The exact deterministic candidate passed 518/518 tests, memory selection at
+  human evidence remains pending until a clean v1.0.13 candidate is frozen and
+  run.
+- The exact deterministic candidate passed 523/523 tests, memory selection at
   15/15 precision and 15/15 recall, lint, typecheck, the 21-page production
   build, mastery and evaluator validation, the bounded privacy scan, and
   `npm audit --omit=dev` with zero reported vulnerabilities. These checks do not

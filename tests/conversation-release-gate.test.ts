@@ -98,8 +98,16 @@ function summary(rows = resultRows(), criticalOnly = false, run = 0) {
   };
 }
 
-function human(full: ReturnType<typeof summary>) {
-  const { key, ratings } = createBlindReview(full as unknown as ConversationEvaluationForReview);
+function human(
+  full: ReturnType<typeof summary>,
+  criticalRuns: Array<ReturnType<typeof summary>>,
+  digests: ConversationReleaseGateInput["sourceDigests"],
+) {
+  const { key, ratings } = createBlindReview(
+    full as unknown as ConversationEvaluationForReview,
+    criticalRuns as unknown as ConversationEvaluationForReview[],
+    { full: digests.full, critical: digests.critical },
+  );
   const completed: BlindReviewRatings = {
     ...ratings,
     reviewer: "Synthetic human fixture",
@@ -118,17 +126,19 @@ function human(full: ReturnType<typeof summary>) {
 function fixture(): ConversationReleaseGateInput {
   const rows = resultRows();
   const full = summary(rows, false, 1);
+  const criticalRuns = [summary(rows, true, 2), summary(rows, true, 3), summary(rows, true, 4)];
+  const sourceDigests = {
+    full: sourceDigest("full"),
+    critical: [sourceDigest("critical-1"), sourceDigest("critical-2"), sourceDigest("critical-3")],
+    human: sourceDigest("human"),
+  };
   return {
     currentGit: { commit, dirty: false },
     full,
-    criticalRuns: [summary(rows, true, 2), summary(rows, true, 3), summary(rows, true, 4)],
-    humanReview: human(full),
+    criticalRuns,
+    humanReview: human(full, criticalRuns, sourceDigests),
     criticalSourceIds: ["run-1", "run-2", "run-3"],
-    sourceDigests: {
-      full: sourceDigest("full"),
-      critical: [sourceDigest("critical-1"), sourceDigest("critical-2"), sourceDigest("critical-3")],
-      human: sourceDigest("human"),
-    },
+    sourceDigests,
   };
 }
 
@@ -145,7 +155,7 @@ test("accepts a valid SHA-256 Git object-format candidate", () => {
   const full = input.full as ReturnType<typeof summary>;
   full.runtime.git.commit = sha256Commit;
   for (const run of input.criticalRuns as Array<ReturnType<typeof summary>>) run.runtime.git.commit = sha256Commit;
-  input.humanReview = human(full);
+  input.humanReview = human(full, input.criticalRuns as Array<ReturnType<typeof summary>>, input.sourceDigests);
   const decision = evaluateConversationReleaseGate(input);
   assert.equal(decision.passed, true, decision.failures.join("\n"));
 });
@@ -355,11 +365,73 @@ test("release gate rejects automated reviewer identities and false human attesta
 test("rejects replaying a human result against different stochastic answer bytes", () => {
   const input = fixture();
   const full = input.full as ReturnType<typeof summary>;
-  const selectedId = createBlindReview(full as unknown as ConversationEvaluationForReview).key.items[0]!.caseId;
+  const selectedId = createBlindReview(
+    full as unknown as ConversationEvaluationForReview,
+    input.criticalRuns as unknown as ConversationEvaluationForReview[],
+    { full: input.sourceDigests.full, critical: input.sourceDigests.critical },
+  ).key.items[0]!.caseId;
   full.results.find((result) => result.id === selectedId)!.answer += " Different stochastic continuation.";
   const decision = evaluateConversationReleaseGate(input);
   assert.equal(decision.passed, false);
-  assert.match(decision.failures.join("\n"), /packet does not bind to the supplied full result's selected inputs and answers/);
+  assert.match(decision.failures.join("\n"), /packet does not bind to the supplied full and three critical results/);
+});
+
+test("rejects replayed, swapped, and forged repeated semantic evidence", () => {
+  const replayed = fixture();
+  const replayRuns = replayed.criticalRuns as Array<ReturnType<typeof summary>>;
+  const replayAnswer = `${replayRuns[0]!.results.find((result) => result.id === "false-premise-01")!.answer} replay-marker`;
+  replayRuns[0]!.results.find((result) => result.id === "false-premise-01")!.answer = replayAnswer;
+  replayRuns[1]!.results.find((result) => result.id === "false-premise-01")!.answer = replayAnswer;
+  replayed.sourceDigests.critical[0] = sourceDigest("replayed-source-1");
+  replayed.sourceDigests.critical[1] = sourceDigest("replayed-source-2");
+  const replayDecision = evaluateConversationReleaseGate(replayed);
+  assert.equal(replayDecision.passed, false);
+  assert.match(replayDecision.failures.join("\n"), /packet does not bind to the supplied full and three critical results/);
+
+  const swapped = fixture();
+  [swapped.criticalRuns[0], swapped.criticalRuns[1]] = [swapped.criticalRuns[1]!, swapped.criticalRuns[0]!];
+  [swapped.sourceDigests.critical[0], swapped.sourceDigests.critical[1]] = [swapped.sourceDigests.critical[1]!, swapped.sourceDigests.critical[0]!];
+  const swappedDecision = evaluateConversationReleaseGate(swapped);
+  assert.equal(swappedDecision.passed, false);
+  assert.match(swappedDecision.failures.join("\n"), /chronological, non-overlapping order/);
+
+  const forged = fixture();
+  const forgedRuns = forged.criticalRuns as Array<ReturnType<typeof summary>>;
+  forgedRuns[2]!.results.find((result) => result.id === "false-premise-01")!.answer =
+    "The premise is mistaken. Python may be interpreted, but indentation has no influence on program behavior and is merely visual. forged-marker";
+  forged.sourceDigests.critical[2] = sourceDigest("forged-source-3");
+  const forgedDecision = evaluateConversationReleaseGate(forged);
+  assert.equal(forgedDecision.passed, false);
+  assert.match(forgedDecision.failures.join("\n"), /packet does not bind to the supplied full and three critical results/);
+});
+
+test("requires at least 4 from a human for every full-and-repeated semantic output", () => {
+  const input = fixture();
+  const { key, ratings } = createBlindReview(
+    input.full as ConversationEvaluationForReview,
+    input.criticalRuns as ConversationEvaluationForReview[],
+    { full: input.sourceDigests.full, critical: input.sourceDigests.critical },
+  );
+  const semanticItems = key.items.filter((item) => item.humanSemanticReviewRequired);
+  assert.equal(semanticItems.length, 4);
+  const completed: BlindReviewRatings = {
+    ...ratings,
+    reviewer: "Synthetic human fixture",
+    reviewedAt: "2026-08-10T10:00:00.000Z",
+    attestation: {
+      humanReviewer: true,
+      completedWithoutAutomatedAssistance: true,
+      ratingsFinalizedBeforeKey: true,
+      statement: conversationHumanReviewAttestationStatement,
+    },
+    items: ratings.items.map((item) => ({ ...item, rating: semanticItems.some((semantic) => semantic.itemId === item.itemId) ? 4 : 5 })),
+  };
+  completed.items.find((item) => item.itemId === semanticItems[2]!.itemId)!.rating = 3;
+  input.humanReview = scoreBlindReview(key, completed);
+  const decision = evaluateConversationReleaseGate(input);
+  assert.equal(decision.passed, false);
+  assert.match(decision.failures.join("\n"), /every human-required semantic item must be at least 4\/5/);
+  assert.match(decision.failures.join("\n"), /semantic-item gate/);
 });
 
 test("recomputes critical ratings instead of trusting a forged passing gate boolean", () => {
@@ -402,7 +474,7 @@ test("rejects dirty or stale candidates and requires exactly three critical runs
   const decision = evaluateConversationReleaseGate(input);
   assert.equal(decision.passed, false);
   assert.match(decision.failures.join("\n"), /current Git worktree is dirty/);
-  assert.match(decision.failures.join("\n"), /requires frozen suite 1.0.12/);
+  assert.match(decision.failures.join("\n"), /requires frozen suite 1.0.13/);
   assert.match(decision.failures.join("\n"), /exactly 3 critical-only runs/);
 });
 
