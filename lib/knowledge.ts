@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { extname, resolve } from "node:path";
 import type { DatabaseSync as Database } from "node:sqlite";
 import * as sqliteVec from "sqlite-vec";
 import { getConfiguredEmbeddingModel, getKnowledgeBudgetBytes, getLocalOllamaBaseUrl } from "./local-runtime-config.ts";
+import { ensurePrivateDirectory, hardenPrivateSqliteFiles, preparePrivateSqliteStorage } from "./private-storage.ts";
 
 const serverRequire = createRequire(resolve(process.cwd(), "package.json"));
 const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sqlite");
@@ -29,63 +30,74 @@ function ensureColumn(db: Database, table: string, column: string, definition: s
 
 function getDatabase() {
   if (database) return database;
-  mkdirSync(resolve(knowledgeRoot, "indexes"), { recursive: true });
+  preparePrivateSqliteStorage(activeKnowledgeDatabasePath);
   database = new DatabaseSync(activeKnowledgeDatabasePath, { allowExtension: true });
   try {
-    sqliteVec.load(database);
-    database.enableLoadExtension(false);
-    nativeVectorAvailable = true;
-  } catch {
+    try {
+      sqliteVec.load(database);
+      nativeVectorAvailable = true;
+    } catch {
+      nativeVectorAvailable = false;
+    } finally {
+      database.enableLoadExtension(false);
+    }
+    database.exec(`
+      PRAGMA secure_delete = ON;
+      PRAGMA journal_mode = WAL;
+      CREATE TABLE IF NOT EXISTS documents (
+        id TEXT PRIMARY KEY,
+        path TEXT UNIQUE NOT NULL,
+        title TEXT NOT NULL,
+        format TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        sha256 TEXT NOT NULL,
+        chunk_count INTEGER NOT NULL,
+        ingested_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS chunks (
+        id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL,
+        ordinal INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        embedding TEXT,
+        FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS chunks_document_ordinal_idx ON chunks(document_id, ordinal);
+      CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+        chunk_id UNINDEXED,
+        document_id UNINDEXED,
+        title,
+        content,
+        tokenize = 'porter unicode61'
+      );
+      CREATE TABLE IF NOT EXISTS source_issues (
+        path TEXT PRIMARY KEY,
+        sha256 TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        detected_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS vector_index_meta (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        model TEXT NOT NULL,
+        dimensions INTEGER NOT NULL,
+        chunk_count INTEGER NOT NULL,
+        built_at TEXT NOT NULL
+      );
+    `);
+    ensureColumn(database, "documents", "ingestion_version", "INTEGER NOT NULL DEFAULT 1");
+    ensureColumn(database, "chunks", "heading", "TEXT");
+    ensureColumn(database, "chunks", "section_path", "TEXT");
+    ensureColumn(database, "chunks", "page_start", "INTEGER");
+    ensureColumn(database, "chunks", "page_end", "INTEGER");
+    hardenPrivateSqliteFiles(activeKnowledgeDatabasePath);
+    return database;
+  } catch (error) {
+    try { database.close(); } catch { /* Preserve the initialization error. */ }
+    database = undefined;
     nativeVectorAvailable = false;
+    hardenPrivateSqliteFiles(activeKnowledgeDatabasePath);
+    throw error;
   }
-  database.exec(`
-    PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS documents (
-      id TEXT PRIMARY KEY,
-      path TEXT UNIQUE NOT NULL,
-      title TEXT NOT NULL,
-      format TEXT NOT NULL,
-      size_bytes INTEGER NOT NULL,
-      sha256 TEXT NOT NULL,
-      chunk_count INTEGER NOT NULL,
-      ingested_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS chunks (
-      id TEXT PRIMARY KEY,
-      document_id TEXT NOT NULL,
-      ordinal INTEGER NOT NULL,
-      content TEXT NOT NULL,
-      embedding TEXT,
-      FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
-    );
-    CREATE INDEX IF NOT EXISTS chunks_document_ordinal_idx ON chunks(document_id, ordinal);
-    CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
-      chunk_id UNINDEXED,
-      document_id UNINDEXED,
-      title,
-      content,
-      tokenize = 'porter unicode61'
-    );
-    CREATE TABLE IF NOT EXISTS source_issues (
-      path TEXT PRIMARY KEY,
-      sha256 TEXT NOT NULL,
-      reason TEXT NOT NULL,
-      detected_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS vector_index_meta (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      model TEXT NOT NULL,
-      dimensions INTEGER NOT NULL,
-      chunk_count INTEGER NOT NULL,
-      built_at TEXT NOT NULL
-    );
-  `);
-  ensureColumn(database, "documents", "ingestion_version", "INTEGER NOT NULL DEFAULT 1");
-  ensureColumn(database, "chunks", "heading", "TEXT");
-  ensureColumn(database, "chunks", "section_path", "TEXT");
-  ensureColumn(database, "chunks", "page_start", "INTEGER");
-  ensureColumn(database, "chunks", "page_end", "INTEGER");
-  return database;
 }
 
 function vectorBlob(values: number[]) {
@@ -549,17 +561,17 @@ function directorySize(path: string): number {
 }
 
 export function getKnowledgeStatus() {
-  mkdirSync(knowledgeInbox, { recursive: true });
+  ensurePrivateDirectory(knowledgeInbox);
   const db = getDatabase();
   const documents = db.prepare("SELECT COUNT(*) AS count FROM documents").get() as { count: number };
   const chunks = db.prepare("SELECT COUNT(*) AS count FROM chunks").get() as { count: number };
   const usedBytes = directorySize(knowledgeRoot);
   const sources = getKnowledgeSourceStates();
-  return { root: knowledgeRoot, inbox: knowledgeInbox, budgetBytes: knowledgeBudgetBytes, usedBytes, remainingBytes: Math.max(0, knowledgeBudgetBytes - usedBytes), documents: documents.count, chunks: chunks.count, embeddingModel, sources, incompatible: sources.filter((source) => source.status === "incompatible").length, pending: sources.filter((source) => source.status === "pending").length };
+  return { budgetBytes: knowledgeBudgetBytes, usedBytes, remainingBytes: Math.max(0, knowledgeBudgetBytes - usedBytes), documents: documents.count, chunks: chunks.count, embeddingModel, sources, incompatible: sources.filter((source) => source.status === "incompatible").length, pending: sources.filter((source) => source.status === "pending").length };
 }
 
 export function listInboxFiles() {
-  mkdirSync(knowledgeInbox, { recursive: true });
+  ensurePrivateDirectory(knowledgeInbox);
   const supported = new Set([".pdf", ".docx", ".txt", ".md", ".markdown", ".html", ".htm"]);
   return readdirSync(/* turbopackIgnore: true */ knowledgeInbox, { withFileTypes: true })
     .filter((entry) => entry.isFile() && supported.has(extname(entry.name).toLowerCase()))
@@ -586,4 +598,8 @@ export function closeKnowledgeDatabaseForTests() {
 export function setKnowledgeDatabasePathForTests(path: string) {
   closeKnowledgeDatabaseForTests();
   activeKnowledgeDatabasePath = path;
+}
+
+export function getKnowledgeDatabaseForTests() {
+  return getDatabase();
 }

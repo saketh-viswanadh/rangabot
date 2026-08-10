@@ -1,5 +1,5 @@
 import type { ChatMessage } from "./providers/types.ts";
-import type { ApprovedDataset } from "./datasets.ts";
+import type { DatasetDescriptor } from "./datasets.ts";
 import type { DatasetColumn } from "./sql-runtime.ts";
 import type { SqlProposal } from "./sql-proposals.ts";
 import { focusDatabaseSchema } from "./sql-proposals.ts";
@@ -64,11 +64,11 @@ const baseSchema = {
 };
 
 function requestText(messages: ChatMessage[]) { return [...messages].reverse().find((message) => message.role === "user")?.content.trim() ?? ""; }
-function focusedColumns(messages: ChatMessage[], dataset: ApprovedDataset, columns: DatasetColumn[]) {
+function focusedColumns(messages: ChatMessage[], dataset: DatasetDescriptor, columns: DatasetColumn[]) {
   return dataset.format === "duckdb" ? focusDatabaseSchema(columns, requestText(messages)) : columns.map((column) => ({ ...column, table: "dataset" }));
 }
 
-export function buildAdvancedAnalyticalSchema(messages: ChatMessage[], dataset: ApprovedDataset, columns: DatasetColumn[]) {
+export function buildAdvancedAnalyticalSchema(messages: ChatMessage[], dataset: DatasetDescriptor, columns: DatasetColumn[]) {
   const focused = focusedColumns(messages, dataset, columns);
   const fields = focused.flatMap((column) => column.table ? [`${column.table}.${column.name}`] : []);
   const tables = [...new Set(focused.flatMap((column) => column.table ? [column.table] : []))];
@@ -88,7 +88,7 @@ export function buildAdvancedAnalyticalSchema(messages: ChatMessage[], dataset: 
   return schema;
 }
 
-export function buildAdvancedAnalyticalMessages(messages: ChatMessage[], dataset: ApprovedDataset, columns: DatasetColumn[]): ChatMessage[] {
+export function buildAdvancedAnalyticalMessages(messages: ChatMessage[], dataset: DatasetDescriptor, columns: DatasetColumn[]): ChatMessage[] {
   const request = requestText(messages); const focused = focusedColumns(messages, dataset, columns);
   const schema = focused.map((column) => `- ${column.table}.${column.name}: ${column.type}`).join("\n");
   return [

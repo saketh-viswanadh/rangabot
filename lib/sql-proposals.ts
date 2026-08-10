@@ -1,5 +1,5 @@
 import type { ChatMessage } from "./providers/types.ts";
-import type { ApprovedDataset } from "./datasets.ts";
+import type { DatasetDescriptor } from "./datasets.ts";
 import type { DatasetColumn } from "./sql-runtime.ts";
 import { validateSqlPreviewQuery } from "./sql-confirmations.ts";
 
@@ -83,7 +83,7 @@ export function parseSqlProposal(raw: string): SqlProposal {
   return { action: "query", query: validateSqlPreviewQuery(candidate.query), explanation: candidate.explanation.trim() };
 }
 
-export function buildSqlProposalMessages(messages: ChatMessage[], dataset: ApprovedDataset, columns: DatasetColumn[]): ChatMessage[] {
+export function buildSqlProposalMessages(messages: ChatMessage[], dataset: DatasetDescriptor, columns: DatasetColumn[]): ChatMessage[] {
   const request = [...messages].reverse().find((message) => message.role === "user")?.content.trim() ?? "";
   const focusedColumns = dataset.format === "duckdb" ? focusDatabaseSchema(columns, request) : columns;
   const schema = focusedColumns.map((column) => `- ${column.table ? `${JSON.stringify(column.table)}.` : ""}${JSON.stringify(column.name)}: ${column.type}`).join("\n");

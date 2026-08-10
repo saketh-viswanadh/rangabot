@@ -175,6 +175,7 @@ export function wrapSuccessfulTurnResponse(response: Response, callbacks: TurnLi
 
 function statusFailureCode(status: number): ConversationTurnFailureCode {
   if (status === 499) return "cancelled";
+  if (status === 429) return "busy";
   if (status === 504) return "timeout";
   if (status === 503) return "unavailable";
   if (status >= 400 && status < 500) return "invalid-request";
@@ -187,7 +188,7 @@ export async function recordFailedTurnResponse(response: Response, callbacks: Tu
   try {
     const body = (await response.clone().json()) as { error?: unknown; code?: unknown };
     if (typeof body.error === "string" && body.error.trim()) message = body.error.slice(0, 500);
-    if (typeof body.code === "string" && (["unavailable", "model-missing", "timeout", "cancelled", "http", "empty-output", "invalid-stream", "invalid-request", "internal", "interrupted"] as string[]).concat(expertPackFailureCodes).includes(body.code)) {
+    if (typeof body.code === "string" && (["unavailable", "model-missing", "busy", "timeout", "cancelled", "http", "empty-output", "invalid-stream", "resource-limit", "invalid-request", "internal", "interrupted"] as string[]).concat(expertPackFailureCodes).includes(body.code)) {
       code = body.code as ConversationTurnFailureCode;
     }
   } catch {

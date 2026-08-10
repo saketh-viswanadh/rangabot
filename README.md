@@ -18,6 +18,10 @@ mandatory cloud account, paid API, or specialized machine.
 > [the Core Conversation Contract](docs/CORE_CONVERSATION_CONTRACT.md); a merged
 > feature is not automatically a mastered capability.
 
+Project site: [rangabot.com](https://rangabot.com). The site is public, but its
+maintainer-controlled publishing source is intentionally not included here because it is not
+needed to build, run, audit, or contribute to the open-source application.
+
 ## Vision, mission, and north star
 
 Rangabot's canonical [charter](docs/RANGABOT_CHARTER.md) governs product
@@ -63,7 +67,13 @@ memory, repository content, or private Knowledge Vault document is shown.
 2. Run `npm install`.
 3. Run `npm run setup` for guided model selection and private vault setup.
 4. Run `npm run doctor` to verify the installation.
-5. Start with `npm run dev` and open `http://127.0.0.1:3000`.
+5. Start with `npm run dev`, then open the private one-launch URL printed in the
+   terminal. Do not share that URL. Its fragment is removed before Rangabot
+   redirects to the clean local app URL.
+
+Existing installations should run `npm run privacy:repair` once after upgrading
+to enforce owner-only permissions on Rangabot-managed private storage. It does
+not read or delete the stored content.
 
 On macOS, the development launcher uses a one-second polling watcher to avoid
 the desktop session's low file-watcher limit. Linux and Windows retain native
@@ -88,7 +98,9 @@ model server.
 - Server-owned durable turn lifecycle with idempotent start, one pending turn per
   chat, atomic completed-history commits, reload recovery, and inspectable
   cancelled/failed receipts that never pollute later prompts
-- Local SQLite conversation history with reopen, search, pin, Markdown backup/restore and delete controls
+- Local SQLite conversation history with reopen, search, pin, delete controls,
+  and portable Markdown transcript export/import. Markdown carries text and
+  reply references only; it is not a complete conversation backup.
 - Chat-focused sidebar with a compact Brief and Tools header, plus a real
   keyboard-accessible mobile chat/project drawer
 - Title-first conversation focus stack with readable hover expansion and
@@ -115,12 +127,15 @@ model server.
   one locally indexed, cited sentence and an explicit empty state when no safe
   fact is available
 - Offline welcome library with 100 quotes, 100 jokes and 100 thoughts, plus a 60-item no-repeat window
-- No cloud transmission
+- No enabled cloud chat or private-data handoff at runtime
+- Signed same-origin local API boundary, blocked remote Markdown resources,
+  bounded per-model execution and output, and owner-only private storage on
+  POSIX systems
 - Interactive **Path to Mastery** at `/mastery`, generated from the same strict
   capability data used by the public contributor backlog. Version 3 maps all
   work into nine charter-aligned paths: Mind & Memory, Scholar, Analyst,
   Builder, Creator, Personal Companion, Model Steward, Guardian, and Open
-  Platform. Its current strict readiness is 7/45 capabilities; weighted
+  Platform. Its current strict readiness is 6/45 capabilities; weighted
   development progress is not presented as readiness
 
 Conversation data stays in `data/rangabot.db` on this computer. The database and
@@ -135,14 +150,21 @@ sentence to the browser. The feature does not persist that sentence as welcome
 history; only an opaque identifier is retained to reduce immediate repetition.
 
 Repository approvals stay in the private, Git-ignored
-`data/repositories.json` file. Adding a repository records only its canonical
-folder path. Selecting an approved repository opens on-demand code search.
+`data/repositories.json` file. Adding a repository records its canonical folder
+path and server-only filesystem identity. Selecting an approved repository opens
+on-demand code search.
 Rangabot reads only eligible text/code files after an explicit search, skips
-secrets, symlinks, dependencies and build output, and never creates a background
-repository index.
+secrets, symlinks, dependencies and build output, revalidates the approved root
+before each bounded read, and never creates a background repository index.
 An attached preview is visibly listed above the composer before sending. Saved
 chats retain only the repository, file and line-range reference; the raw source
 preview is read again at send time and supplied only to the local Ollama model.
+
+Dataset approvals use a stricter equivalent boundary. Rangabot binds approval
+to the canonical file identity and SHA-256, then runs DuckDB against an
+owner-only read-only snapshot of those exact bytes. A replaced, symlinked, or
+modified file requires explicit reapproval; request snapshots are removed after
+success, failure, timeout, or cancellation.
 
 ### Conversational local analysis
 
@@ -304,6 +326,24 @@ npm run knowledge:vector-index
 This does not re-read books or regenerate embeddings. If the native extension
 cannot load on a supported system, retrieval safely falls back to the existing
 JavaScript similarity scan instead of making the vault unavailable.
+
+Create a private, validated Knowledge **index database** backup with:
+
+```bash
+npm run knowledge:backup
+```
+
+New backups use SQLite's online backup API, receive a SHA-256 integrity sidecar,
+and are checked before completion. Rangabot keeps the newest 12 by default;
+set `RANGABOT_KNOWLEDGE_BACKUP_RETENTION` from 2 to 100 to change that limit.
+This backs up the generated `knowledge.db` index only; original inbox/source
+books are not included and need their own private backup.
+To inspect the latest backup, run `npm run knowledge:rollback` without `--yes`.
+To restore it, stop Rangabot and follow the printed confirmation command. Restore
+validates and stages the backup before replacing the live index, and preserves a
+private recovery copy of the replaced index. The app and rollback command share
+one local runtime lease, so a restore refuses to start while Rangabot is live and
+Rangabot cannot start halfway through a restore.
 
 Measure retrieval quality against the local vault with:
 
@@ -516,13 +556,19 @@ a separately approved disclosure and consent design.
 
 ## Contributing
 
-[Path to Mastery](docs/PATH_TO_MASTERY.md) is the criterion-audited public
-program map and backlog: 9 epics, 45 capabilities, and 146 independently
-assessed criteria. Scores and states are calculated from the governed merged-PR
-[evidence registry](content/mastery-evidence.json), never typed by hand. Official
+[Path to Mastery](docs/PATH_TO_MASTERY.md) is the maintainer-assessed public
+program map and backlog: 9 epics, 45 capabilities, and 161 criteria. Scores and
+states are calculated from maintainer-reviewed criterion assessments in
+[`content/path-to-mastery.json`](content/path-to-mastery.json); cited PRs are
+validated against the merged-PR
+[evidence registry](content/mastery-evidence.json) and prove merge only, not an
+acceptance-gate result. Node/path aggregates are generated rather than typed by
+hand. Official
 contribution claims must use the Mastery contribution issue template, cite
 merged evidence and pass the [official approval process](docs/mastery-claims.md);
-direct self-awards are rejected.
+direct self-awards are rejected by the metadata-only governance workflow. That
+workflow is not an enforced merge gate until its named check is added to main
+branch protection after this change merges.
 
 Rangabot welcomes community development. Read
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), the
@@ -543,9 +589,19 @@ documented clean-clone release rehearsal. Starter-source licensing and the
 local-download-only policy are documented in
 [docs/source-licensing.md](docs/source-licensing.md).
 
+The informational website is maintained in a maintainer-local, Git-ignored and
+currently untracked Sites workspace. Repository CI and contributor setup have no
+website dependency; only merged, synthetic, public-safe evidence may be
+published there. The source is absent from the current tracked tree but remains
+recoverable from public history and older branch/PR copies. A durable private
+source repository is still planned, so the local ignored workspace must be
+backed up independently.
+
 Source code and documentation use Apache-2.0. Original Ranga artwork uses CC BY
 4.0 with attribution. The Rangabot naming policy is documented in
 [BRANDING.md](BRANDING.md).
 
-The latest severity-ranked engineering audit is in
-[docs/code-review.md](docs/code-review.md).
+The 2026-08-02 engineering audit is retained in
+[docs/code-review.md](docs/code-review.md); current privacy-candidate findings
+and residual risks are recorded in this changelog, `DAILY_PROGRESS.md`, and
+`SECURITY.md` until the exact candidate is committed and CI-verified.

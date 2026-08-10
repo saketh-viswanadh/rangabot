@@ -40,10 +40,10 @@ function findNamedVariable(name: string) {
   return match;
 }
 
-function fetchCallsWithin(node: ts.Node) {
+function localApiCallsWithin(node: ts.Node) {
   const calls: ts.CallExpression[] = [];
   function visit(child: ts.Node) {
-    if (ts.isCallExpression(child) && ts.isIdentifier(child.expression) && child.expression.text === "fetch") calls.push(child);
+    if (ts.isCallExpression(child) && ts.isIdentifier(child.expression) && child.expression.text === "localApiFetch") calls.push(child);
     ts.forEachChild(child, visit);
   }
   visit(node);
@@ -195,18 +195,18 @@ test("keeps the empty-chat composer to one compact row", () => {
 });
 
 test("never places welcome preferences or a preferred name in chat request payloads", () => {
-  const requests = fetchCallsWithin(findNamedFunction("sendMessage"));
+  const requests = localApiCallsWithin(findNamedFunction("sendMessage"));
   const requestText = requests.map((call) => call.getText(pageAst)).join("\n");
-  assert.match(requestText, /fetch\("\/api\/chat"/);
+  assert.match(requestText, /localApiFetch\("\/api\/chat"/);
   assert.match(requestText, /body:\s*JSON\.stringify/);
   assert.doesNotMatch(requestText, /welcomePreferences|preferredName|welcomeMode|WELCOME_PREFERENCES_STORAGE_KEY|nickname/i);
 });
 
 test("loads book welcome facts only from the same-origin no-store endpoint", async () => {
-  const request = fetchCallsWithin(findNamedVariable("refreshBookWelcome"))[0];
+  const request = localApiCallsWithin(findNamedVariable("refreshBookWelcome"))[0];
   assert.ok(request, "Missing book welcome request");
   const requestText = request.getText(pageAst);
-  assert.match(requestText, /fetch\(`\/api\/knowledge\/welcome/);
+  assert.match(requestText, /localApiFetch\(`\/api\/knowledge\/welcome/);
   assert.match(requestText, /cache:\s*"no-store"/);
   assert.doesNotMatch(requestText, /https?:\/\//);
 

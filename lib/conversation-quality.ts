@@ -1,6 +1,6 @@
 import type { AnswerContract } from "./conversation-contract.ts";
 import { latestUserRequest, normalizeContractAnswer, semanticContractRepairs } from "./conversation-contract.ts";
-import type { ChatMessage, GenerationOptions } from "./providers/types.ts";
+import { ProviderError, type ChatMessage, type GenerationOptions } from "./providers/types.ts";
 
 export type ReviewStatus = "skipped" | "passed" | "revised" | "invalid-review" | "rejected-revision";
 export type ReviewedAnswer = { answer: string; status: ReviewStatus; issues: string[] };
@@ -82,7 +82,8 @@ First solve or reason through the request independently, including recomputing e
   let reviewed;
   try {
     reviewed = parseReview(await input.completeJson(reviewMessages, { signal: input.signal, numPredict: 1200, timeoutMs: 120_000, jsonSchema: reviewSchema }));
-  } catch {
+  } catch (error) {
+    if (error instanceof ProviderError && error.code === "resource-limit") throw error;
     return { answer: input.draft, status: "invalid-review", issues: [] };
   }
   if (!reviewed) return { answer: input.draft, status: "invalid-review", issues: [] };

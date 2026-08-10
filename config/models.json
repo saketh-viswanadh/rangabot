@@ -37,7 +37,7 @@
       "downloadSize": "approximately 4.7 GB",
       "contextWindow": "32K Ollama artifact",
       "uses": ["general-chat", "reasoning", "teaching", "coding"],
-      "notes": "Higher-quality general option. On machines below 16 GB, keep it opt-in, run one model at a time, and expect memory pressure; do not make it the automatic default.",
+      "notes": "Larger opt-in general/reasoning comparison profile. It did not demonstrate higher quality on the tested 8 GB M1 and is not recommended there. On machines below 16 GB, run one model at a time and expect memory pressure.",
       "upstream": "https://ollama.com/library/qwen2.5",
       "licenseReview": "Review the exact upstream model variant and license before use."
     }

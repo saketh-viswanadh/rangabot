@@ -9,6 +9,28 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Added a signed per-launch local browser capability, strict loopback Host and
+  same-origin enforcement, bounded JSON mutations, non-cacheable private APIs,
+  a restrictive browser resource policy, and remote-image blocking for model
+  Markdown.
+- Added one-active-generation-per-model scheduling with a bounded abort-aware
+  queue and server-owned turn cancellation, preventing concurrent local-model
+  work from silently exhausting ordinary hardware.
+- Added owner-only managed-storage enforcement, SQLite secure deletion, a
+  non-destructive `privacy:repair` upgrade path, and repository approvals bound
+  to revalidated filesystem identity.
+- Added immutable, owner-only dataset execution snapshots bound to the exact
+  approved device, inode, timestamps, size, and SHA-256. Legacy path-only
+  approvals now require explicit reapproval instead of being silently trusted.
+- Added checksummed online Knowledge index database backups, validated staged
+  restore with a recovery copy, bounded retention, and a cross-process runtime
+  lease that prevents restore from racing a live Rangabot server. Source
+  books/inbox files are not included.
+- Added a trusted mastery-approval receipt that accepts the owner or another
+  write/admin maintainer, binds approval to the exact pull-request head SHA,
+  and invalidates it automatically after every push. Pull-request code is never
+  checked out or executed by the approval workflow.
+
 - Established the canonical Rangabot Charter as a generated, governed source of
   truth for the product vision, mission, personal promise, decision test, twelve
   north-star principles, and ten parts of Rangabot's identity. The same source
@@ -20,14 +42,27 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   backlog.
 - Added the complete public website source to the main Rangabot change set,
   including a Charter route, canonical mastery data imports, ten-route rendered
-  tests, and a charter-aligned 1200×630 social card. Public deployment remains a
-  separate maintainer approval.
+  tests, and a charter-aligned 1200×630 social card during the first publishing
+  iteration. The source was subsequently separated as described under Removed.
 
 ### Changed
 
+- Replaced automatic session issuance on a loopback page visit with a fresh,
+  purpose-separated startup capability. The launcher prints a fragment-bound
+  URL, the browser removes the fragment before an exact same-origin exchange,
+  and Rangabot redirects to a clean URL only after the session is issued.
+- Minimized browser-facing status and allowlist responses so Knowledge Vault
+  roots, inbox locations, dataset paths, and repository device/inode identity
+  remain server-only. Future commits now use the repository's GitHub noreply
+  identity, and third-party CI Actions are pinned to reviewed immutable SHAs.
+- Migrated private evaluation outputs and checkpoints to owner-only atomic
+  writers. SQL-confirmation expiry is now maintained at startup, and private
+  registries reject symbolic links instead of following them.
+
 - Reconciled every cited mastery criterion against merged evidence only. The
-  strict result is 7/45 fully unlocked (16% readiness), 72/161 verified
-  criteria, and 52% weighted development progress. The weighted figure includes
+  strict maintainer-assessed result is 6/45 fully unlocked (13% readiness),
+  69/161 verified
+  criteria, and 51% weighted development progress. The weighted figure includes
   partial work and is never presented as readiness.
 - Remapped founder recognition into 33 evidence-backed claims attached to the
   new capability nodes. Attribution records work performed; it does not unlock
@@ -42,6 +77,18 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - Pinned the transitive production `nanoid` dependency to patched version
   3.3.17 after a new high-severity advisory began failing both CI platforms;
   the vulnerable code path arrived through Next.js's PostCSS dependency.
+
+### Removed
+
+- Removed `website/` from the current open-source Git tree and repository CI.
+  The public `rangabot.com` deployment remains online, while its source is now
+  maintained in a maintainer-local, Git-ignored and untracked Sites workspace with
+  no app dependency. A durable private source repository remains follow-up work.
+  Historical Git objects are unchanged pending a separately approved,
+  contributor-disruptive history rewrite.
+- Removed the unused raw Knowledge Vault passage-search browser endpoint and the
+  legacy stateless chat request path; all generation now uses the durable,
+  cancellable turn lifecycle.
 
 ### Improved
 
@@ -63,10 +110,33 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   and Word rendering. Word preview subprocesses receive TERM then bounded KILL;
   uncommitted artifacts are removed, and chat requests no longer rebuild the
   full native vector index synchronously.
-- On clean implementation commit `f4b3677`, the unchanged 60-case suite passed
+- Bounded Ollama buffered bodies, error bodies, stream wire bytes, partial
+  lines, emitted output, chunks, and lines. Oversized or newline-free hostile
+  streams cancel upstream work and return a typed resource-limit failure rather
+  than consuming memory indefinitely or triggering a fallback retry.
+- Made conversation deletion transaction-aware across SQLite and generated Word
+  artifacts. Exclusive artifacts are first renamed into an owner-only
+  same-filesystem quarantine, restored if the database transaction rolls back,
+  and purged only after commit; interrupted pending batches are resolved against
+  authoritative database references on restart. A cleanup that still cannot
+  finish is reported visibly instead of claiming complete removal. Shared
+  artifact references remain protected.
+- Upgraded dataset approvals from path trust to content-and-filesystem identity.
+  Every query runs against a private read-only snapshot of the exact bytes that
+  were hashed, and that snapshot is removed after success, failure, timeout, or
+  cancellation.
+- Bounded analytical execution beyond row count: the isolated worker now caps
+  JavaScript/DuckDB memory, schema width, result columns, per-cell payload and
+  total IPC result size, surfacing a typed resource-limit failure without using
+  silently truncated evidence.
+- Updated patched transitive dependencies and the reproducible lockfile. Local
+  audits of the candidate lockfile, including development dependencies, report
+  zero vulnerabilities; GitHub must recalculate Dependabot alerts after merge.
+- At historical implementation commit `f4b3677`, the unchanged 60-case suite passed
   59/60 overall and 22/22 critical at 6.5 seconds mean latency. The deterministic
-  project suite passed 368/368 after the final hostile-audit additions. This preserves a
-  conditional pass, not a claim of semantic mastery or completed human review.
+  project suite at that checkpoint passed 368/368. The current privacy candidate
+  has a separate 470/470 deterministic result recorded in `DAILY_PROGRESS.md`.
+  Neither is a claim of semantic mastery or completed human review.
 
 - Corrected the fresh-chat hierarchy after another production-size review.
   The rotating content is now passive text rather than a settings card: the

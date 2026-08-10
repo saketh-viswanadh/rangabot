@@ -10,7 +10,7 @@ import { getConfiguredChatModel } from "./local-runtime-config.ts";
 import { completeJsonWithOllama } from "./providers/ollama.ts";
 import { ProviderError, type ChatMessage, type GenerationOptions } from "./providers/types.ts";
 import type { SqlProposal } from "./sql-proposals.ts";
-import { executeReadOnlySql, inspectDatasetIdentity, inspectDatasetSchema, SqlRuntimeError, type DatasetColumn, type SqlExecutionResult } from "./sql-runtime.ts";
+import { executeReadOnlySql, inspectDatasetIdentity, inspectDatasetSchema, SqlRuntimeError, type DatasetColumn, type DatasetFileIdentity, type SqlExecutionResult } from "./sql-runtime.ts";
 
 function requireManifest(): ExpertPackManifest {
   const installed = getExpertPackManifest("analytics");
@@ -22,10 +22,10 @@ const manifest = requireManifest();
 
 export type AnalyticsPackDependencies = {
   getDataset(id: string): ApprovedDataset | null;
-  inspectIdentity(path: string, options?: { signal?: AbortSignal }): ReturnType<typeof inspectDatasetIdentity>;
-  inspectSchema(path: string, options?: { signal?: AbortSignal }): Promise<DatasetColumn[]>;
+  inspectIdentity(path: string, options?: { signal?: AbortSignal; expectedFileIdentity?: DatasetFileIdentity }): ReturnType<typeof inspectDatasetIdentity>;
+  inspectSchema(path: string, options?: { signal?: AbortSignal; expectedFileIdentity?: DatasetFileIdentity; expectedInputSha256?: string }): Promise<DatasetColumn[]>;
   completeJson(messages: ChatMessage[], options?: GenerationOptions): Promise<string>;
-  executeSql(input: { approvedDatasetPath: string; query: string; expectedInputSha256?: string; signal?: AbortSignal }): Promise<SqlExecutionResult>;
+  executeSql(input: { approvedDatasetPath: string; query: string; expectedFileIdentity?: DatasetFileIdentity; expectedInputSha256?: string; signal?: AbortSignal }): Promise<SqlExecutionResult>;
   configuredModel(): string;
 };
 
@@ -182,9 +182,11 @@ function mappedFailure(request: ExpertPackRequest, error: unknown, phase: PackPh
   if (timedOut(error, signal)) return failure(request, "timeout", phase === "planning" || phase === "narration" ? "The local model or analytical grounding timed out." : "The local analytical runtime timed out.", true, usage);
   if (cancelled(error, signal)) return failure(request, "cancelled", "The Analytics request was stopped.", false, usage);
   const code = failureCode(error);
-  if (error instanceof ProviderError || ["unavailable", "model-missing", "http", "empty-output", "invalid-stream"].includes(code ?? "")) {
+  if (error instanceof ProviderError || ["unavailable", "model-missing", "busy", "http", "empty-output", "invalid-stream", "resource-limit"].includes(code ?? "")) {
     if (code === "model-missing") return failure(request, "model-missing", "The configured local model is not installed.", false, usage);
     if (code === "unavailable") return failure(request, "provider-unavailable", "The local model provider is unavailable.", true, usage);
+    if (code === "busy") return failure(request, "provider-failure", "The selected local model is busy. Try again after the active answer finishes.", true, usage);
+    if (code === "resource-limit") return failure(request, "resource-limit", error instanceof Error ? error.message : "The local model response exceeded the safe output limit.", false, usage);
     return failure(request, "provider-failure", "The local model could not prepare the analysis.", code === "http" || code === "empty-output", usage);
   }
   if (error instanceof SqlRuntimeError || ["resource-limit", "invalid-query", "dataset-changed", "tool-failure"].includes(code ?? "")) {
@@ -227,17 +229,21 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
     usage.permissions.add("approved-dataset:read");
     usage.grantIds.add(datasetGrant.id);
     phase = "identity";
-    const identity = await dependencies.inspectIdentity(dataset.path, { signal: options.signal });
+    const identity = await dependencies.inspectIdentity(dataset.path, { signal: options.signal, expectedFileIdentity: dataset.fileIdentity });
     throwIfCancelled(options.signal);
 
     usage.permissions.add("local-runtime:execute");
     usage.grantIds.add(runtimeGrant.id);
     usage.tools.add("duckdb-readonly");
     phase = "schema";
-    const columns = await dependencies.inspectSchema(dataset.path, { signal: options.signal });
+    const columns = await dependencies.inspectSchema(dataset.path, {
+      signal: options.signal,
+      expectedFileIdentity: dataset.fileIdentity,
+      expectedInputSha256: identity.sha256,
+    });
     throwIfCancelled(options.signal);
     const executeGrounding = async (query: string) => {
-      const grounded = await dependencies.executeSql({ approvedDatasetPath: dataset.path, query, expectedInputSha256: identity.sha256, signal: options.signal });
+      const grounded = await dependencies.executeSql({ approvedDatasetPath: dataset.path, query, expectedFileIdentity: dataset.fileIdentity, expectedInputSha256: identity.sha256, signal: options.signal });
       throwIfCancelled(options.signal);
       validateExecutionReceipt(grounded, identity, query);
       return grounded;
@@ -302,7 +308,7 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
 
     if (!resolvedPlan) throw new Error("The Analytics Pack lost its typed analytical plan.");
     phase = "execution";
-    const result = await dependencies.executeSql({ approvedDatasetPath: dataset.path, query: proposal.query, expectedInputSha256: identity.sha256, signal: options.signal });
+    const result = await dependencies.executeSql({ approvedDatasetPath: dataset.path, query: proposal.query, expectedFileIdentity: dataset.fileIdentity, expectedInputSha256: identity.sha256, signal: options.signal });
     throwIfCancelled(options.signal);
     validateExecutionReceipt(result, identity, proposal.query);
     phase = "narration";

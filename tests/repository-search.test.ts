@@ -1,9 +1,21 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { previewRepositoryFile, searchRepository } from "../lib/repository-search.ts";
+
+function approvedRepository(root: string) {
+  const canonicalRoot = realpathSync(root);
+  const metadata = statSync(canonicalRoot, { bigint: true });
+  return {
+    id: "repo",
+    name: "repo",
+    path: canonicalRoot,
+    addedAt: new Date(0).toISOString(),
+    rootIdentity: { device: metadata.dev.toString(), inode: metadata.ino.toString() },
+  };
+}
 
 test("searches only bounded text files and returns line-aware previews", () => {
   const parent = mkdtempSync(join(tmpdir(), "rangabot-code-search-"));
@@ -16,7 +28,7 @@ test("searches only bounded text files and returns line-aware previews", () => {
     writeFileSync(join(root, "node_modules", "ignored.js"), "values.reduce");
     writeFileSync(join(root, "binary.txt"), Buffer.from([0, 1, 2, 3]));
     writeFileSync(join(parent, "outside.ts"), "values.reduce");
-    const repository = { id: "repo", name: "repo", path: root, addedAt: new Date(0).toISOString() };
+    const repository = approvedRepository(root);
     assert.deepEqual(searchRepository(repository, "values.reduce"), [{
       path: join("src", "math.ts"),
       line: 2,
@@ -41,9 +53,44 @@ test("does not search or preview files containing high-confidence secrets", () =
   const root = mkdtempSync(join(tmpdir(), "rangabot-repository-secret-"));
   try {
     writeFileSync(join(root, "config.ts"), 'export const password = "synthetic-secret-value";\n');
-    const repository = { id: "repo", name: "private", path: root, addedAt: new Date().toISOString() };
+    const repository = approvedRepository(root);
     assert.deepEqual(searchRepository(repository, "password"), []);
     assert.throws(() => previewRepositoryFile(repository, "config.ts", 1), /cannot be previewed safely/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("does not follow a nested symbolic link outside the approved root", (context) => {
+  const parent = mkdtempSync(join(tmpdir(), "rangabot-code-search-"));
+  const root = join(parent, "repo");
+  const outsidePath = join(parent, "outside.ts");
+  try {
+    mkdirSync(root);
+    writeFileSync(outsidePath, "export const syntheticOutsideMarker = true;\n");
+    try {
+      symlinkSync(outsidePath, join(root, "linked.ts"), "file");
+    } catch (error) {
+      context.skip(`File symlinks are unavailable on this platform: ${error instanceof Error ? error.message : "unknown error"}`);
+      return;
+    }
+    const repository = approvedRepository(root);
+    assert.deepEqual(searchRepository(repository, "syntheticOutsideMarker"), []);
+    assert.throws(() => previewRepositoryFile(repository, "linked.ts", 1), /outside the approved repository/);
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test("rejects repository access when approval identity is missing or stale", () => {
+  const root = mkdtempSync(join(tmpdir(), "rangabot-code-search-"));
+  try {
+    writeFileSync(join(root, "safe.ts"), "export const safe = true;\n");
+    const current = approvedRepository(root);
+    const legacy = { ...current, rootIdentity: undefined };
+    const stale = { ...current, rootIdentity: { device: current.rootIdentity.device, inode: `${current.rootIdentity.inode}0` } };
+    assert.throws(() => searchRepository(legacy, "safe"), /predates identity checks/);
+    assert.throws(() => previewRepositoryFile(stale, "safe.ts", 1), /changed or was replaced/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

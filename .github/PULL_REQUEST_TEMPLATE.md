@@ -18,7 +18,7 @@
 - [ ] The claim maps to an existing mastery node and describes the contributor's own work.
 - [ ] Every claim cites a merged Rangabot pull request or commit.
 - [ ] The contributor explicitly opted into public recognition and any portrait use.
-- [ ] An official CODEOWNER approved changes to mastery scores or contributor claims.
+- [ ] After the final push, an authorized write/admin maintainer applied (or removed and reapplied) `mastery-approved`; the trusted workflow bound that approval to the current PR head SHA.
 
 ## Privacy and local-first review
 

@@ -1,9 +1,10 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { totalmem } from "node:os";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import { ensurePrivateDirectory, ensurePrivateFile } from "../lib/private-storage.ts";
 
 type Registry = { models: Array<{ id: string; label: string; tier: string; minimumMemoryGb: number; recommendedContextTokens: number; uses: string[]; notes: string }>; embeddingModels: Array<{ id: string; label: string }> };
 const registry = JSON.parse(readFileSync(resolve("config/models.json"), "utf8")) as Registry;
@@ -45,6 +46,7 @@ if (shouldPull) {
 
 const envPath = resolve(".env.local");
 if (existsSync(envPath)) {
+  ensurePrivateFile(envPath);
   console.log("\n.env.local already exists; setup did not overwrite it.");
 } else {
   writeFileSync(envPath, [
@@ -58,6 +60,6 @@ if (existsSync(envPath)) {
   console.log("\nCreated private .env.local configuration.");
 }
 
-for (const directory of ["data/artifacts", "data/knowledge/inbox", "data/knowledge/indexes", "data/knowledge/processed", "data/knowledge/backups"]) mkdirSync(resolve(directory), { recursive: true });
+for (const directory of ["data/artifacts", "data/knowledge/inbox", "data/knowledge/indexes", "data/knowledge/processed", "data/knowledge/backups"]) ensurePrivateDirectory(resolve(directory));
 console.log("Initialized the private Knowledge Vault.");
 console.log("\nNext: add documents to data/knowledge/inbox, run npm run knowledge:ingest, then npm run dev.\n");

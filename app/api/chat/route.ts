@@ -7,7 +7,6 @@ import { buildTeacherMessages, formatKnowledgeContext } from "@/lib/teacher-mode
 import { isCodeContextRequest } from "@/lib/code-context";
 import { buildConversationSummaryFallback, buildWordConversationPrompt, buildWordDraftPrompt, buildWordSourceTranscript, createWordArtifact, isWordConversationSummaryRequest, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, removeWordArtifact, shouldPlanWordDocument, validateWordDraftForBrief, type WordDocumentBrief } from "@/lib/word-documents";
 import { findStoryPack } from "@/lib/story-packs";
-import { isValidChatMessages } from "@/lib/chat-validation";
 import { buildKnowledgeSearchQuery } from "@/lib/knowledge-query-planning";
 import { listMemories } from "@/lib/memories";
 import { buildConversationMessagesWithSelected, buildSemanticRepairMessages, selectConversationMemories } from "@/lib/conversation-orchestration";
@@ -20,15 +19,16 @@ import {
   claimConversationTurn,
   completeConversationTurn,
   failConversationTurn,
-  isValidConversationMode,
   isValidConversationTurnId,
 } from "@/lib/conversation-turns";
 import { recordFailedTurnResponse, recordTurnException, responseFromCompletedAssistant, wrapSuccessfulTurnResponse, type TurnLifecycleCallbacks } from "@/lib/chat-turn-lifecycle";
 import { getConversationTurnTimeoutMs } from "@/lib/local-runtime-config";
+import { registerActiveConversationTurn } from "@/lib/active-conversation-turns";
 
 export const runtime = "nodejs";
 
 function throwIfCancelled(error: unknown, signal?: AbortSignal) {
+  if (error instanceof ProviderError && error.code === "resource-limit") throw error;
   if (!signal?.aborted && !(error instanceof ProviderError && error.code === "cancelled")
     && !(error instanceof DOMException && error.name === "AbortError")) return;
   throw error;
@@ -260,6 +260,7 @@ function providerErrorResponse(error: unknown) {
   if (error instanceof ProviderError) {
     const status = error.code === "timeout" ? 504
       : error.code === "cancelled" ? 499
+        : error.code === "busy" ? 429
         : error.code === "unavailable" || error.code === "model-missing" ? 503
           : 502;
     return NextResponse.json({ error: error.message, code: error.code }, { status });
@@ -276,7 +277,13 @@ function providerErrorResponse(error: unknown) {
   );
 }
 
-function lifecycleCallbacks(turnId: string): TurnLifecycleCallbacks {
+function lifecycleCallbacks(turnId: string, onSettled: () => void = () => undefined): TurnLifecycleCallbacks {
+  let settled = false;
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    onSettled();
+  };
   const removeUncommittedArtifact = (message: ChatMessage | null) => {
     if (!message?.wordArtifact) return message;
     removeWordArtifact(message.wordArtifact.id);
@@ -284,9 +291,18 @@ function lifecycleCallbacks(turnId: string): TurnLifecycleCallbacks {
     return withoutArtifact;
   };
   return {
-    complete: (message) => { completeConversationTurn(turnId, message); },
-    cancel: (partial) => { cancelConversationTurn(turnId, removeUncommittedArtifact(partial)); },
-    fail: (code, message, partial) => { failConversationTurn(turnId, code, message, removeUncommittedArtifact(partial)); },
+    complete: (message) => {
+      try { completeConversationTurn(turnId, message); }
+      finally { finish(); }
+    },
+    cancel: (partial) => {
+      try { cancelConversationTurn(turnId, removeUncommittedArtifact(partial)); }
+      finally { finish(); }
+    },
+    fail: (code, message, partial) => {
+      try { failConversationTurn(turnId, code, message, removeUncommittedArtifact(partial)); }
+      finally { finish(); }
+    },
   };
 }
 
@@ -321,10 +337,16 @@ async function handleVersionedChat(request: Request, body: VersionedChatBody) {
     return NextResponse.json({ error: "The local turn entered an unknown state.", code: "integrity" }, { status: 500 });
   }
 
-  const callbacks = lifecycleCallbacks(body.turnId);
+  let releaseActiveTurn: () => void = () => undefined;
+  const callbacks = lifecycleCallbacks(body.turnId, () => releaseActiveTurn());
   let turnSignal: AbortSignal | undefined;
   try {
-    turnSignal = AbortSignal.any([request.signal, AbortSignal.timeout(getConversationTurnTimeoutMs())]);
+    const activeTurn = registerActiveConversationTurn(body.turnId, [
+      request.signal,
+      AbortSignal.timeout(getConversationTurnTimeoutMs()),
+    ]);
+    releaseActiveTurn = activeTurn.release;
+    turnSignal = activeTurn.signal;
     if (turnSignal.aborted) throw turnSignal.reason ?? new DOMException("Stopped", "AbortError");
     const response = await generateChatResponse({
       messages: claim.messages,
@@ -341,24 +363,6 @@ async function handleVersionedChat(request: Request, body: VersionedChatBody) {
   }
 }
 
-async function handleLegacyChat(request: Request, body: Record<string, unknown>) {
-  const allowedKeys = new Set(["messages", "mode"]);
-  if (!Object.keys(body).every((key) => allowedKeys.has(key))
-    || !isValidChatMessages(body.messages)
-    || body.messages.some((message) => message.role === "system")
-    || (body.mode !== undefined && !isValidConversationMode(body.mode))) {
-    return NextResponse.json({
-      error: "Legacy chat accepts only stateless user and assistant messages. Start a versioned turn for saved conversations.",
-      code: "invalid-request",
-    }, { status: 400 });
-  }
-  try {
-    return await generateChatResponse({ messages: body.messages, mode: body.mode }, request.signal);
-  } catch (error) {
-    return providerErrorResponse(error);
-  }
-}
-
 export async function POST(request: Request) {
   let body: unknown;
   try {
@@ -369,10 +373,7 @@ export async function POST(request: Request) {
   if (!isRecord(body)) {
     return NextResponse.json({ error: "A valid chat request is required.", code: "invalid-request" }, { status: 400 });
   }
-  if ("protocolVersion" in body || "conversationId" in body || "turnId" in body) {
-    return isVersionedChatBody(body)
-      ? handleVersionedChat(request, body)
-      : NextResponse.json({ error: "A valid versioned conversation turn is required.", code: "invalid-request" }, { status: 400 });
-  }
-  return handleLegacyChat(request, body);
+  return isVersionedChatBody(body)
+    ? handleVersionedChat(request, body)
+    : NextResponse.json({ error: "A valid versioned conversation turn is required.", code: "invalid-request" }, { status: 400 });
 }

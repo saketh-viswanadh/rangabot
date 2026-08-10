@@ -2,10 +2,11 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { CraftIcon } from "@/app/components/craft-icon";
+import { localApiFetch } from "@/lib/local-api-client";
 import { formatSqlCell } from "@/lib/sql-display";
 import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
 
-type Dataset = { id: string; name: string; path: string; format: "csv" | "parquet" | "duckdb"; sizeBytes: number; addedAt: string };
+type Dataset = { id: string; name: string; format: "csv" | "parquet" | "duckdb"; sizeBytes: number; addedAt: string };
 type Preview = { confirmationId: string; token: string; expiresAt: string; dataset: { id: string; name: string; format: string; sizeBytes: number; sha256: string }; query: string; limits: { readOnly: true; externalAccess: false; maxRows: number; timeoutMs: number } };
 type Result = { columns: string[]; rows: unknown[][]; receipt: { engine: "duckdb"; input: { filename: string; sha256: string; sizeBytes: number }; querySha256: string; rowLimit: number; returnedRows: number; truncated: boolean; durationMs: number } };
 
@@ -21,7 +22,7 @@ export function SqlAnalysisPanel({ open, onClose, onAttach, initialDraft }: { op
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const refresh = useCallback(async () => {
-    const response = await fetch("/api/datasets", { cache: "no-store" });
+    const response = await localApiFetch("/api/datasets", { cache: "no-store" });
     const data = (await response.json()) as { datasets?: Dataset[]; error?: string };
     if (!response.ok || !data.datasets) return setMessage(data.error ?? "Could not read approved datasets.");
     setDatasets(data.datasets);
@@ -40,7 +41,7 @@ export function SqlAnalysisPanel({ open, onClose, onAttach, initialDraft }: { op
     event.preventDefault();
     if (!datasetPath.trim()) return;
     setBusy(true); setMessage("");
-    const response = await fetch("/api/datasets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: datasetPath.trim() }) });
+    const response = await localApiFetch("/api/datasets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: datasetPath.trim() }) });
     const data = (await response.json()) as { dataset?: Dataset; error?: string };
     setBusy(false);
     if (!response.ok || !data.dataset) return setMessage(data.error ?? "Could not approve this dataset.");
@@ -49,7 +50,7 @@ export function SqlAnalysisPanel({ open, onClose, onAttach, initialDraft }: { op
   }
 
   async function revoke(dataset: Dataset) {
-    const response = await fetch(`/api/datasets/${dataset.id}`, { method: "DELETE" });
+    const response = await localApiFetch(`/api/datasets/${dataset.id}`, { method: "DELETE" });
     if (!response.ok) return setMessage("Could not revoke this dataset.");
     if (datasetId === dataset.id) { setDatasetId(""); setPreview(null); setResult(null); }
     setMessage(`${dataset.name} approval was revoked. The file was not changed.`);
@@ -58,7 +59,7 @@ export function SqlAnalysisPanel({ open, onClose, onAttach, initialDraft }: { op
 
   async function createPreview(event: FormEvent) {
     event.preventDefault(); setBusy(true); setMessage(""); setPreview(null); setResult(null);
-    const response = await fetch("/api/analysis/sql/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ datasetId, query }) });
+    const response = await localApiFetch("/api/analysis/sql/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ datasetId, query }) });
     const data = (await response.json()) as { preview?: Preview; error?: string }; setBusy(false);
     if (!response.ok || !data.preview) return setMessage(data.error ?? "Could not create the SQL proposal.");
     setPreview(data.preview);
@@ -67,7 +68,7 @@ export function SqlAnalysisPanel({ open, onClose, onAttach, initialDraft }: { op
   async function runOnce() {
     if (!preview) return;
     setBusy(true); setMessage("");
-    const response = await fetch("/api/analysis/sql/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmationId: preview.confirmationId, token: preview.token, datasetId: preview.dataset.id, query: preview.query }) });
+    const response = await localApiFetch("/api/analysis/sql/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmationId: preview.confirmationId, token: preview.token, datasetId: preview.dataset.id, query: preview.query }) });
     const data = (await response.json()) as { result?: Result; error?: string }; setBusy(false); setPreview(null);
     if (!response.ok || !data.result) return setMessage(data.error ?? "The SQL execution failed.");
     setResult(data.result); setMessage("Completed locally. The one-time approval has been consumed.");

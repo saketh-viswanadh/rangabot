@@ -1,5 +1,5 @@
 import type { ChatMessage } from "./providers/types.ts";
-import type { ApprovedDataset } from "./datasets.ts";
+import type { DatasetDescriptor } from "./datasets.ts";
 import type { DatasetColumn } from "./sql-runtime.ts";
 import { focusDatabaseSchema, type SqlProposal } from "./sql-proposals.ts";
 import { validateSqlPreviewQuery } from "./sql-confirmations.ts";
@@ -35,12 +35,12 @@ const baseAnalyticalPlanSchema = {
   },
 };
 
-function focusedSchema(messages: ChatMessage[], dataset: ApprovedDataset, columns: DatasetColumn[]) {
+function focusedSchema(messages: ChatMessage[], dataset: DatasetDescriptor, columns: DatasetColumn[]) {
   const request = [...messages].reverse().find((message) => message.role === "user")?.content.trim() ?? "";
   return dataset.format === "duckdb" ? focusDatabaseSchema(columns, request) : columns.map((column) => ({ ...column, table: "dataset" }));
 }
 
-export function buildAnalyticalPlanSchema(messages: ChatMessage[], dataset: ApprovedDataset, columns: DatasetColumn[]) {
+export function buildAnalyticalPlanSchema(messages: ChatMessage[], dataset: DatasetDescriptor, columns: DatasetColumn[]) {
   const focused = focusedSchema(messages, dataset, columns);
   const tables = [...new Set(focused.flatMap((column) => column.table ? [column.table] : []))];
   const fields = focused.flatMap((column) => column.table ? [`${column.table}.${column.name}`] : []);
@@ -279,7 +279,7 @@ export function compileAnalyticalPlan(plan: AnalyticalPlan, columns: DatasetColu
   return { action: "query", query: validateSqlPreviewQuery(query), explanation: plan.explanation };
 }
 
-export function buildAnalyticalPlanMessages(messages: ChatMessage[], dataset: ApprovedDataset, columns: DatasetColumn[]): ChatMessage[] {
+export function buildAnalyticalPlanMessages(messages: ChatMessage[], dataset: DatasetDescriptor, columns: DatasetColumn[]): ChatMessage[] {
   const request = [...messages].reverse().find((message) => message.role === "user")?.content.trim() ?? "";
   const focused = focusedSchema(messages, dataset, columns);
   const schema = focused.map((column) => `- ${column.table}.${column.name}: ${column.type}`).join("\n");

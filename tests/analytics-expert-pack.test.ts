@@ -5,9 +5,10 @@ import { issueAuthorizedAnalyticsRequest } from "../lib/analytics-pack-control.t
 import { runAnalyticsExpertPack, type AnalyticsPackDependencies } from "../lib/analytics-expert-pack.ts";
 import type { Conversation } from "../lib/conversations.ts";
 import { ProviderError, type GenerationOptions } from "../lib/providers/types.ts";
-import type { SqlExecutionResult } from "../lib/sql-runtime.ts";
+import type { DatasetFileIdentity, SqlExecutionResult } from "../lib/sql-runtime.ts";
 
 const inputSha256 = "a".repeat(64);
+const fileIdentity: DatasetFileIdentity = { device: "1", inode: "2", sizeBytes: 128, modifiedNs: "3", changedNs: "4", sha256: inputSha256 };
 
 function queryDigest(query: string) {
   return createHash("sha256").update(query.trim().replace(/;\s*$/, "")).digest("hex");
@@ -41,10 +42,10 @@ function execution(query: string): SqlExecutionResult {
 }
 
 function dependencies(overrides: Partial<AnalyticsPackDependencies> = {}) {
-  const state = { identityCalls: 0, schemaCalls: 0, jsonCalls: 0, sqlCalls: [] as Array<{ approvedDatasetPath: string; query: string; expectedInputSha256?: string; signal?: AbortSignal }>, jsonOptions: undefined as GenerationOptions | undefined };
+  const state = { identityCalls: 0, schemaCalls: 0, jsonCalls: 0, sqlCalls: [] as Array<{ approvedDatasetPath: string; query: string; expectedFileIdentity?: DatasetFileIdentity; expectedInputSha256?: string; signal?: AbortSignal }>, jsonOptions: undefined as GenerationOptions | undefined };
   const value: AnalyticsPackDependencies = {
-    getDataset: () => ({ id: "dataset-a", name: "shop.duckdb", path: "/approved/shop.duckdb", format: "duckdb", sizeBytes: 128, addedAt: "2026-08-07T00:00:00.000Z" }),
-    inspectIdentity: async () => { state.identityCalls += 1; return { canonical: "/approved/shop.duckdb", extension: ".duckdb", sizeBytes: 128, filename: "shop.duckdb", sha256: inputSha256 }; },
+    getDataset: () => ({ id: "dataset-a", name: "shop.duckdb", path: "/approved/shop.duckdb", format: "duckdb", sizeBytes: 128, addedAt: "2026-08-07T00:00:00.000Z", approvalVersion: 2, fileIdentity }),
+    inspectIdentity: async () => { state.identityCalls += 1; return { canonical: "/approved/shop.duckdb", extension: ".duckdb", sizeBytes: 128, filename: "shop.duckdb", sha256: inputSha256, fileIdentity }; },
     inspectSchema: async () => { state.schemaCalls += 1; return [
       { table: "customers", name: "customer_id", type: "INTEGER" }, { table: "customers", name: "region", type: "VARCHAR" },
       { table: "orders", name: "order_id", type: "INTEGER" }, { table: "orders", name: "customer_id", type: "INTEGER" },
@@ -77,6 +78,7 @@ test("wraps the legacy analytical path with exact evidence, grants, model, and t
   assert.equal(fixture.state.jsonCalls, 1);
   assert.equal(fixture.state.sqlCalls.length, 1);
   assert.equal(fixture.state.sqlCalls[0].expectedInputSha256, inputSha256);
+  assert.deepEqual(fixture.state.sqlCalls[0].expectedFileIdentity, fileIdentity);
   assert.equal(fixture.state.jsonOptions?.modelId, "llama3.2:3b");
   assert.deepEqual(outcome.result.receipt.permissionsUsed, ["approved-dataset:read", "local-runtime:execute"]);
   assert.deepEqual(outcome.result.receipt.grantIdsUsed, ["request-a:dataset", "request-a:runtime"]);
@@ -165,6 +167,20 @@ test("maps planning, schema, and cancellation failures into terminal typed outco
   assert.equal(cancelledOutcome.result.error?.code, "cancelled");
   assert.equal(cancelledOutcome.result.error?.retryable, false);
   assert.equal(cancelledOutcome.result.evidence.length, 0);
+});
+
+test("treats a model output resource limit as terminal and non-retryable", async () => {
+  let calls = 0;
+  const fixture = dependencies({ completeJson: async () => {
+    calls += 1;
+    throw new ProviderError("resource-limit", "The local model response exceeded the safe output limit.");
+  } });
+  const outcome = await runAnalyticsExpertPack(request(), fixture.value);
+  assert.equal(outcome.result.status, "failure");
+  assert.equal(outcome.result.error?.code, "resource-limit");
+  assert.equal(outcome.result.error?.retryable, false);
+  assert.equal(calls, 1);
+  assert.equal(fixture.state.sqlCalls.length, 0);
 });
 
 test("classifies structurally typed SQL failures across runtime boundaries", async () => {

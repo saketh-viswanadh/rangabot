@@ -1,0 +1,65 @@
+import { spawn } from "node:child_process";
+import { resolve } from "node:path";
+import { localBootstrapUrl, localServerEnvironment, localServerPort } from "../lib/dev-server.ts";
+import { defaultSqlConfirmationStorePath, maintainSqlConfirmationStoreAtPath } from "../lib/sql-confirmation-store.ts";
+import { purgeArtifactDeletionQuarantine } from "../lib/conversation-artifacts.ts";
+import { acquireRuntimeLease } from "../lib/runtime-lease.ts";
+
+const serverEnvironment = localServerEnvironment();
+const serverPort = localServerPort(serverEnvironment);
+const bootstrapToken = serverEnvironment.RANGABOT_BOOTSTRAP_TOKEN;
+if (!bootstrapToken) throw new Error("Could not create Rangabot's private startup capability.");
+
+const runtimeLease = acquireRuntimeLease({ role: "app" });
+
+try {
+  maintainSqlConfirmationStoreAtPath(defaultSqlConfirmationStorePath);
+  purgeArtifactDeletionQuarantine();
+} catch (error) {
+  console.warn(`Private storage maintenance could not complete: ${error instanceof Error ? error.message : "unknown local storage error"}`);
+}
+
+const nextCli = resolve(process.cwd(), "node_modules", "next", "dist", "bin", "next");
+console.log(`\nOpen Rangabot using this private one-launch URL:\n${localBootstrapUrl(bootstrapToken, serverPort)}\n`);
+const child = spawn(process.execPath, [nextCli, "start", "--hostname", "127.0.0.1", "--port", String(serverPort)], {
+  env: serverEnvironment as NodeJS.ProcessEnv,
+  stdio: "inherit",
+});
+
+if (child.pid) {
+  try { runtimeLease.registerRuntimeProcess(child.pid); }
+  catch (error) {
+    child.kill("SIGTERM");
+    console.error(error instanceof Error ? error.message : "Could not register the private Rangabot runtime.");
+    process.exitCode = 1;
+  }
+}
+
+const forwardedSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
+const signalHandlers = new Map<NodeJS.Signals, () => void>();
+for (const signal of forwardedSignals) {
+  const handler = () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill(signal);
+  };
+  signalHandlers.set(signal, handler);
+  process.once(signal, handler);
+}
+
+const detachSignalHandlers = () => {
+  for (const [signal, handler] of signalHandlers) process.off(signal, handler);
+};
+
+process.once("exit", () => {
+  if (child.exitCode !== null || child.signalCode !== null || !child.pid) runtimeLease.release();
+});
+
+child.once("error", (error) => {
+  console.error(`Could not start Rangabot: ${error.message}`);
+  if (!child.pid || child.exitCode !== null || child.signalCode !== null) runtimeLease.release();
+  process.exitCode = 1;
+});
+child.once("exit", (code, signal) => {
+  detachSignalHandlers();
+  runtimeLease.release();
+  process.exitCode = signal ? 1 : (code ?? 1);
+});

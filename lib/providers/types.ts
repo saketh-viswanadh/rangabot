@@ -59,7 +59,7 @@ export interface ProviderStatus {
   error?: string;
 }
 
-export type ProviderFailureCode = "unavailable" | "model-missing" | "timeout" | "cancelled" | "http" | "empty-output" | "invalid-stream";
+export type ProviderFailureCode = "unavailable" | "model-missing" | "busy" | "timeout" | "cancelled" | "http" | "empty-output" | "invalid-stream" | "resource-limit";
 
 export class ProviderError extends Error {
   readonly code: ProviderFailureCode;

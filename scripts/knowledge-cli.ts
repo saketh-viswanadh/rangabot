@@ -1,12 +1,13 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { createKnowledgeBackup, getKnowledgeBackupRetention, listKnowledgeBackups, restoreLatestKnowledgeBackup, validateKnowledgeBackup } from "../lib/knowledge-backups.ts";
 import { getKnowledgeStatus, getKnowledgeVectorIndexStatus, knowledgeDatabasePath, knowledgeInbox, knowledgeIngestionVersion, knowledgeRoot, listIndexedDocumentUsefulCharacters, listIndexedKnowledgeDocuments, listKnowledgeFiles, rebuildKnowledgeVectorIndex } from "../lib/knowledge.ts";
 import { getKnowledgeDoctorTimeoutMs, inspectKnowledgeFileHashes } from "../lib/knowledge-doctor.ts";
+import { ensurePrivateDirectory } from "../lib/private-storage.ts";
 
 const command = process.argv[2] ?? "status";
 if (command === "init") {
-  for (const directory of [knowledgeInbox, `${knowledgeRoot}/indexes`, `${knowledgeRoot}/processed`, `${knowledgeRoot}/backups`]) mkdirSync(directory, { recursive: true });
+  for (const directory of [knowledgeInbox, `${knowledgeRoot}/indexes`, `${knowledgeRoot}/processed`, `${knowledgeRoot}/backups`]) ensurePrivateDirectory(directory);
   console.log(`Knowledge Vault initialized at ${knowledgeRoot}`);
   console.log(`Add private documents to ${knowledgeInbox}, then run npm run knowledge:ingest.`);
 } else if (command === "status" || command === "doctor") {
@@ -14,7 +15,7 @@ if (command === "init") {
   console.log(`Documents: ${status.documents}`);
   console.log(`Passages: ${status.chunks}`);
   console.log(`Storage: ${(status.usedBytes / 1024 ** 2).toFixed(1)} MB / ${(status.budgetBytes / 1024 ** 3).toFixed(1)} GB`);
-  console.log(`Inbox: ${status.inbox}`);
+  console.log(`Inbox: ${knowledgeInbox}`);
   console.log(`Embedding model: ${status.embeddingModel}`);
   if (command === "doctor") {
     const problems = [];
@@ -61,34 +62,48 @@ if (command === "init") {
     process.exitCode = 1;
   } else console.log(`PASS: ${manifest.sources?.length ?? 0} source records contain required metadata.`);
 } else if (command === "backup") {
-  if (!existsSync(knowledgeDatabasePath)) {
-    console.error("No knowledge index exists to back up.");
+  try {
+    const result = await createKnowledgeBackup({
+      databasePath: knowledgeDatabasePath,
+      backupRoot: resolve(knowledgeRoot, "backups"),
+      retention: getKnowledgeBackupRetention(),
+    });
+    console.log(`Created validated private Knowledge index database backup: ${result.name}`);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : "Knowledge backup failed.");
     process.exitCode = 1;
-  } else {
-    const db = new DatabaseSync(knowledgeDatabasePath);
-    db.exec("PRAGMA wal_checkpoint(FULL)");
-    db.close();
-    const backupRoot = resolve(knowledgeRoot, "backups");
-    mkdirSync(backupRoot, { recursive: true });
-    const stamp = new Date().toISOString().replaceAll(/[:.]/g, "-");
-    const target = resolve(backupRoot, `knowledge-${stamp}.db`);
-    copyFileSync(knowledgeDatabasePath, target);
-    console.log(`Created local backup: ${target}`);
   }
 } else if (command === "rollback") {
   const backupRoot = resolve(knowledgeRoot, "backups");
-  const backups = existsSync(backupRoot) ? readdirSync(backupRoot).filter((name) => /^knowledge-.*\.db$/.test(name)).sort().reverse() : [];
+  const backups = listKnowledgeBackups(backupRoot);
   if (!backups[0]) {
-    console.error("No local Knowledge Vault backup is available.");
+    console.error("No local Knowledge index database backup is available.");
     process.exitCode = 1;
   } else if (!process.argv.includes("--yes")) {
-    console.log(`Latest backup: ${backups[0]}`);
-    console.log("Rollback replaces the current local index. Stop Rangabot, then confirm with: npm run knowledge:rollback -- --yes");
+    try {
+      const validation = validateKnowledgeBackup(backups[0].path);
+      console.log(`Latest backup: ${backups[0].name}`);
+      console.log(`Integrity: SQLite valid; checksum ${validation.checksumVerified ? "verified" : "unavailable for this legacy backup"}`);
+      console.log("Rollback replaces the current local index. Stop Rangabot, then confirm with: npm run knowledge:rollback -- --yes");
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : "The latest Knowledge index database backup is invalid.");
+      process.exitCode = 1;
+    }
   } else {
-    console.log("Stop Rangabot before rollback so no process is using the index.");
-    for (const suffix of ["-wal", "-shm"]) if (existsSync(`${knowledgeDatabasePath}${suffix}`)) unlinkSync(`${knowledgeDatabasePath}${suffix}`);
-    copyFileSync(resolve(backupRoot, backups[0]), knowledgeDatabasePath);
-    console.log(`Restored latest local backup: ${backups[0]}`);
+    try {
+      console.log("Stop Rangabot before rollback so no process is using the index.");
+      const result = await restoreLatestKnowledgeBackup({
+        databasePath: knowledgeDatabasePath,
+        backupRoot,
+        retention: getKnowledgeBackupRetention(),
+      });
+      console.log(`Restored validated local backup: ${result.restored}`);
+      if (!result.checksumVerified) console.log("NOTICE: this legacy backup predated checksum sidecars; SQLite integrity was verified before restore.");
+      if (result.recoveryBackup) console.log(`Preserved the replaced index as recovery backup: ${result.recoveryBackup}`);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : "Knowledge rollback failed.");
+      process.exitCode = 1;
+    }
   }
 } else {
   console.error(`Unknown knowledge command: ${command}`);

@@ -1,10 +1,10 @@
-import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { ChatMessage } from "../lib/providers/types.ts";
 import type { LocalMemory } from "../lib/memories.ts";
 import { selectRelevantMemoriesFrom } from "../lib/memories.ts";
 import { buildConversationMemoryQuery } from "../lib/conversation-orchestration.ts";
 import { compileAnswerContract } from "../lib/conversation-contract.ts";
+import { ensurePrivateDirectory, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
 
 type Fixture = {
   id: string;
@@ -65,9 +65,9 @@ const results = fixtures.map((fixture) => {
 const precision = truePositive / Math.max(1, truePositive + falsePositive);
 const recall = truePositive / Math.max(1, truePositive + falseNegative);
 const summary = { suite, fixtures: fixtures.length, truePositive, falsePositive, falseNegative, precision, recall, passed: precision >= 0.95 && recall >= 0.90 && results.every((result) => result.passed), results };
-await mkdir(resolve("data/evaluations/results"), { recursive: true });
+ensurePrivateDirectory(resolve("data/evaluations/results"));
 const output = resolve("data/evaluations/results", `memory-selection-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
-await writeFile(output, `${JSON.stringify(summary, null, 2)}\n`);
+writePrivateJsonFileAtomic(output, summary);
 console.log(`Memory selection ${suite.version}: precision ${(precision * 100).toFixed(1)}% (${truePositive}/${truePositive + falsePositive}), recall ${(recall * 100).toFixed(1)}% (${truePositive}/${truePositive + falseNegative})`);
 for (const result of results.filter((item) => !item.passed)) console.log(`FAIL ${result.id}: expected [${result.expected.join(", ")}], selected [${result.selected.join(", ")}]`);
 console.log(`Private synthetic result: ${output}`);

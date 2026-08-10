@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { buildAdvancedAnalyticalMessages, buildAdvancedAnalyticalSchema, shouldUseAdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
@@ -8,7 +8,8 @@ import { buildAnalyticalPlanMessages, buildAnalyticalPlanSchema, compileAnalytic
 import type { ApprovedDataset } from "../lib/datasets.ts";
 import { completeJsonWithOllama } from "../lib/providers/ollama.ts";
 import type { ChatMessage } from "../lib/providers/types.ts";
-import { executeReadOnlySql, inspectDatasetSchema } from "../lib/sql-runtime.ts";
+import { executeReadOnlySql, inspectDatasetIdentity, inspectDatasetSchema } from "../lib/sql-runtime.ts";
+import { ensurePrivateDirectory, ensurePrivateFile, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
 
 type HoldoutCase = { id: string; question: string; goldSql?: string; boundary?: "clarify" | "unavailable" };
 const cases: HoldoutCase[] = [
@@ -28,7 +29,7 @@ const cases: HoldoutCase[] = [
 
 const outputDirectory = resolve("data/evaluations/results");
 const databasePath = resolve(outputDirectory, "analytical-holdout-v1.duckdb");
-mkdirSync(outputDirectory, { recursive: true });
+ensurePrivateDirectory(outputDirectory);
 
 async function createDatabase() {
   if (existsSync(databasePath)) unlinkSync(databasePath);
@@ -40,11 +41,15 @@ async function createDatabase() {
       CREATE TABLE trips AS SELECT i::INTEGER trip_id, ((i * 7) % 18 + 1)::INTEGER driver_id, ((i * 3) % 8 + 1)::INTEGER route_id, TIMESTAMP '2025-01-01 06:00:00' + i * INTERVAL '11 hours' departed_at, TIMESTAMP '2025-01-01 06:00:00' + i * INTERVAL '11 hours' + (2 + i % 7) * INTERVAL '1 hour' arrived_at, (45 + (i * 17) % 260)::DOUBLE distance_km, (8 + (i * 5) % 31)::DOUBLE fuel_liters, DATE '2025-01-01' + ((i * 3) % 75)::INTEGER trip_date, CASE WHEN i % 11 = 0 THEN 'cancelled' ELSE 'completed' END status FROM range(1, 121) t(i);
       CREATE TABLE inspections AS SELECT i::INTEGER inspection_id, ((i * 4) % 18 + 1)::INTEGER driver_id, DATE '2025-01-01' + (i * 5)::INTEGER inspection_date, (i % 4 <> 0) passed FROM range(1, 25) t(i);
     `);
-  } finally { connection.closeSync(); instance.closeSync(); }
+  } finally { connection.closeSync(); instance.closeSync(); ensurePrivateFile(databasePath); }
 }
 
 await createDatabase();
-const dataset: ApprovedDataset = { id: "holdout-v1", name: "logistics-holdout.duckdb", path: databasePath, format: "duckdb", sizeBytes: 0, addedAt: new Date().toISOString() };
+const datasetIdentity = await inspectDatasetIdentity(databasePath);
+const dataset: ApprovedDataset = {
+  id: "holdout-v1", name: "logistics-holdout.duckdb", path: databasePath, format: "duckdb",
+  sizeBytes: datasetIdentity.sizeBytes, addedAt: new Date().toISOString(), approvalVersion: 2, fileIdentity: datasetIdentity.fileIdentity,
+};
 const schema = await inspectDatasetSchema(databasePath);
 const results = [];
 for (const item of cases) {
@@ -66,7 +71,7 @@ for (const item of cases) {
 }
 const timestamp = new Date().toISOString().replaceAll(":", "-");
 const outputPath = resolve(outputDirectory, `analytical-holdout-v1-${timestamp}.json`);
-writeFileSync(outputPath, JSON.stringify({ suite: "analytical-holdout-v1", frozenAt: "2026-08-03", cases: results }, null, 2));
+writePrivateJsonFileAtomic(outputPath, { suite: "analytical-holdout-v1", frozenAt: "2026-08-03", cases: results });
 const passed = results.filter((item) => item.passed).length;
 console.log(`\nFrozen holdout: ${passed}/${results.length} passed.`);
 console.log(`Private result: ${outputPath}`);

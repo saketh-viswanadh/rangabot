@@ -30,7 +30,7 @@ Current execution order:
 8. **Ordinary-machine proof** — publish reproducible quality, latency, RAM, and
    compatibility profiles across low, medium, and high consumer hardware.
 
-The strict current score is **7/45 fully unlocked capabilities (16%)**. The 52%
+The strict current score is **6/45 fully unlocked capabilities (13%)**. The 51%
 weighted development figure includes half-credit for partial work and must not
 be presented as product readiness.
 
@@ -130,6 +130,24 @@ qualified local model, if any, powers each workflow.
   keeping private prompts, documents, datasets, memories and answers local.
 
 ## Approved
+
+- [ ] Complete the privacy-boundary release candidate: signed same-origin local
+  API capability, strict loopback Host validation, bounded JSON requests,
+  blocked remote model resources, one-generation-per-model scheduling,
+  server-owned cancellation, owner-only managed storage, secure SQLite deletes,
+  repository identity revalidation, immutable dataset snapshots, bounded model
+  output, crash-recoverable transaction-aware artifact deletion, validated
+  staged index-database restore,
+  minimized browser DTOs, expanded current-tree/history privacy scanning, and
+  immutable CI action pins are implemented on the candidate branch. The combined
+  deterministic suite passes 470/470 and local lint, typecheck, production
+  build, privacy scan, and complete dependency audit pass; both CI platforms,
+  merge, and the final residual-risk sign-off remain before release.
+- [ ] Finish separating the informational website from the open-source app. The
+  public site remains at `rangabot.com`; current-tree source removal and
+  app-independent CI are implemented on the candidate branch. Merge and verify
+  a durable private website review/deployment workflow before closing this item. A
+  disruptive historical Git rewrite remains a separate maintainer decision.
 
 - [x] Establish a versioned, balanced 60-case synthetic Mind & Memory benchmark and a shared
   model-independent conversation contract for directness, truthfulness,
@@ -233,8 +251,12 @@ qualified local model, if any, powers each workflow.
   false-premise failure
 - [ ] Add inspectable correction and memory-conflict workflows so outdated facts
   can be superseded without silently deleting provenance
-- [x] Govern official mastery attribution through evidence-backed claims,
-  CODEOWNER approval and node-level contributor recognition.
+- [ ] Make official mastery attribution tamper-resistant through a trusted
+  metadata-only GitHub gate, an authorized current-head approval receipt,
+  required branch protection, and node-level contributor recognition. The
+  workflow now rejects stale or read-only label actors and invalidates approval
+  on every push; it is not an enforced merge boundary until its check is required
+  in branch protection.
 
 - [x] Path to Mastery v3: the 9 charter-aligned paths, 45 capability nodes,
   161 criterion-level assessments, calculated readiness, interactive audit
@@ -265,7 +287,9 @@ qualified local model, if any, powers each workflow.
   mode-aware restrained Ranga styling in persistent Preferences
 - [x] Local SQLite conversation history: create, list, reopen, update, and delete
 - [x] Project-aware local conversation search and persistent pinning
-- [x] Local Markdown conversation export and restore
+- [x] Portable Markdown transcript export/import for text and reply references;
+  project/dataset bindings, pins, timestamps, turn receipts, provenance, and
+  artifacts intentionally remain outside this non-backup format
 - [x] Markdown and syntax-highlighted code rendering with copy controls
 - [x] Message hover affordances and reply-to-message context
 - [x] Offline welcome library with 100 quotes, 100 jokes and 100 thoughts, a 60-item no-repeat window, and weekly quality review
@@ -366,6 +390,26 @@ qualified local model, if any, powers each workflow.
 - What information a future cloud/Codex handoff preview may include. Actual
   sending remains disabled until a separate explicit approval.
 - Whether conversation history should support optional local encryption.
+- Whether to move the ignored website workspace into a durable private
+  repository. The current local-only copy is intentionally outside public Git
+  but can be lost by destructive ignored-file cleanup.
+- Whether to perform a coordinated public-history rewrite to remove historical
+  website source and a redacted personal commit-metadata email. This changes
+  commit IDs, disrupts clones and open pull requests, and cannot retract copies
+  already cloned or cached.
+- After adding a second trusted maintainer, whether main should require one
+  approving CODEOWNER review. Today required Ubuntu/Windows checks, admin
+  enforcement, and force-push/deletion protection are active, but a review gate
+  is not enforced because the sole maintainer cannot approve their own pull
+  request.
+- Whether to add CodeQL for supported JavaScript/TypeScript code paths. GitHub
+  secret scanning and push protection are enabled; code scanning is not yet
+  configured.
+- Whether to migrate the maintainer-authored mastery ledger to structured,
+  reproducible criterion-verification records. Most current `verified` rows cite
+  merged work but do not yet contain an independent command/observable audit.
+- Complete the merged-evidence registry audit: older merged program PRs remain
+  absent, so current registry validation proves cited ancestry, not completeness.
 
 ## Architecture and decisions
 

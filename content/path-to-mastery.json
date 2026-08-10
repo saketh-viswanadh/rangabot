@@ -1,8 +1,8 @@
 {
   "version": 3,
   "title": "Path to Mastery",
-  "updatedAt": "2026-08-08",
-  "evidenceVerifiedAt": "2026-08-08",
+  "updatedAt": "2026-08-10",
+  "evidenceVerifiedAt": "2026-08-10",
   "vision": "Extraordinary capability from ordinary machines: one user-owned local intelligence that helps open models reach their full practical potential through honest orchestration, approved knowledge, memory, tools, and evidence.",
   "core": {
     "id": "rangabot",
@@ -1413,12 +1413,13 @@
             },
             {
               "id": "local-first-2",
-              "text": "Chats, databases, documents, embeddings, credentials, and private evaluation outputs remain ignored",
-              "state": "verified",
+              "text": "Private stores, browser/API access, model output, approved paths, backups, artifacts, and evaluator outputs pass adversarial boundaries and cross-platform CI",
+              "state": "partial",
               "evidence": [
                 "pr-15",
                 "pr-50"
-              ]
+              ],
+              "note": "The complete boundary is implemented and passes local deterministic checks on the privacy candidate; merged evidence and both CI platforms are still required."
             },
             {
               "id": "local-first-3",
@@ -1430,7 +1431,7 @@
               ]
             }
           ],
-          "backlog": "Repeat the privacy scan for every release candidate"
+          "backlog": "Merge the privacy boundary and require both CI platforms before restoring the full gate"
         },
         {
           "id": "permission-centre",
@@ -1684,10 +1685,11 @@
             {
               "id": "cross-platform-ci-3",
               "text": "Protected main requires validation and resolved review conversations",
-              "state": "verified",
+              "state": "partial",
               "evidence": [
                 "pr-15"
-              ]
+              ],
+              "note": "A 2026-08-10 read-only settings audit observed required Ubuntu/Windows validation and resolved conversations, but mutable GitHub settings are not yet represented by durable external-audit evidence in this ledger."
             },
             {
               "id": "cross-platform-ci-4",
@@ -1795,7 +1797,7 @@
         {
           "id": "public-roadmap",
           "name": "Charter, mastery & community",
-          "description": "Keep the north star, public website, GitHub documentation, evidence-backed roadmap, contributor recognition, and backlog synchronized.",
+          "description": "Keep the north star, public website claims, GitHub documentation, evidence-backed roadmap, contributor recognition, and backlog synchronized without making the app depend on private publishing source.",
           "dependencies": [
             "evaluation-governance",
             "open-source-governance"
@@ -1803,39 +1805,45 @@
           "criteria": [
             {
               "id": "public-roadmap-1",
-              "text": "One governed source generates criterion-level mastery with calculated states and no manual scores",
+              "text": "One governed source stores maintainer-reviewed criterion assessments and PR citations; generators calculate node and path scores without hand-authored aggregate scores",
               "state": "verified",
               "evidence": [
                 "pr-66",
                 "pr-67"
-              ]
+              ],
+              "note": "Criterion assessment is a governed human input. A merged PR proves merge only, not that an acceptance gate passed."
             },
             {
               "id": "public-roadmap-2",
-              "text": "Official contributor claims require opt-in, merged evidence, and owner review",
-              "state": "verified",
+              "text": "Official contributor claims require opt-in, merged evidence, and an authorized current-head approval receipt from a trusted required metadata-only gate",
+              "state": "partial",
               "evidence": [
                 "pr-53",
                 "pr-66"
-              ]
+              ],
+              "note": "The trusted gate is designed to bind an authorized label event to the exact PR head, but the base-branch workflow and required-check setting are not yet both active."
             },
             {
               "id": "public-roadmap-3",
-              "text": "Every merged program increment through PR #93 is present in the evidence registry and mapped where relevant",
+              "text": "Every cited evidence-registry entry resolves to a merged ancestor; completeness against all merged program work is audited separately",
               "state": "verified",
               "evidence": [
-                "pr-93"
-              ]
+                "pr-99"
+              ],
+              "note": "The 2026-08-10 completeness audit found older merged increments that are not yet registered, so the registry is not claimed complete."
             },
             {
               "id": "public-roadmap-4",
-              "text": "The canonical charter and website source live on main and are validated together",
-              "state": "planned",
-              "evidence": [],
-              "note": "This branch implements the requirement, but unmerged work cannot certify itself."
+              "text": "The public website mirrors merged charter and mastery evidence through a separate maintainer-local publishing workflow without becoming an app dependency",
+              "state": "partial",
+              "evidence": [
+                "pr-94",
+                "pr-99"
+              ],
+              "note": "The public site and evidence-backed pages exist; current-tree source separation, private workflow validation, and merge evidence remain incomplete."
             }
           ],
-          "backlog": "Merge and deploy the canonical charter website page"
+          "backlog": "Merge website-source separation and validate the private review and deployment boundary"
         }
       ]
     }

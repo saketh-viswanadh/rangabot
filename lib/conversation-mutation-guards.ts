@@ -1,7 +1,16 @@
 import { getConversationDatabase } from "./conversations.ts";
+import {
+  ConversationArtifactReferenceError,
+  deleteConversationRecordWithArtifacts,
+  recoverArtifactDeletionQuarantine,
+  stageOwnedWordArtifactDirectories,
+  type ArtifactQuarantineRecovery,
+  type ArtifactDirectoryStager,
+  type StagedArtifactDeletion,
+} from "./conversation-artifacts.ts";
 import { recoverExpiredConversationTurns } from "./conversation-turns.ts";
 
-export type GuardedDeleteResult = "deleted" | "not-found" | "turn-in-progress";
+export type GuardedDeleteResult = "deleted" | "deleted-cleanup-pending" | "not-found" | "turn-in-progress" | "artifact-cleanup-failed";
 
 function guardedDelete(checkPending: () => boolean, mutate: () => boolean): GuardedDeleteResult {
   recoverExpiredConversationTurns();
@@ -21,12 +30,47 @@ function guardedDelete(checkPending: () => boolean, mutate: () => boolean): Guar
   }
 }
 
-export function deleteConversationWhenIdle(id: string): GuardedDeleteResult {
+export function deleteConversationWhenIdle(
+  id: string,
+  options: {
+    stageArtifactDirectories?: ArtifactDirectoryStager;
+    recoverArtifactQuarantine?: ArtifactQuarantineRecovery;
+  } = {},
+): GuardedDeleteResult {
+  recoverExpiredConversationTurns();
   const database = getConversationDatabase();
-  return guardedDelete(
-    () => Boolean(database.prepare("SELECT 1 FROM conversation_turns WHERE conversation_id = ? AND status = 'pending' LIMIT 1").get(id)),
-    () => database.prepare("DELETE FROM conversations WHERE id = ?").run(id).changes > 0,
-  );
+  database.exec("BEGIN IMMEDIATE");
+  let stagedDeletion: StagedArtifactDeletion | undefined;
+  try {
+    const pending = database.prepare("SELECT 1 FROM conversation_turns WHERE conversation_id = ? AND status = 'pending' LIMIT 1").get(id);
+    if (pending) {
+      database.exec("ROLLBACK");
+      return "turn-in-progress";
+    }
+    const result = deleteConversationRecordWithArtifacts(
+      database,
+      id,
+      options.stageArtifactDirectories ?? stageOwnedWordArtifactDirectories,
+    );
+    if (result.kind === "artifact-cleanup-failed") {
+      database.exec("ROLLBACK");
+      return result.kind;
+    }
+    if (result.kind === "deleted") stagedDeletion = result.stagedDeletion;
+    database.exec("COMMIT");
+    if (!stagedDeletion || stagedDeletion.finalize()) return result.kind;
+    try {
+      (options.recoverArtifactQuarantine ?? recoverArtifactDeletionQuarantine)(database);
+      return result.kind;
+    } catch {
+      return "deleted-cleanup-pending";
+    }
+  } catch (error) {
+    try { database.exec("ROLLBACK"); }
+    finally { stagedDeletion?.rollback(); }
+    if (error instanceof ConversationArtifactReferenceError) return "artifact-cleanup-failed";
+    throw error;
+  }
 }
 
 export function deleteProjectWhenIdle(id: string): GuardedDeleteResult {
