@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "policy": "Official recognition is opt-in and evidence-linked. Claims use a pull request carrying the owner-controlled mastery-approved label. A trusted metadata-only workflow checks protected paths without executing contributor code, but it is not an enforced merge gate until that check is added to main branch protection after merge. CODEOWNERS requests maintainer review; GitHub does not enforce an approving review. A claim credits merged work but never changes product readiness. Portraits must be committed locally with permission; Rangabot never fetches GitHub avatars at runtime.",
+  "policy": "Official recognition is opt-in and evidence-linked. Claims use a pull request carrying the owner-controlled mastery-approved label. A trusted metadata-only workflow checks protected paths without executing contributor code and binds approval to the exact current head. A 2026-08-10 settings audit observed its named check as required on main; because GitHub settings are mutable, current enforcement must be reverified independently. CODEOWNERS requests maintainer review; GitHub does not enforce an approving review. A claim credits merged work but never changes product readiness. Portraits must be committed locally with permission; Rangabot never fetches GitHub avatars at runtime.",
   "contributors": [
     {
       "name": "Saketh Viswanadha",

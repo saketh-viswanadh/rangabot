@@ -18,16 +18,18 @@ review every frame before publishing it.
 sharing card. It carries the canonical Charter promise. The earlier
 `rangabot-social-preview.png` remains only as historical brand-source material.
 
-The current product showcase uses three 1280×720 privacy-safe captures:
+The product media directory contains three 1280×720 privacy-safe captures:
 
 - `rangabot-product-home.png` — fresh conversation workspace;
 - `rangabot-product-brief.png` — local Knowledge Brief;
-- `rangabot-product-mastery.png` — public Path to Mastery.
+- `rangabot-product-mastery.png` — historical Path to Mastery capture, currently
+  withheld from public documentation until recaptured against governed v3 data.
 
 Refresh these together after a material navigation or design change. Captures
 must use synthetic/public content and must not expose chats, memories, local
 paths, repository previews, private vault sources, or machine identifiers.
 
-Only screenshots referenced by current public documentation are retained. Older
-UI captures are deliberately removed rather than shipped as stale project media.
-It uses generated, project-owned launch artwork and contains no user content.
+Only current screenshots should be referenced by public documentation. A stale
+capture may remain temporarily as source material but must be identified as
+historical and withheld until replaced. The media uses generated, project-owned
+launch artwork and contains no user content.

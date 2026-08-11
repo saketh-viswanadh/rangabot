@@ -1,5 +1,41 @@
 # Daily progress
 
+## 2026-08-10 — Core conversation exact-candidate preparation
+
+- Added a generic Semantic Task Frame above the selected Ollama model. It
+  preserves current-turn intent, exact named subject, audience, tone, depth,
+  and diagnostic direction, then supplies broad causal, composition, choice,
+  and calculation rules without embedding benchmark answers or domain facts.
+- Versioned the frozen evaluator through v1.0.13. v1.0.12 repaired a politeness
+  false negative while preserving the genuine unbalanced-quotation failure.
+  The first exact-candidate run then exposed a more serious false positive:
+  `false-premise-01` passed an answer that still denied indentation can affect
+  execution. An expanded regex repair still failed adversarial valid and
+  contradictory paraphrases and was discarded. v1.0.13 instead requires human
+  semantic ratings for that output from the full run and all three critical
+  repetitions; lexical scoring is no longer presented as factual proof.
+- The v1.0.12 full run remains 58/60 and 22/22 under its structural scorer, but
+  its known false positive makes it invalid standalone release evidence; its
+  three critical repetitions are each 21/22. An attempted lexical same-model
+  production repair was adversarially shown to replace a truthful draft with a
+  confidently false one and was fully reverted. No premise answer was
+  hardcoded, no failing run was hidden, and release status is **fail** pending
+  fresh v1.0.13 machine and human evidence.
+- Added blind-human protocol 1.3.0 and release-gate policy 1.3.0. The gate binds
+  the exact commit, suite, model/context profile, full result, three separately
+  generated nonduplicate critical runs, and fifteen-answer human packet. Twelve
+  items balance the full-run capabilities; three append the required semantic
+  case from each repetition. The gate
+  recomputes row-level results
+  and packet provenance instead of trusting stored summaries. Final machine and
+  human evidence remains pending until a clean v1.0.13 candidate is frozen and
+  run.
+- The exact deterministic candidate passed 523/523 tests, memory selection at
+  15/15 precision and 15/15 recall, lint, typecheck, the 21-page production
+  build, mastery and evaluator validation, the bounded privacy scan, and
+  `npm audit --omit=dev` with zero reported vulnerabilities. These checks do not
+  substitute for the pending model and human evidence.
+
 ## 2026-08-10 — Privacy release-candidate closure
 
 - Closed a stale mastery-approval gap: the persistent label alone is no longer
@@ -39,8 +75,17 @@
   and completed the full deterministic suite at 470/470 on the frozen local
   candidate. Lint, typecheck,
   production build, privacy/history scan, diff validation, and both production-
-  only and complete dependency audits pass locally; both GitHub CI platforms
-  remain required before merge.
+  only and complete dependency audits passed locally. PR #100 then merged as
+  `a599d8a` after the required Ubuntu and Windows checks passed.
+- Added `Mastery governance / mastery-governance` to protected `main`'s required
+  checks. This 2026-08-10 observation is current repository state, not immutable
+  ledger evidence; GitHub settings remain mutable and must be reverified.
+- Closed obsolete website PR #86 and removed its source branch. Dependabot PRs
+  #95–#98 were already closed and their website branches were confirmed absent.
+  The informational site remains public while the current open-source tree
+  contains no website source or app dependency.
+- Rechecked repository dependency state after merge: GitHub reports zero open
+  Dependabot alerts. This dated observation does not replace future audits.
 - Verified the public site remains available while its current source is absent
   from the open-source index and repository CI. Historical website objects and
   one redacted personal commit-metadata email remain recoverable in existing Git
@@ -96,7 +141,7 @@
   with its structured source, and CI rejects drift.
 - Re-audited the whole program into nine charter-aligned paths, 45 capability
   nodes, and 161 acceptance criteria. The strict current result is 7/45 fully
-  unlocked (16%), 72/161 verified criteria, 52% weighted development progress,
+  unlocked (16%), 71/161 verified criteria, 52% weighted development progress,
   and 26 nodes below their complete gate. Partial work never counts as unlocked.
 - Mapped 33 founder achievements to specific new nodes and merged evidence.
   Contributor credit remains independent from product readiness and stays

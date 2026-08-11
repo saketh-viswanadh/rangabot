@@ -69,7 +69,7 @@ test("normalizes narrow exact formats without rewriting semantic prose", () => {
   const causal = compileAnswerContract([{ role: "user", content: "Since correlation proves causation, explain this relationship." }]);
   assert.equal(causal.falseCausalPremise, true);
   assert.match(formatAnswerContract(causal) ?? "", /correlation does not prove causation/i);
-  assert.equal(semanticContractRepairs("Summer heat drives both outcomes.", causal).length, 1);
+  assert.equal(semanticContractRepairs("Summer heat drives both outcomes.", causal).length, 2);
   assert.equal(semanticContractRepairs("Correlation does not prove causation.", causal).length, 1);
   assert.equal(semanticContractRepairs("Correlation does not prove causation; summer heat is a common cause.", causal).length, 0);
   assert.match(enforceReasoningInvariants("There is no direct causal link.", causal), /^Correlation does not prove causation\. A shared third variable can drive both outcomes\./);
@@ -77,11 +77,25 @@ test("normalizes narrow exact formats without rewriting semantic prose", () => {
   assert.deepEqual(deriveVerifiedReasoningFacts(speedup.latestRequest), [{ statement: "Verified speedup calculation: 12 / 3 = 4 seconds.", requiredTerms: ["4"] }]);
   assert.match(formatAnswerContract(speedup) ?? "", /12 \/ 3 = 4 seconds/);
   assert.match(enforceReasoningInvariants("12 × 3 = 36 seconds.", speedup), /^Verified speedup calculation: 12 \/ 3 = 4 seconds\./);
-  const imbalance = compileAnswerContract([{ role: "user", content: "A test has 95% accuracy where 95% of cases are negative. Why can accuracy mislead?" }]);
+  const imbalance = compileAnswerContract([{ role: "user", content: "A binary test has 95% accuracy where 95% of cases are negative. Why can accuracy mislead?" }]);
   assert.equal(imbalance.verifiedReasoningFacts.length, 1);
   const groundedImbalance = enforceReasoningInvariants("Accuracy can hide errors.", imbalance);
-  assert.match(groundedImbalance, /predicting every case as negative/i);
-  assert.match(groundedImbalance, /precision and recall/i);
+  assert.match(groundedImbalance, /majority-class baseline/i);
+  assert.match(groundedImbalance, /class-specific errors/i);
+  const differentBaseline = deriveVerifiedReasoningFacts("A binary model reports 82% accuracy and 70% of observations are positive.");
+  assert.match(differentBaseline[0]?.statement ?? "", /70% accuracy/);
+  assert.deepEqual(
+    deriveVerifiedReasoningFacts("A multiclass model has 40% red, 35% blue, and 25% green observations with 60% accuracy."),
+    [],
+  );
+  assert.match(
+    deriveVerifiedReasoningFacts("A binary model has 60% accuracy and 40% of observations are red.")[0]?.statement ?? "",
+    /60% accuracy/,
+  );
+  assert.deepEqual(
+    deriveVerifiedReasoningFacts("A three-class sentiment model has 60% accuracy where 40% of observations are positive, 35% are neutral, and 25% are negative."),
+    [],
+  );
   const pValue = compileAnswerContract([{ role: "user", content: "Explain a p-value simply." }]);
   assert.equal(chooseSemanticRepair("It estimates how surprising the data are under a null hypothesis.", "A p-value simply", pValue), "It estimates how surprising the data are under a null hypothesis.");
   assert.match(chooseSemanticRepair("This relationship is false.", "Correlation does not prove causation; summer heat can drive both outcomes.", causal), /summer heat/);

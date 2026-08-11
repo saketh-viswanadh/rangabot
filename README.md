@@ -53,10 +53,15 @@ Tools menu.
 
 ### Local intelligence and an honest roadmap
 
-| Knowledge Brief | Path to Mastery |
-| --- | --- |
-| Meaningful technical developments, primary links, and local-vault status in a focused reading pane. | Every capability exposes its score, state, dependencies, and unlock criteria instead of implying that unfinished work is complete. |
-| ![Rangabot Knowledge Brief showing locally saved data-science developments](docs/media/rangabot-product-brief.png) | ![Rangabot Path to Mastery showing its public capability roadmap](docs/media/rangabot-product-mastery.png) |
+The Knowledge Brief presents meaningful technical developments, primary links,
+and local-vault status in a focused reading pane.
+
+![Rangabot Knowledge Brief showing locally saved data-science developments](docs/media/rangabot-product-brief.png)
+
+The generated [Path to Mastery](docs/PATH_TO_MASTERY.md) exposes every
+capability's state, dependencies, evidence, and unlock criteria instead of
+implying that unfinished work is complete. Its older UI capture is temporarily
+withheld until it can be recaptured against the current governed score.
 
 All showcase content is synthetic or public project metadata. No personal chat,
 memory, repository content, or private Knowledge Vault document is shown.
@@ -135,7 +140,7 @@ model server.
   capability data used by the public contributor backlog. Version 3 maps all
   work into nine charter-aligned paths: Mind & Memory, Scholar, Analyst,
   Builder, Creator, Personal Companion, Model Steward, Guardian, and Open
-  Platform. Its current strict readiness is 6/45 capabilities; weighted
+  Platform. Its current strict readiness is 7/45 capabilities; weighted
   development progress is not presented as readiness
 
 Conversation data stays in `data/rangabot.db` on this computer. The database and
@@ -483,6 +488,26 @@ trust diagnostic. It is deliberately marked as a partial selection and cannot
 replace the complete-suite result. The current request path and invariants are
 documented in the [Mind & Memory release architecture](docs/MIND_MEMORY_ARCHITECTURE.md).
 
+The final release decision is stricter than one successful run. It requires one
+clean 60-case result from the exact candidate, three separate 22-case critical
+runs from that same commit and model profile, and a fifteen-answer blind review
+completed by a person. The packet contains twelve balanced full-run answers plus
+the three repeated outputs for the case requiring semantic adjudication.
+`npm run conversation:release:gate` recomputes those
+machine and human gates rather than trusting their saved summaries. The frozen
+selection, rating rubric, private-file workflow, and exact commands are in the
+[blind-human review protocol](docs/CONVERSATION_HUMAN_REVIEW.md). No model,
+Rangabot, or Codex review counts as the human gate.
+
+The first exact-candidate v1.0.12 run exposed a critical evaluator false
+positive: a factually wrong premise answer passed its vocabulary rule. A larger
+regex repair still failed adversarial valid and contradictory paraphrases and
+was discarded. v1.0.13 marks semantic-truth cases for mandatory human review and
+binds their outputs from the full run and all three critical repetitions into
+the private packet. The automated score is structural evidence, not proof of
+factual truth; release remains failed until fresh machine evidence and every
+required human semantic rating pass.
+
 `npm run conversation:reviewer:qualify` tests whether the configured local model
 is safe to use as an answer critic. Qualification requires 12/12: six incorrect
 drafts corrected and six correct drafts preserved. A failed qualification exits
@@ -492,7 +517,11 @@ the ignored private evaluation directory.
 Ordinary chat now uses a provider-independent Rangabot contract and a bounded
 recent-history window. Relevant approved memories may shape an answer, but the
 latest explicit user correction always wins and unrelated memories remain
-outside the model request.
+outside the model request. A deterministic semantic task frame also preserves
+the current turn's intent, named subject, audience, tone, depth, and diagnostic
+direction before any supported model generates. It adds no factual answer and
+cannot manufacture knowledge a model lacks; it exists to reduce adjacent-topic,
+generic-checklist, and wrapper-text drift across models.
 
 Saved chat uses the versioned lifecycle documented in the contract. A start
 retry reuses the same UUID, the server reconstructs history and options, and
@@ -566,9 +595,10 @@ acceptance-gate result. Node/path aggregates are generated rather than typed by
 hand. Official
 contribution claims must use the Mastery contribution issue template, cite
 merged evidence and pass the [official approval process](docs/mastery-claims.md);
-direct self-awards are rejected by the metadata-only governance workflow. That
-workflow is not an enforced merge gate until its named check is added to main
-branch protection after this change merges.
+direct self-awards are rejected by the metadata-only governance workflow. A
+2026-08-10 settings audit observed its named check as required on `main`; because
+GitHub settings are mutable, current enforcement must be reverified
+independently.
 
 Rangabot welcomes community development. Read
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), the
@@ -602,6 +632,6 @@ Source code and documentation use Apache-2.0. Original Ranga artwork uses CC BY
 [BRANDING.md](BRANDING.md).
 
 The 2026-08-02 engineering audit is retained in
-[docs/code-review.md](docs/code-review.md); current privacy-candidate findings
-and residual risks are recorded in this changelog, `DAILY_PROGRESS.md`, and
-`SECURITY.md` until the exact candidate is committed and CI-verified.
+[docs/code-review.md](docs/code-review.md). PR #100's merged privacy-boundary
+closure, cross-platform validation, and remaining historical or environmental
+risks are recorded in this changelog, `DAILY_PROGRESS.md`, and `SECURITY.md`.

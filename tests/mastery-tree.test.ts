@@ -20,9 +20,9 @@ test("derives a complete program map from criterion-level evidence", () => {
   assert.equal(progress.criteriaTotal, 161);
   assert.ok(tree.epics.some((epic) => epic.id === "platform"));
   assert.ok(tree.epics.some((epic) => epic.id === "steward"));
-  assert.equal(progress.readinessPercent, 13);
-  assert.equal(progress.verificationPercent, 43);
-  assert.equal(progress.developmentPercent, 51);
+  assert.equal(progress.readinessPercent, 16);
+  assert.equal(progress.verificationPercent, 44);
+  assert.equal(progress.developmentPercent, 52);
   assert.ok(progress.readinessPercent < progress.verificationPercent);
   assert.ok(progress.verificationPercent < progress.developmentPercent);
   const hasManualField = (value: unknown, field: string): boolean => Boolean(value && typeof value === "object" && (Object.prototype.hasOwnProperty.call(value, field) || Object.values(value).some((item) => hasManualField(item, field))));

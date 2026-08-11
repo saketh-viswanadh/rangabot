@@ -30,6 +30,27 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   write/admin maintainer, binds approval to the exact pull-request head SHA,
   and invalidates it automatically after every push. Pull-request code is never
   checked out or executed by the approval workflow.
+- Added a provider-independent semantic task frame that preserves the current
+  turn's intent, exact subject, audience, requested tone/depth, and diagnostic
+  direction. It constrains drift without adding benchmark answers or pretending
+  to supply technical knowledge the selected model does not have.
+- Added a frozen blind-human conversation-review protocol and a fail-closed
+  release-gate checker. The checker recomputes one exact 60-case result, three
+  separately generated nonduplicate critical runs, and the human packet from
+  private source results; neither generated summaries nor a model/Codex review
+  can satisfy the gate.
+- Closed a critical semantic-governance gap in conversation evaluator v1.0.12:
+  a factually wrong premise answer passed its lexical rule. An expanded regex
+  repair still failed adversarial valid and contradictory paraphrases and was
+  discarded. v1.0.13 instead marks semantic-truth cases for mandatory human
+  review and binds their output from the full run and every critical repetition
+  into the private packet. Automated scoring is explicitly structural, the
+  earlier result is invalid standalone release evidence, and no unsafe
+  same-model rewrite was retained.
+- The closeout candidate passes 523/523 deterministic tests, memory-selection
+  precision and recall at 15/15 each, lint, typecheck, production build, privacy
+  scanning, and the production dependency audit. End-to-end model and human
+  evidence remains pending and is not inferred from these deterministic gates.
 
 - Established the canonical Rangabot Charter as a generated, governed source of
   truth for the product vision, mission, personal promise, decision test, twelve
@@ -59,10 +80,10 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   writers. SQL-confirmation expiry is now maintained at startup, and private
   registries reject symbolic links instead of following them.
 
-- Reconciled every cited mastery criterion against merged evidence only. The
-  strict maintainer-assessed result is 6/45 fully unlocked (13% readiness),
-  69/161 verified
-  criteria, and 51% weighted development progress. The weighted figure includes
+- Reconciled every cited mastery criterion against merged evidence only. After
+  PR #100's merged privacy and release validation, the strict maintainer-assessed
+  result is 7/45 fully unlocked (16% readiness), 71/161 verified criteria, and
+  52% weighted development progress. The weighted figure includes
   partial work and is never presented as readiness.
 - Remapped founder recognition into 33 evidence-backed claims attached to the
   new capability nodes. Attribution records work performed; it does not unlock
@@ -77,6 +98,10 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - Pinned the transitive production `nanoid` dependency to patched version
   3.3.17 after a new high-severity advisory began failing both CI platforms;
   the vulnerable code path arrived through Next.js's PostCSS dependency.
+- Closed obsolete website PR #86 and removed its source branch after PR #100
+  merged the current-tree separation. Dependabot PRs #95–#98 were already
+  closed and their website branches were confirmed absent. A historical rewrite
+  remains a separate disruptive decision.
 
 ### Removed
 
@@ -131,11 +156,13 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   silently truncated evidence.
 - Updated patched transitive dependencies and the reproducible lockfile. Local
   audits of the candidate lockfile, including development dependencies, report
-  zero vulnerabilities; GitHub must recalculate Dependabot alerts after merge.
+  zero vulnerabilities; a 2026-08-10 post-merge GitHub audit reports zero open
+  Dependabot alerts.
 - At historical implementation commit `f4b3677`, the unchanged 60-case suite passed
   59/60 overall and 22/22 critical at 6.5 seconds mean latency. The deterministic
-  project suite at that checkpoint passed 368/368. The current privacy candidate
-  has a separate 470/470 deterministic result recorded in `DAILY_PROGRESS.md`.
+  project suite at that checkpoint passed 368/368. PR #100's merged privacy
+  boundary has a separate 470/470 deterministic result plus passing Ubuntu and
+  Windows checks recorded in `DAILY_PROGRESS.md`.
   Neither is a claim of semantic mastery or completed human review.
 
 - Corrected the fresh-chat hierarchy after another production-size review.

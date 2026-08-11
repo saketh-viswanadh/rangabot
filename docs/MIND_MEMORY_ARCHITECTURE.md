@@ -147,7 +147,7 @@ and 7.2 seconds average latency on `llama3.2:3b` Q4_K_M. Failures were concentra
 in format adherence, reasoning, adaptation, unavailable actions, memory privacy,
 and memory precedence. That result fails release gates.
 
-The release candidate must pass the unchanged v1.0.11 suite at 54/60 or better,
+The release candidate must pass the frozen v1.0.13 suite at 54/60 or better,
 all 22 critical cases, at least 4/5 in every category, 100% deterministic tests,
 zero evaluator errors, and a blinded usefulness sample of at least 4/5. Targeted
 runs are diagnostic only and never replace the complete suite.
@@ -190,7 +190,7 @@ reviewer therefore remains locked and is absent from the production response
 path. This negative result prevents a superficially sophisticated quality stage
 from making Rangabot slower and less reliable.
 
-## Current candidate verdict
+## Historical candidate evidence
 
 The latest complete production-path run finished all 60 v1.0.7 cases without an
 execution error at 56/60, 22/22 critical, and 8.3 seconds mean latency. The
@@ -229,9 +229,20 @@ An earlier dirty-tree lifecycle candidate was 58/60 and is retained rather than
 hidden. The model suite uses the preserved stateless evaluator path, so it shows
 that lifecycle work did not materially regress answer quality; it does not test
 durable turn ownership. The latter is supported by deterministic route,
-transaction, stream, cancellation, migration, and race simulations. The formal
-verdict remains **conditional pass** until repeated critical and blind-human
-gates are complete.
+transaction, stream, cancellation, migration, and race simulations. That
+historical candidate's verdict was **conditional pass** until repeated critical
+and blind-human gates were complete.
+
+The closeout candidate adds a provider-independent Semantic Task Frame and a
+bound release-gate implementation. Its first v1.0.12 full run reported 58/60
+and 22/22 critical under its lexical scorer, but a preserved false-premise
+answer was semantically wrong; three separately generated critical runs each
+scored 21/22. A broader regex repair still failed adversarial valid and
+contradictory paraphrases and was discarded. v1.0.13 instead binds the flagged
+semantic-truth output from the full run and every critical repetition into the
+human packet. No unsafe same-model premise rewrite was retained. The release
+decision is therefore **fail** pending a fresh exact-candidate v1.0.13 full run,
+three critical repetitions, and completed blind-human semantic review.
 
 On 2026-08-05, `qwen2.5:7b` also passed only 1/12 reviewer cases and remains
 blocked. The first same-context critical comparison recorded 21/22 for both
