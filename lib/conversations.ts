@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import type { DatabaseSync as Database } from "node:sqlite";
 import type { ChatMessage } from "./providers/types";
 import { hardenPrivateSqliteFiles, preparePrivateSqliteStorage } from "./private-storage.ts";
+import { ensureResponseFeedbackSchema } from "./response-feedback.ts";
 import {
   ConversationArtifactCleanupError,
   ConversationArtifactReferenceError,
@@ -110,6 +111,7 @@ export function getConversationDatabase() {
       ON conversation_turns(conversation_id) WHERE status = 'pending';
     `);
     validateConversationTurnIndexes(database);
+    ensureResponseFeedbackSchema(database);
     const migrationKey = "conversation-turn-lifecycle-v1";
     const migration = database.prepare("SELECT key, applied_at AS appliedAt FROM schema_migrations WHERE key = ?")
       .get(migrationKey) as { key: string; appliedAt: string } | undefined;

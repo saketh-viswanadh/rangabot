@@ -5,6 +5,8 @@ import { CONVERSATION_TURN_PROTOCOL_VERSION } from "./conversation-turn-contract
 import { getConversation, getConversationDatabase, titleFromMessages, type Conversation } from "./conversations.ts";
 import type { ExpertPackFailureCode } from "./expert-packs.ts";
 import type { ChatMessage, ConversationTurnStatus, ProviderFailureCode } from "./providers/types.ts";
+import { getRuntimeResponseFeedbackCandidate } from "./response-feedback-candidate.ts";
+import { recordCompletedResponseFeedback } from "./response-feedback.ts";
 
 export { CONVERSATION_TURN_PROTOCOL_VERSION };
 // Longer than the maximum configurable 15-minute absolute deadline, so a
@@ -70,6 +72,7 @@ export type ClaimedConversationTurn = {
   kind: "claimed";
   turn: ConversationTurn;
   messages: ChatMessage[];
+  candidateBuildId: string | null;
 };
 
 export type ConversationTurnClaim = ClaimedConversationTurn | {
@@ -299,6 +302,10 @@ export function buildBoundedPromptMessages(history: ChatMessage[], currentUser: 
 }
 
 export function claimConversationTurn(conversationId: string, turnId: string): ConversationTurnClaim {
+  // Candidate inspection hashes only public source files and must happen
+  // before the SQLite write lock is acquired. The resulting identity is then
+  // frozen for this one generation lifecycle.
+  const candidate = getRuntimeResponseFeedbackCandidate();
   return withImmediateTransaction(() => {
     const database = getConversationDatabase();
     const row = getTurnRow(turnId);
@@ -319,7 +326,12 @@ export function claimConversationTurn(conversationId: string, turnId: string): C
     if (result.changes !== 1) throw new ConversationTurnError("turn-in-progress", "This turn is already being processed.");
     const claimed = getConversationTurn(turnId);
     if (!claimed) throw new ConversationTurnError("integrity", "Claimed turn could not be reloaded.");
-    return { kind: "claimed", turn: claimed, messages: buildBoundedPromptMessages(conversation.messages, claimed.userMessage) };
+    return {
+      kind: "claimed",
+      turn: claimed,
+      messages: buildBoundedPromptMessages(conversation.messages, claimed.userMessage),
+      candidateBuildId: candidate.state === "known" ? candidate.candidateBuildId : null,
+    };
   });
 }
 
@@ -327,7 +339,11 @@ function sameMessage(left: ChatMessage | null, right: ChatMessage) {
   return left ? JSON.stringify(withoutTurnMetadata(left)) === JSON.stringify(withoutTurnMetadata(right)) : false;
 }
 
-export function completeConversationTurn(turnId: string, assistantMessage: ChatMessage): ConversationTurn {
+export function completeConversationTurn(
+  turnId: string,
+  assistantMessage: ChatMessage,
+  candidateBuildId: string | null = null,
+): ConversationTurn {
   const portableAssistant = withoutTurnMetadata({ ...assistantMessage, content: assistantMessage.content.trim() });
   if (portableAssistant.role !== "assistant" || !isValidChatMessage(portableAssistant)) {
     throw new ConversationTurnError("invalid", "A valid non-empty assistant message is required to complete a turn.");
@@ -360,6 +376,7 @@ export function completeConversationTurn(turnId: string, assistantMessage: ChatM
       WHERE id = ? AND status = 'pending'
     `).run(JSON.stringify(portableAssistant), now, now, turnId);
     if (updated.changes !== 1) throw new ConversationTurnError("conflict", "Another terminal transition won this turn.");
+    recordCompletedResponseFeedback(database, turnId, candidateBuildId, now);
     database.prepare("UPDATE conversations SET title = ?, messages = ?, updated_at = ? WHERE id = ?")
       .run(titleFromMessages(canonicalMessages), JSON.stringify(canonicalMessages), now, turn.conversationId);
     const completed = getConversationTurn(turnId);

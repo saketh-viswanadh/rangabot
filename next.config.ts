@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { requireKnownResponseFeedbackCandidate } from "./lib/response-feedback-candidate.ts";
 
 const development = process.env.NODE_ENV !== "production";
 const contentSecurityPolicy = [
@@ -18,6 +19,7 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  generateBuildId: async () => requireKnownResponseFeedbackCandidate().build,
   serverExternalPackages: ["sqlite-vec", "@duckdb/node-api", "@duckdb/node-bindings"],
   async headers() {
     return [{
