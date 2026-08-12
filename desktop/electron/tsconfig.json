@@ -15,7 +15,8 @@
   },
   "include": [
     "./*.ts",
-    "../../lib/local-session-token.ts"
+    "../../lib/local-session-token.ts",
+    "../../lib/runtime-lease.ts"
   ],
   "exclude": [
     "./build.ts"

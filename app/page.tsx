@@ -22,6 +22,7 @@ import { formatAnswerReceipt } from "@/lib/answer-receipt";
 import { SqlAnalysisPanel } from "@/app/components/sql-analysis-panel";
 import { WelcomePreferencesDialog } from "@/app/components/welcome-preferences";
 import { ResponseFeedback } from "@/app/components/response-feedback";
+import { ModelManager } from "@/app/components/model-manager";
 import type { ResponseFeedbackRating, ResponseFeedbackView } from "@/lib/response-feedback-contract";
 import type { DesktopPreferences } from "@/lib/desktop-preferences";
 import { mergeResponseFeedbackRead, responseFeedbackBindingMatches } from "@/lib/response-feedback-client-state";
@@ -240,6 +241,7 @@ export default function Home() {
   const [legacyPreferencesPreview, setLegacyPreferencesPreview] = useState<LegacyPreferencesPreview | null>(null);
   const [replyTo, setReplyTo] = useState<DisplayMessage | null>(null);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
+  const [modelManagerOpen, setModelManagerOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [adoptedPendingTurn, setAdoptedPendingTurn] = useState<ActiveConversationTurn | null>(null);
@@ -1465,7 +1467,7 @@ export default function Home() {
                 </section>
               </div>}
             </div>
-            <button className={`status ${ready ? "ready" : "offline"}`} onClick={refreshStatus}>
+            <button className={`status ${ready ? "ready" : "offline"}`} onClick={() => setModelManagerOpen(true)} title="Open Model Manager">
               <span /> {ready ? `${status.configuredModel} ready` : status?.available ? "Model not installed" : "Ollama offline"}
             </button>
           </div>
@@ -1566,8 +1568,9 @@ export default function Home() {
 
         <div className={`composer-wrap ${messages.length === 0 ? "empty-chat" : ""}`}>
           {!ready && <div className="setup-hint">
-            <strong>{status?.available ? "Install the configured model" : "Start Ollama to chat"}</strong>
-            <span>{status?.available ? `Run: ollama pull ${status.configuredModel}` : "The app is ready and waiting for the local model service."}</span>
+            <strong>{status?.available ? "Choose a local model" : "Starting RangaBot’s model engine"}</strong>
+            <span>{status?.available ? "Open Model Manager to install or select a model—no terminal required." : "The private model engine is not ready yet."}</span>
+            <button type="button" onClick={() => setModelManagerOpen(true)}>Model Manager</button>
           </div>}
           <form className="composer" onSubmit={sendMessage} aria-busy={conversationLoading}>
             {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
@@ -1695,6 +1698,7 @@ export default function Home() {
       <MemoryPanel open={memoryPanelOpen} onClose={closeMemoryPanel} />
       <SqlAnalysisPanel key={sqlDraft ? `${sqlDraft.datasetId}:${sqlDraft.query}` : "manual"} open={sqlPanelOpen} onClose={closeSqlPanel} onAttach={(dataset) => { void attachDatasetToChat(dataset); setSqlDraft(null); }} initialDraft={sqlDraft} />
       {welcomePreferencesOpen && <WelcomePreferencesDialog preferences={welcomePreferences} appearance={appearance} palette={palette} onClose={closeWelcomePreferences} onSave={saveWelcomePreferences} />}
+      {modelManagerOpen && <ModelManager onClose={() => setModelManagerOpen(false)} onChanged={() => void refreshStatus()} />}
     </main>
   );
 }

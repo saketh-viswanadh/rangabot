@@ -145,15 +145,19 @@ function assertMachOArchitecture(path: string, arch: DesktopArtifactArch) {
   if (extname(path) === "" && reported.length !== 1) throw new Error("The packaged Electron executable must be architecture-specific, not universal.");
 }
 
-function makeTreeReadOnly(directory: string) {
+function makeTreeReadOnly(directory: string, resourceRoot = directory) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     const status = lstatSync(path);
     if (status.isSymbolicLink()) throw new Error("Final desktop Resources cannot contain symbolic links.");
     if (status.isDirectory()) {
-      makeTreeReadOnly(path);
+      makeTreeReadOnly(path, resourceRoot);
       chmodSync(path, 0o555);
-    } else if (status.isFile()) chmodSync(path, 0o444);
+    } else if (status.isFile()) {
+      const relative = path.slice(resourceRoot.length + 1).replaceAll("\\", "/");
+      const managedRuntimeExecutable = /^(?:rangabot-resources\/)?runtime\/ollama\/(?:ollama|llama-server|llama-quantize)$/.test(relative);
+      chmodSync(path, managedRuntimeExecutable ? 0o555 : 0o444);
+    }
     else throw new Error("Final desktop Resources contains an unsupported filesystem entry.");
   }
 }
