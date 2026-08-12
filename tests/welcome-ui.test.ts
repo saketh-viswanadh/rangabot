@@ -67,7 +67,7 @@ test("offers optional local personalization and every approved fresh-chat conten
   assert.match(preferences, /Name or nickname/);
   assert.match(preferences, /autoComplete="nickname"/);
   assert.match(preferences, /welcomeModeOptions\.map/);
-  assert.match(preferences, /stay in this browser/);
+  assert.match(preferences, /stay in Rangabot’s private local data on this device/);
   assert.match(page, /<WelcomePreferencesDialog/);
   assert.match(page, /formatWelcomeGreeting\(greetingIndex, welcomePreferences\.preferredName/);
 });
@@ -220,7 +220,7 @@ test("loads book welcome facts only from the same-origin no-store endpoint", asy
 
 test("keeps maintained public demo captures isolated from private local UI state", () => {
   assert.match(page, /const PUBLIC_DEMO_MODES = new Set\(\["knowledge", "welcome"\]\)/);
-  assert.match(page, /publicDemo\s*\?\s*\{ \.\.\.defaultWelcomePreferences \}/);
+  assert.match(page, /if \(publicDemo\)\s*\{\s*applyPreferences\(\{ \.\.\.defaultWelcomePreferences \}, null, DEFAULT_PALETTE\);/);
   assert.match(page, /if \(!publicDemo\)\s*\{[\s\S]*?void refreshProjects\(\);\s*void refreshRepositories\(\);\s*void refreshKnowledge\(\);/);
   assert.match(page, /PUBLIC_DEMO_MODES\.has\([^)]*get\("demo"\)[^)]*\)[\s\S]*setConversations\(\[\]\);\s*return;/);
 

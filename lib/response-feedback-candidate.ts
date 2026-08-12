@@ -11,6 +11,11 @@ import {
 } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
 import candidateManifest from "../config/response-feedback-candidate.json" with { type: "json" };
+import {
+  desktopRuntimeEvidenceFromResourceRoot,
+  inspectDesktopArtifact,
+} from "./desktop-artifact-identity.ts";
+import { runtimePaths, runtimeResourcePath } from "./runtime-paths.ts";
 
 export const RESPONSE_FEEDBACK_CANDIDATE_SCHEMA_VERSION = 1;
 export const RESPONSE_FEEDBACK_CANDIDATE_MANIFEST_PATH = "config/response-feedback-candidate.json";
@@ -345,7 +350,9 @@ export function inspectResponseFeedbackCandidate(options: { root?: string; requi
 export function requireKnownResponseFeedbackCandidate(
   options: { root?: string; requireBuildArtifact?: boolean } = {},
 ): KnownResponseFeedbackCandidate {
-  const candidate = inspectResponseFeedbackCandidate(options);
+  const candidate = process.env.RANGABOT_DESKTOP === "1"
+    ? getRuntimeResponseFeedbackCandidate()
+    : inspectResponseFeedbackCandidate(options);
   if (candidate.state !== "known" || !candidate.candidateBuildId || !candidate.build
     || !candidate.baseCommit || !candidate.manifestSha256 || !candidate.sourceVersion) {
     throw new Error(`Response Feedback Pulse candidate identity is ${candidate.state}; freeze the exact manifest before building or exporting.`);
@@ -403,6 +410,31 @@ export function responseFeedbackCandidateEnvironment(
 let productionRuntimeCandidate: Readonly<KnownResponseFeedbackCandidate> | undefined;
 
 export function getRuntimeResponseFeedbackCandidate(): ResponseFeedbackCandidateInspection {
+  if (process.env.RANGABOT_DESKTOP === "1") {
+    try {
+      const manifestPath = process.env.RANGABOT_DESKTOP_MANIFEST_PATH;
+      const artifactRoot = process.env.RANGABOT_DESKTOP_ARTIFACT_ROOT;
+      const expectedManifestPath = runtimeResourcePath("desktop", "manifest.json");
+      if (!manifestPath || resolve(manifestPath) !== expectedManifestPath || !artifactRoot) return emptyInspection("unknown");
+      const verified = inspectDesktopArtifact({
+        resourceRoot: resolve(artifactRoot),
+        manifestPath,
+        runtime: desktopRuntimeEvidenceFromResourceRoot({ resourceRoot: runtimePaths.resourceRoot }),
+      });
+      const inspection: ResponseFeedbackCandidateInspection = {
+        state: verified.state,
+        candidateBuildId: verified.candidateBuildId,
+        build: verified.build,
+        baseCommit: verified.baseCommit,
+        manifestSha256: verified.manifestSha256,
+        artifactSha256: verified.artifactSha256,
+        sourceVersion: verified.sourceVersion,
+      };
+      return inspection;
+    } catch {
+      return emptyInspection("unknown");
+    }
+  }
   if (process.env.NODE_ENV === "production" && productionRuntimeCandidate) return productionRuntimeCandidate;
   const state = process.env.RANGABOT_CANDIDATE_STATE;
   const candidateBuildId = process.env.RANGABOT_CANDIDATE_BUILD_ID;

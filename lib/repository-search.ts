@@ -1,5 +1,6 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync } from "node:fs";
 import { extname, relative, resolve, sep } from "node:path";
+import { assertExternalFilesystemPathAccess } from "./desktop-external-filesystem-policy.ts";
 import { validateAllowedRepositoryRoot, type AllowedRepository } from "./repositories.ts";
 
 export type CodeSearchResult = { path: string; line: number; excerpt: string };
@@ -123,6 +124,7 @@ function isSafeDirectory(repository: AllowedRepository, root: string, path: stri
 }
 
 export function searchRepository(repository: AllowedRepository, rawQuery: string): CodeSearchResult[] {
+  assertExternalFilesystemPathAccess(repository.path, "repository-search");
   const query = rawQuery.trim();
   if (query.length < 2 || query.length > 120) throw new Error("Search queries must contain between 2 and 120 characters.");
   const root = validateAllowedRepositoryRoot(repository);
@@ -156,6 +158,7 @@ export function searchRepository(repository: AllowedRepository, rawQuery: string
 }
 
 export function previewRepositoryFile(repository: AllowedRepository, relativePath: string, requestedLine = 1): CodePreview {
+  assertExternalFilesystemPathAccess(repository.path, "repository-preview");
   if (!relativePath || relativePath.length > 1024) throw new Error("A valid relative file path is required.");
   const root = validateAllowedRepositoryRoot(repository);
   const candidate = resolve(/* turbopackIgnore: true */ root, relativePath);

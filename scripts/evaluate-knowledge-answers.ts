@@ -3,12 +3,13 @@ import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { loadKnowledgeEvaluationCases, scoreKnowledgeAnswer } from "../lib/knowledge-evaluation.ts";
 import { countCitedSources, generateGroundedTeacherAnswer } from "../lib/knowledge-grounding.ts";
-import { knowledgeRoot, searchKnowledge } from "../lib/knowledge.ts";
+import { knowledgeEvaluationFixtures, knowledgeEvaluationResults, searchKnowledge } from "../lib/knowledge.ts";
+import { runtimePaths } from "../lib/runtime-paths.ts";
 import { buildTeacherMessages } from "../lib/teacher-mode.ts";
 import { ensurePrivateDirectory, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
 
 const option = (name: string) => process.argv.find((argument) => argument.startsWith(`--${name}=`))?.slice(name.length + 3);
-const localEnvironmentPath = resolve(process.cwd(), ".env.local");
+const localEnvironmentPath = resolve(runtimePaths.resourceRoot, ".env.local");
 if (existsSync(localEnvironmentPath)) {
   for (const line of readFileSync(localEnvironmentPath, "utf8").split(/\r?\n/)) {
     const match = line.match(/^([A-Z][A-Z0-9_]*)=(.*)$/);
@@ -20,7 +21,7 @@ if (option("num-ctx")) process.env.OLLAMA_NUM_CTX = option("num-ctx");
 const { completeTextWithOllama } = await import("../lib/providers/ollama.ts");
 const { getConfiguredChatModel, getConfiguredContextTokens } = await import("../lib/local-runtime-config.ts");
 
-const fixturePath = resolve(option("file") ?? resolve(knowledgeRoot, "evaluations", "starter.json"));
+const fixturePath = resolve(option("file") ?? resolve(knowledgeEvaluationFixtures, "starter.json"));
 if (!existsSync(fixturePath)) throw new Error(`Evaluation file not found: ${fixturePath}`);
 const subject = option("subject");
 const ids = new Set((option("ids") ?? "").split(",").filter(Boolean));
@@ -53,7 +54,7 @@ type AnswerEvaluationResult = ReturnType<typeof scoreKnowledgeAnswer> & {
   grounding: Awaited<ReturnType<typeof generateGroundedTeacherAnswer>>["audit"] | null;
   error?: string;
 };
-const outputRoot = resolve(knowledgeRoot, "evaluations", "results");
+const outputRoot = knowledgeEvaluationResults;
 ensurePrivateDirectory(outputRoot);
 const runKey = createHash("sha256").update(JSON.stringify({ fixturePath, ids: cases.map((item) => item.id), model: evaluationModel, contextTokens: evaluationContextTokens })).digest("hex").slice(0, 12);
 const checkpointPath = resolve(outputRoot, `answers-checkpoint-${runKey}.json`);

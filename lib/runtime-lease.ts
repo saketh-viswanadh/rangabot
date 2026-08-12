@@ -18,12 +18,13 @@ import {
   supportsPosixPermissions,
   writePrivateJsonFileAtomic,
 } from "./private-storage.ts";
+import { runtimePaths } from "./runtime-paths.ts";
 
 const runtimeLeaseVersion = 1;
 const maximumLeaseBytes = 4_096;
 const acquisitionAttempts = 8;
 
-export const defaultRuntimeLeasePath = resolve(process.cwd(), "data", "rangabot.db-runtime.lock");
+export const defaultRuntimeLeasePath = runtimePaths.runtimeLease;
 
 export type RuntimeLeaseRole = "app" | "maintenance";
 export type ProcessState = "alive" | "dead" | "unknown";
@@ -37,8 +38,9 @@ type RuntimeLeaseRecord = {
   createdAt: string;
 };
 
-type RuntimeLeaseOptions = {
+export type RuntimeLeaseOptions = {
   path?: string;
+  trustedRoot?: string;
   role: RuntimeLeaseRole;
   ownerPid?: number;
   now?: () => Date;
@@ -132,8 +134,8 @@ function removeVerifiedStaleRecord(path: string, expected: RuntimeLeaseRecord) {
   return true;
 }
 
-function publishRecord(path: string, record: RuntimeLeaseRecord) {
-  ensurePrivateDirectory(dirname(path));
+function publishRecord(path: string, record: RuntimeLeaseRecord, trustedRoot?: string) {
+  ensurePrivateDirectory(dirname(path), { trustedRoot });
   const temporary = `${path}.${record.token}.tmp`;
   let descriptor: number | undefined;
   try {
@@ -147,11 +149,11 @@ function publishRecord(path: string, record: RuntimeLeaseRecord) {
     fsyncSync(descriptor);
     closeSync(descriptor);
     descriptor = undefined;
-    ensurePrivateFile(temporary);
+    ensurePrivateFile(temporary, { trustedRoot });
     // A hard link publishes the already-complete record while preserving the
     // O_EXCL property across cooperating processes.
     linkSync(temporary, path);
-    ensurePrivateFile(path);
+    ensurePrivateFile(path, { trustedRoot });
     unlinkSync(temporary);
   } catch (error) {
     if (descriptor !== undefined) {
@@ -184,7 +186,7 @@ export function acquireRuntimeLease(options: RuntimeLeaseOptions): RuntimeLease 
   let acquired = false;
   for (let attempt = 0; attempt < acquisitionAttempts; attempt += 1) {
     try {
-      publishRecord(path, record);
+      publishRecord(path, record, options.trustedRoot);
       acquired = true;
       break;
     } catch (error) {
@@ -218,7 +220,7 @@ export function acquireRuntimeLease(options: RuntimeLeaseOptions): RuntimeLease 
       if (released || !validPid(pid)) throw new RuntimeLeaseError("invalid", "The Rangabot runtime process identity is invalid.");
       if (!ownsCurrentRecord()) throw new RuntimeLeaseError("active", "The Rangabot runtime lease is no longer owned by this process.");
       record.runtimePid = pid;
-      writePrivateJsonFileAtomic(path, record);
+      writePrivateJsonFileAtomic(path, record, { trustedRoot: options.trustedRoot });
     },
     release() {
       if (released) return false;

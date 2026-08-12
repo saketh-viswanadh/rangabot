@@ -3,9 +3,10 @@ import { randomUUID } from "node:crypto";
 import { existsSync, lstatSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { ensurePrivateDirectory } from "./private-storage.ts";
+import { runtimePaths } from "./runtime-paths.ts";
 
 const wordArtifactId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const wordArtifactsRoot = resolve(process.cwd(), "data", "artifacts");
+const wordArtifactsRoot = runtimePaths.artifactsRoot;
 
 export type StagedArtifactDeletion = {
   processedArtifactIds: string[];

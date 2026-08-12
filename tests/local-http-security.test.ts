@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  bindLocalRequestUrlToValidatedHost,
   evaluateLocalBootstrapRequest,
   evaluateLocalApiRequest,
   isAllowedLocalApiUrl,
@@ -48,6 +49,28 @@ test("accepts only explicit loopback Host values", () => {
   for (const host of [null, "", "rangabot.com", "127.0.0.1.example.com", "127.0.0.1@evil.test", "127.0.0.1/path", "localhost evil.test"]) {
     assert.equal(isAllowedLoopbackHost(host), false, String(host));
   }
+});
+
+test("restores a validated numeric-loopback Host after NextRequest normalizes its URL", () => {
+  assert.equal(
+    bindLocalRequestUrlToValidatedHost(
+      "http://localhost:43127/api/local-session/desktop-readiness",
+      "127.0.0.1:43127",
+    ),
+    "http://127.0.0.1:43127/api/local-session/desktop-readiness",
+  );
+  assert.equal(
+    bindLocalRequestUrlToValidatedHost("http://localhost:43127/api/status?view=compact", "localhost:43127"),
+    "http://localhost:43127/api/status?view=compact",
+  );
+  for (const host of [null, "evil.test:43127", "127.0.0.1@evil.test", "127.0.0.1/path"]) {
+    assert.equal(bindLocalRequestUrlToValidatedHost("http://localhost:43127/api/status", host), null);
+  }
+  assert.equal(bindLocalRequestUrlToValidatedHost("https://localhost:43127/api/status", "127.0.0.1:43127"), null);
+  assert.equal(
+    bindLocalRequestUrlToValidatedHost("http://localhost:43127//evil.test/api/status", "127.0.0.1:43127"),
+    "http://127.0.0.1:43127//evil.test/api/status",
+  );
 });
 
 test("allows the client helper to target only the current local API", () => {
@@ -125,6 +148,12 @@ test("wires the guard across all API routes and all browser API calls", () => {
   const proxy = readFileSync("proxy.ts", "utf8");
   assert.match(proxy, /matcher:\s*\["\/api\/:path\*"/);
   assert.match(proxy, /request\.nextUrl\.pathname === LOCAL_BOOTSTRAP_PATH/);
+  assert.match(proxy, /request\.nextUrl\.pathname === DESKTOP_READINESS_PATH/);
+  assert.match(proxy, /const requestUrl = bindLocalRequestUrlToValidatedHost\(request\.url, host\)/);
+  assert.equal((proxy.match(/url: requestUrl/g) ?? []).length, 3);
+  assert.match(proxy, /NextResponse\.redirect\(new URL\("\/", requestUrl\), 303\)/);
+  assert.match(proxy, /consumeOnce: process\.env\.RANGABOT_DESKTOP === "1"/);
+  assert.match(proxy, /bootstrapTokenVerifier\.consume\(suppliedBootstrapToken\)/);
   assert.match(proxy, /if \(!sessionValid\) return forbidden\(false\)/);
   assert.doesNotMatch(proxy, /if \(!verifyLocalSessionToken\(current, sessionSecret\)\)\s*\{\s*response\.cookies\.set/);
   for (const path of ["app/page.tsx", "app/components/memory-panel.tsx", "app/components/sql-analysis-panel.tsx", "app/components/response-feedback.tsx"]) {

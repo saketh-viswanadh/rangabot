@@ -12,8 +12,10 @@ import {
 } from "node:fs";
 import { chmod, mkdtemp, open, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
-import { basename, extname, join, resolve } from "node:path";
+import { basename, extname, join } from "node:path";
+import { assertExternalFilesystemPathAccess } from "./desktop-external-filesystem-policy.ts";
+import { ensurePrivateDirectory } from "./private-storage.ts";
+import { runtimePaths } from "./runtime-paths.ts";
 
 const supportedExtensions = new Set([".csv", ".parquet", ".duckdb"]);
 const maxInputBytes = 100 * 1024 * 1024;
@@ -23,8 +25,8 @@ const maxCellBytes = 64 * 1024;
 const maxResultBytes = 1024 * 1024;
 const workerHeapMb = 128;
 const defaultTimeoutMs = 10_000;
-const workerPath = resolve(/* turbopackIgnore: true */ process.cwd(), "lib", "sql-runtime-worker.cjs");
-const serverRequire = createRequire(resolve(process.cwd(), "package.json"));
+const workerPath = runtimePaths.sqlRuntimeWorker;
+const serverRequire = createRequire(runtimePaths.packageJson);
 const { fork: forkProcess } = serverRequire("node:child_process") as typeof import("node:child_process");
 
 export type SqlRuntimeFailureCode = "cancelled" | "dataset-changed" | "invalid-query" | "resource-limit" | "timeout" | "tool-failure";
@@ -199,6 +201,7 @@ function hashDescriptorSync(descriptor: number, sizeBytes: number) {
 }
 
 export function inspectDatasetForApproval(path: string) {
+  assertExternalFilesystemPathAccess(path, "dataset-approval");
   const opened = openValidatedDatasetSync(path);
   try {
     const before = stableFileFields(opened.status);
@@ -214,6 +217,7 @@ export function inspectDatasetForApproval(path: string) {
 }
 
 export function validateApprovedDataset(path: string) {
+  assertExternalFilesystemPathAccess(path, "dataset-identity-validation");
   const opened = openValidatedDatasetSync(path);
   try { return opened.dataset; }
   finally { closeSync(opened.descriptor); }
@@ -225,6 +229,7 @@ function assertExpectedIdentity(actual: DatasetFileIdentity, options: DatasetBou
 }
 
 async function createDatasetSnapshot(path: string, options: DatasetBoundaryOptions = {}): Promise<DatasetSnapshot> {
+  assertExternalFilesystemPathAccess(path, "dataset-snapshot");
   throwIfCancelled(options.signal);
   const canonical = canonicalDatasetPath(path);
   let root: string | undefined;
@@ -238,7 +243,8 @@ async function createDatasetSnapshot(path: string, options: DatasetBoundaryOptio
     assertPathReferencesOpenedFile(canonical, beforeStatus);
     if (options.expectedFileIdentity && !sameStableFile(before, options.expectedFileIdentity)) throw changedDatasetError();
 
-    root = await mkdtemp(join(tmpdir(), "rangabot-dataset-"));
+    ensurePrivateDirectory(runtimePaths.datasetSnapshots, { trustedRoot: runtimePaths.dataRoot });
+    root = await mkdtemp(join(runtimePaths.datasetSnapshots, "request-"));
     if (process.platform !== "win32") await chmod(root, 0o700);
     const snapshotPath = join(root, `input${dataset.extension}`);
     destination = await open(snapshotPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollowFlag(), 0o600);
@@ -421,6 +427,7 @@ function validateExecutionPayload(value: { columns: string[]; rows: unknown[][];
 }
 
 export async function inspectDatasetSchema(path: string, options: DatasetBoundaryOptions & { timeoutMs?: number } = {}): Promise<DatasetColumn[]> {
+  assertExternalFilesystemPathAccess(path, "dataset-schema");
   const timeoutMs = boundedTimeout(options.timeoutMs);
   const deadline = operationSignal(options.signal, timeoutMs, "SQL schema inspection");
   let snapshot: DatasetSnapshot | undefined;
@@ -444,6 +451,7 @@ export async function executeReadOnlySql(input: {
   onSnapshotReady?: (snapshotPath: string) => void;
   onQueryStart?: () => void;
 }): Promise<SqlExecutionResult> {
+  assertExternalFilesystemPathAccess(input.approvedDatasetPath, "dataset-sql-execution");
   const started = Date.now();
   const timeoutMs = boundedTimeout(input.timeoutMs);
   const deadline = operationSignal(input.signal, timeoutMs, "SQL execution");

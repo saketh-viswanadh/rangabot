@@ -1,14 +1,15 @@
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
 import {
   requireKnownResponseFeedbackCandidate,
   responseFeedbackCandidateEnvironment,
   writeResponseFeedbackBuildArtifactManifest,
 } from "../lib/response-feedback-candidate.ts";
+import { runtimePaths } from "../lib/runtime-paths.ts";
 
 requireKnownResponseFeedbackCandidate();
-const nextCli = resolve(process.cwd(), "node_modules", "next", "dist", "bin", "next");
+const nextCli = runtimePaths.nextCli;
 const result = spawnSync(process.execPath, [nextCli, "build"], {
+  cwd: runtimePaths.resourceRoot,
   env: responseFeedbackCandidateEnvironment({
     ...process.env,
     NEXT_TELEMETRY_DISABLED: process.env.NEXT_TELEMETRY_DISABLED ?? "1",

@@ -16,6 +16,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { resolveRuntimePathWithinRoot, runtimePaths } from "./runtime-paths.ts";
 
 export const privateDirectoryMode = 0o700;
 export const privateFileMode = 0o600;
@@ -54,33 +55,47 @@ function pathIsWithin(root: string, path: string) {
 
 /**
  * Chooses an explicit trust boundary without walking above it. Rangabot's
- * managed state lives below the process working directory; deterministic test
- * and worker state may live below the operating-system temp directory. Callers
- * using another location must name their trusted root explicitly.
+ * managed state lives below the configured private data root; deterministic
+ * test and worker state may live below the operating-system temp directory.
+ * CLI mode also preserves the historical project-root trust boundary. A
+ * configured desktop resource root is intentionally never writable here.
  */
 function resolveTrustedRoot(path: string, requestedRoot?: string) {
   const target = resolve(/* turbopackIgnore: true */ path);
+  if (runtimePaths.mode === "configured" && pathIsWithin(runtimePaths.dataRoot, target)) {
+    resolveRuntimePathWithinRoot(runtimePaths.dataRoot);
+  }
+  if (runtimePaths.mode === "configured" && pathIsWithin(runtimePaths.resourceRoot, target)) {
+    throw new UnsafePrivateStoragePathError("Packaged Rangabot resources are immutable private-storage inputs.");
+  }
   const candidates = requestedRoot === undefined
     ? [
-      resolve(/* turbopackIgnore: true */ process.cwd()),
+      runtimePaths.dataRoot,
+      ...(runtimePaths.mode === "cli" ? [resolve(/* turbopackIgnore: true */ process.cwd())] : []),
       resolve(/* turbopackIgnore: true */ tmpdir()),
     ]
     : [resolve(/* turbopackIgnore: true */ requestedRoot)];
-  const trustedRoot = candidates
+  const eligible = candidates
     .filter((candidate) => pathIsWithin(candidate, target))
-    .sort((left, right) => right.length - left.length)[0];
-  if (!trustedRoot) {
+    .sort((left, right) => right.length - left.length);
+  if (!eligible.length) {
     throw new UnsafePrivateStoragePathError("Private storage outside Rangabot requires an explicit trusted root.");
   }
-  let rootStatus;
-  try { rootStatus = lstatSync(trustedRoot); }
-  catch {
-    throw new UnsafePrivateStoragePathError("Private storage trusted root must be an existing local directory.");
+  for (const trustedRoot of eligible) {
+    let rootStatus;
+    try { rootStatus = lstatSync(trustedRoot); }
+    catch (error) {
+      if (requestedRoot !== undefined || (error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw new UnsafePrivateStoragePathError("Private storage trusted root must be an existing local directory.");
+      }
+      continue;
+    }
+    if (rootStatus.isSymbolicLink() || !rootStatus.isDirectory()) {
+      throw new UnsafePrivateStoragePathError("Private storage trusted root must be a real local directory.");
+    }
+    return trustedRoot;
   }
-  if (rootStatus.isSymbolicLink() || !rootStatus.isDirectory()) {
-    throw new UnsafePrivateStoragePathError("Private storage trusted root must be a real local directory.");
-  }
-  return trustedRoot;
+  throw new UnsafePrivateStoragePathError("Private storage trusted root must be an existing local directory.");
 }
 
 /**

@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 import { requireKnownResponseFeedbackCandidate } from "./lib/response-feedback-candidate.ts";
 
 const development = process.env.NODE_ENV !== "production";
+const desktopStagingBuildId = process.env.RANGABOT_DESKTOP_STAGING_BUILD_ID;
+if (desktopStagingBuildId !== undefined && !/^desktop-stage-[0-9a-f]{16}$/.test(desktopStagingBuildId)) {
+  throw new Error("RANGABOT_DESKTOP_STAGING_BUILD_ID is invalid.");
+}
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${development ? " 'unsafe-eval'" : ""}`,
@@ -18,8 +22,9 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   poweredByHeader: false,
-  generateBuildId: async () => requireKnownResponseFeedbackCandidate().build,
+  generateBuildId: async () => desktopStagingBuildId ?? requireKnownResponseFeedbackCandidate().build,
   serverExternalPackages: ["sqlite-vec", "@duckdb/node-api", "@duckdb/node-bindings"],
   async headers() {
     return [{

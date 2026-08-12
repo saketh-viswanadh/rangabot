@@ -38,8 +38,11 @@ data/knowledge/evaluations/*.private.json
 data/knowledge/evaluations/results/
 data/evaluations/results/
 data/evaluations/reviews/
+data/dataset-snapshots/
 work/
 outputs/
+desktop/out/
+out/
 # The public rangabot.com site is maintained in a maintainer-controlled local
 # Sites workspace. Its source is intentionally not part of the open-source app.
 /website/

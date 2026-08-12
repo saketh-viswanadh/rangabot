@@ -42,6 +42,24 @@ export function isAllowedLoopbackHost(host: string | null) {
   return host !== null && normalizedHostOrigin(host) !== null;
 }
 
+/**
+ * NextRequest canonicalizes loopback hostnames to `localhost`. Restore only
+ * the authority from the separately validated Host header so downstream
+ * checks still compare against the local address the client actually used.
+ */
+export function bindLocalRequestUrlToValidatedHost(candidate: string, host: string | null) {
+  const hostOrigin = normalizedHostOrigin(host ?? "");
+  if (!hostOrigin) return null;
+  try {
+    const normalized = new URL(candidate);
+    if (normalized.protocol !== "http:") return null;
+    normalized.host = new URL(hostOrigin).host;
+    return normalized.href;
+  } catch {
+    return null;
+  }
+}
+
 export function isAllowedLocalApiUrl(candidate: string, currentOrigin: string) {
   try {
     const url = new URL(candidate, currentOrigin);

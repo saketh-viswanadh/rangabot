@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
-import { resolve } from "node:path";
 import type { DatabaseSync as Database } from "node:sqlite";
 import type { ChatMessage } from "./providers/types";
 import { hardenPrivateSqliteFiles, preparePrivateSqliteStorage } from "./private-storage.ts";
@@ -13,8 +12,9 @@ import {
   stageOwnedWordArtifactDirectories,
   type StagedArtifactDeletion,
 } from "./conversation-artifacts.ts";
+import { runtimePaths } from "./runtime-paths.ts";
 
-const serverRequire = createRequire(resolve(process.cwd(), "package.json"));
+const serverRequire = createRequire(runtimePaths.packageJson);
 const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sqlite");
 
 export interface ConversationSummary {
@@ -38,7 +38,7 @@ export interface Conversation extends ConversationSummary {
   messages: ChatMessage[];
 }
 
-const defaultDatabasePath = resolve(process.cwd(), "data", "rangabot.db");
+const defaultDatabasePath = runtimePaths.conversationDatabase;
 let databasePath = defaultDatabasePath;
 let database: Database | undefined;
 

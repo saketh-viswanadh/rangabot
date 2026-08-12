@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  createExpectedLocalBootstrapTokenVerifier,
   createLocalSessionSecret,
   issueLocalBootstrapToken,
   issueLocalSessionToken,
@@ -36,4 +37,34 @@ test("separates startup capabilities from browser session capabilities", () => {
   assert.equal(verifyLocalSessionToken(bootstrap, secret), false);
   assert.equal(verifyExpectedLocalBootstrapToken(bootstrap, secret, undefined), false);
   assert.equal(verifyExpectedLocalBootstrapToken(bootstrap, secret, issueLocalBootstrapToken(secret)), false);
+});
+
+test("desktop bootstrap capability is synchronously consumed exactly once", () => {
+  const secret = createLocalSessionSecret();
+  const bootstrap = issueLocalBootstrapToken(secret);
+  const verifier = createExpectedLocalBootstrapTokenVerifier({
+    secret,
+    expectedToken: bootstrap,
+    consumeOnce: true,
+  });
+
+  assert.equal(verifier.matches(bootstrap), true);
+  assert.equal(verifier.consume(issueLocalBootstrapToken(secret)), false, "a different valid capability cannot consume this launch");
+  assert.equal(verifier.consume(bootstrap), true);
+  assert.equal(verifier.matches(bootstrap), false);
+  assert.equal(verifier.consume(bootstrap), false, "replay must fail after the first successful consumption");
+});
+
+test("CLI bootstrap capability preserves launch-bound reusable semantics", () => {
+  const secret = createLocalSessionSecret();
+  const bootstrap = issueLocalBootstrapToken(secret);
+  const verifier = createExpectedLocalBootstrapTokenVerifier({
+    secret,
+    expectedToken: bootstrap,
+    consumeOnce: false,
+  });
+
+  assert.equal(verifier.consume(bootstrap), true);
+  assert.equal(verifier.consume(bootstrap), true);
+  assert.equal(verifier.matches(bootstrap), true);
 });

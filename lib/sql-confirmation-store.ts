@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { ensurePrivateDirectory, ensurePrivateFile } from "./private-storage.ts";
+import { runtimePaths } from "./runtime-paths.ts";
 
 export type SqlConfirmationRecord = {
   id: string;
@@ -13,7 +14,7 @@ export type SqlConfirmationRecord = {
   expiresAt: string;
 };
 
-export const defaultSqlConfirmationStorePath = resolve(process.cwd(), "data", "sql-confirmations.json");
+export const defaultSqlConfirmationStorePath = runtimePaths.sqlConfirmations;
 export const sqlConfirmationTempMaxAgeMs = 10 * 60 * 1000;
 
 function isConfirmation(value: unknown): value is SqlConfirmationRecord {

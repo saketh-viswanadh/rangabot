@@ -1,10 +1,10 @@
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
 import { devServerEnvironment, localBootstrapUrl, localServerPort } from "../lib/dev-server.ts";
 import { defaultSqlConfirmationStorePath, maintainSqlConfirmationStoreAtPath } from "../lib/sql-confirmation-store.ts";
 import { purgeArtifactDeletionQuarantine } from "../lib/conversation-artifacts.ts";
 import { acquireRuntimeLease } from "../lib/runtime-lease.ts";
 import { responseFeedbackCandidateEnvironment } from "../lib/response-feedback-candidate.ts";
+import { runtimePaths } from "../lib/runtime-paths.ts";
 
 const serverEnvironment = responseFeedbackCandidateEnvironment(devServerEnvironment(process.platform));
 const serverPort = localServerPort(serverEnvironment);
@@ -20,12 +20,13 @@ try {
   console.warn(`Private storage maintenance could not complete: ${error instanceof Error ? error.message : "unknown local storage error"}`);
 }
 
-const nextCli = resolve(process.cwd(), "node_modules", "next", "dist", "bin", "next");
+const nextCli = runtimePaths.nextCli;
 if (serverEnvironment.RANGABOT_CANDIDATE_STATE !== "known") {
   console.warn(`Response feedback is disabled because candidate identity is ${serverEnvironment.RANGABOT_CANDIDATE_STATE ?? "unknown"}.`);
 }
 console.log(`\nOpen Rangabot using this private one-launch URL:\n${localBootstrapUrl(bootstrapToken, serverPort)}\n`);
 const child = spawn(process.execPath, [nextCli, "dev", "--hostname", "127.0.0.1", "--port", String(serverPort)], {
+  cwd: runtimePaths.resourceRoot,
   env: serverEnvironment as NodeJS.ProcessEnv,
   stdio: "inherit",
 });

@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "declaration": false,
+    "incremental": false,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "noEmit": false,
+    "outDir": "../out/electron-app",
+    "rootDir": "../..",
+    "rewriteRelativeImportExtensions": true,
+    "sourceMap": false,
+    "target": "ES2022"
+  },
+  "include": [
+    "./*.ts",
+    "../../lib/local-session-token.ts"
+  ],
+  "exclude": [
+    "./build.ts"
+  ]
+}

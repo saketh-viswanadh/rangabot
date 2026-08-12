@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { createKnowledgeBackup, getKnowledgeBackupRetention, listKnowledgeBackups, restoreLatestKnowledgeBackup, validateKnowledgeBackup } from "../lib/knowledge-backups.ts";
-import { getKnowledgeStatus, getKnowledgeVectorIndexStatus, knowledgeDatabasePath, knowledgeInbox, knowledgeIngestionVersion, knowledgeRoot, listIndexedDocumentUsefulCharacters, listIndexedKnowledgeDocuments, listKnowledgeFiles, rebuildKnowledgeVectorIndex } from "../lib/knowledge.ts";
+import { getKnowledgeStatus, getKnowledgeVectorIndexStatus, knowledgeDatabasePath, knowledgeInbox, knowledgeIngestionVersion, knowledgeRoot, knowledgeSourceManifest, listIndexedDocumentUsefulCharacters, listIndexedKnowledgeDocuments, listKnowledgeFiles, rebuildKnowledgeVectorIndex } from "../lib/knowledge.ts";
 import { getKnowledgeDoctorTimeoutMs, inspectKnowledgeFileHashes } from "../lib/knowledge-doctor.ts";
 import { ensurePrivateDirectory } from "../lib/private-storage.ts";
 
@@ -54,7 +54,7 @@ if (command === "init") {
   if (!result.available) process.exitCode = 1;
   else console.log(`Indexed ${result.vectors.toLocaleString()} vectors with ${result.dimensions} dimensions in ${((Date.now() - started) / 1000).toFixed(1)}s.`);
 } else if (command === "validate") {
-  const manifest = JSON.parse(readFileSync(resolve(knowledgeRoot, "SOURCE_MANIFEST.json"), "utf8")) as { sources?: Array<Record<string, unknown>> };
+  const manifest = JSON.parse(readFileSync(knowledgeSourceManifest, "utf8")) as { sources?: Array<Record<string, unknown>> };
   const required = ["id", "title", "author", "url", "license", "licenseUrl", "distributionPolicy", "retrievedAt", "subject", "difficulty", "updatePolicy"];
   const problems = (manifest.sources ?? []).flatMap((source, index) => required.filter((field) => source[field] === undefined).map((field) => `source ${index + 1} missing ${field}`));
   if (problems.length) {

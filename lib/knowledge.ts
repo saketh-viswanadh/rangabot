@@ -5,16 +5,21 @@ import { extname, resolve } from "node:path";
 import type { DatabaseSync as Database } from "node:sqlite";
 import * as sqliteVec from "sqlite-vec";
 import { getConfiguredEmbeddingModel, getKnowledgeBudgetBytes, getLocalOllamaBaseUrl } from "./local-runtime-config.ts";
+import { verificationLocalModelDisabled } from "./desktop-external-filesystem-policy.ts";
 import { ensurePrivateDirectory, hardenPrivateSqliteFiles, preparePrivateSqliteStorage } from "./private-storage.ts";
+import { runtimePaths } from "./runtime-paths.ts";
 
-const serverRequire = createRequire(resolve(process.cwd(), "package.json"));
+const serverRequire = createRequire(runtimePaths.packageJson);
 const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sqlite");
 
-export const knowledgeRoot = resolve(process.cwd(), "data", "knowledge");
-export const knowledgeInbox = resolve(knowledgeRoot, "inbox");
-export const knowledgeWeeklyBrief = resolve(knowledgeRoot, "NEW_THIS_WEEK.md");
-export const knowledgeMonthlyBrief = resolve(knowledgeRoot, "NEW_THIS_MONTH.md");
-export const knowledgeDatabasePath = resolve(knowledgeRoot, "indexes", "knowledge.db");
+export const knowledgeRoot = runtimePaths.knowledgeRoot;
+export const knowledgeInbox = runtimePaths.knowledgeInbox;
+export const knowledgeWeeklyBrief = runtimePaths.knowledgeWeeklyBrief;
+export const knowledgeMonthlyBrief = runtimePaths.knowledgeMonthlyBrief;
+export const knowledgeSourceManifest = runtimePaths.knowledgeSourceManifest;
+export const knowledgeEvaluationFixtures = runtimePaths.knowledgeEvaluationFixtures;
+export const knowledgeEvaluationResults = runtimePaths.knowledgeEvaluationResults;
+export const knowledgeDatabasePath = runtimePaths.knowledgeDatabase;
 let activeKnowledgeDatabasePath = knowledgeDatabasePath;
 export const knowledgeBudgetBytes = getKnowledgeBudgetBytes();
 export const embeddingModel = getConfiguredEmbeddingModel();
@@ -456,7 +461,7 @@ export async function searchKnowledgeWithDiagnostics(query: string, limit = 6, s
     ORDER BY rank LIMIT ?
   `).all(expression, Math.max(limit * 6, 24)) as unknown as Array<Omit<KnowledgeResult, "score"> & { rank: number }>;
   const lexical = rows.map(({ rank: _rank, ...row }, index) => ({ ...row, lexicalScore: Math.max(.35, 1 - index / Math.max(rows.length, 1)) }));
-  const queryEmbedding = process.env.KNOWLEDGE_DISABLE_EMBEDDINGS === "1" ? null : await embedQuery(query, signal);
+  const queryEmbedding = process.env.KNOWLEDGE_DISABLE_EMBEDDINGS === "1" ? null : await embedKnowledgeQuery(query, signal);
   signal?.throwIfAborted();
   if (!queryEmbedding) return {
     results: diversifyKnowledgeResults(filterKnowledgeResultsBySubject(query, lexical.map(({ lexicalScore, ...result }) => ({ ...result, score: lexicalScore }))), limit),
@@ -528,7 +533,8 @@ function nativeSemanticSearch(queryEmbedding: number[], limit: number, signal?: 
   }
 }
 
-async function embedQuery(input: string, signal?: AbortSignal): Promise<number[] | null> {
+export async function embedKnowledgeQuery(input: string, signal?: AbortSignal): Promise<number[] | null> {
+  if (verificationLocalModelDisabled()) return null;
   try {
     const timeout = AbortSignal.timeout(30_000);
     const response = await fetch(`${getLocalOllamaBaseUrl()}/api/embed`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: embeddingModel, input }), signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
@@ -585,8 +591,7 @@ export function listKnowledgeFiles() {
 }
 
 export function readSourceManifest() {
-  const path = resolve(knowledgeRoot, "SOURCE_MANIFEST.json");
-  return JSON.parse(readFileSync(/* turbopackIgnore: true */ path, "utf8")) as unknown;
+  return JSON.parse(readFileSync(/* turbopackIgnore: true */ knowledgeSourceManifest, "utf8")) as unknown;
 }
 
 export function closeKnowledgeDatabaseForTests() {

@@ -171,7 +171,7 @@ export function WelcomePreferencesDialog({ preferences, appearance, palette, onC
               </div>
             </div>
           </section>}
-          <p className="welcome-privacy"><CraftIcon name="shield" size={15} /><span>These preferences stay in this browser. Your name is not added to chat, Local Memory, the Knowledge Vault or a model prompt.</span></p>
+          <p className="welcome-privacy"><CraftIcon name="shield" size={15} /><span>These preferences stay in Rangabot’s private local data on this device. Your name is not added to chat, Local Memory, the Knowledge Vault or a model prompt.</span></p>
           <footer>
             <button type="button" className="welcome-clear" onClick={() => { setPreferredName(defaultWelcomePreferences.preferredName ?? ""); setMode(defaultWelcomePreferences.mode); setDraftAppearance(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); setDraftPalette(DEFAULT_PALETTE); }}>Reset</button>
             <button type="button" className="welcome-cancel" onClick={onClose}>Cancel</button>

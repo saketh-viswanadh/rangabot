@@ -4,6 +4,7 @@ import { basename, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { ensurePrivateDirectory, ensurePrivateFile } from "./private-storage.ts";
+import { runtimePaths } from "./runtime-paths.ts";
 import {
   AlignmentType,
   Document,
@@ -45,7 +46,7 @@ export type QualityCheck = { id: string; label: string; status: "passed" | "warn
 export type WordArtifact = { id: string; title: string; filename: string; previewPages: number; checks: QualityCheck[] };
 export type StoryDraftPart = { title: string; paragraphs: string[]; reflection: string };
 
-const defaultArtifactsRoot = resolve(process.cwd(), "data", "artifacts");
+const defaultArtifactsRoot = runtimePaths.artifactsRoot;
 let artifactsRoot = defaultArtifactsRoot;
 const safeId = /^[0-9a-f-]{36}$/;
 

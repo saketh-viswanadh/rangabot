@@ -53,3 +53,22 @@ export function verifyExpectedLocalBootstrapToken(
     && verifyPurposeBoundToken(token, secret, bootstrapPurpose)
     && tokensEqual(token, expectedToken);
 }
+
+export function createExpectedLocalBootstrapTokenVerifier(input: {
+  secret: string;
+  expectedToken: string | undefined;
+  consumeOnce: boolean;
+}) {
+  let consumed = false;
+  const matches = (token: string | undefined) => !consumed && verifyExpectedLocalBootstrapToken(
+    token,
+    input.secret,
+    input.expectedToken,
+  );
+  const consume = (token: string | undefined) => {
+    if (!matches(token)) return false;
+    if (input.consumeOnce) consumed = true;
+    return true;
+  };
+  return Object.freeze({ matches, consume });
+}

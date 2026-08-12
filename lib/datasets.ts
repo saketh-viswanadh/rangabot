@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
-import { basename, isAbsolute, resolve } from "node:path";
+import { basename, isAbsolute } from "node:path";
+import {
+  assertExternalFilesystemPathAccess,
+  assertExternalRegistryEntriesAllowed,
+} from "./desktop-external-filesystem-policy.ts";
 import { writePrivateJsonFileAtomic } from "./private-storage.ts";
+import { runtimePaths } from "./runtime-paths.ts";
 import { inspectDatasetForApproval, type DatasetFileIdentity } from "./sql-runtime.ts";
 
 export type ApprovedDataset = {
@@ -17,7 +22,7 @@ export type ApprovedDataset = {
 export type DatasetDescriptor = Pick<ApprovedDataset, "id" | "name" | "path" | "format" | "sizeBytes" | "addedAt">;
 type LegacyApprovedDataset = Omit<ApprovedDataset, "approvalVersion" | "fileIdentity">;
 type StoredDataset = ApprovedDataset | LegacyApprovedDataset;
-const defaultRegistryPath = resolve(/* turbopackIgnore: true */ process.cwd(), "data", "datasets.json");
+const defaultRegistryPath = runtimePaths.datasetsRegistry;
 let registryPath = defaultRegistryPath;
 
 function validFileIdentity(value: unknown): value is DatasetFileIdentity {
@@ -71,6 +76,7 @@ function readRegistry(): StoredDataset[] {
       || isBoundApproval(item as StoredDataset)))) {
     throw new Error("The local dataset allowlist is damaged.");
   }
+  assertExternalRegistryEntriesAllowed(value);
   return value as StoredDataset[];
 }
 
@@ -90,6 +96,7 @@ function sameFileIdentity(left: DatasetFileIdentity, right: DatasetFileIdentity)
 }
 
 export function approveDataset(inputPath: string): ApprovedDataset {
+  assertExternalFilesystemPathAccess(inputPath, "dataset-approval");
   if (!inputPath.trim() || inputPath.length > 1024 || !isAbsolute(inputPath)) throw new Error("Enter an absolute CSV, Parquet, or DuckDB file path.");
   const validated = inspectDatasetForApproval(inputPath.trim());
   const datasets = readRegistry();
