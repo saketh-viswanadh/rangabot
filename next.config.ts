@@ -3,8 +3,12 @@ import { requireKnownResponseFeedbackCandidate } from "./lib/response-feedback-c
 
 const development = process.env.NODE_ENV !== "production";
 const desktopStagingBuildId = process.env.RANGABOT_DESKTOP_STAGING_BUILD_ID;
+const sourceBuildId = process.env.RANGABOT_SOURCE_BUILD_ID;
 if (desktopStagingBuildId !== undefined && !/^desktop-stage-[0-9a-f]{16}$/.test(desktopStagingBuildId)) {
   throw new Error("RANGABOT_DESKTOP_STAGING_BUILD_ID is invalid.");
+}
+if (sourceBuildId !== undefined && !/^source-[0-9a-f]{24}$/.test(sourceBuildId)) {
+  throw new Error("RANGABOT_SOURCE_BUILD_ID is invalid.");
 }
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -24,7 +28,7 @@ const contentSecurityPolicy = [
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
-  generateBuildId: async () => desktopStagingBuildId ?? requireKnownResponseFeedbackCandidate().build,
+  generateBuildId: async () => desktopStagingBuildId ?? sourceBuildId ?? requireKnownResponseFeedbackCandidate().build,
   serverExternalPackages: ["sqlite-vec", "@duckdb/node-api", "@duckdb/node-bindings"],
   async headers() {
     return [{

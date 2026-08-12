@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
@@ -329,6 +329,7 @@ test("production runtime has no unclassified cwd or relative data filesystem loo
   const relativeData = (value: string) => /^(?:\.[/\\])?data(?:[/\\]|$)/.test(value);
 
   for (const path of files) {
+    const inventoryPath = path.split(sep).join("/");
     const source = readFileSync(path, "utf8");
     const kind = path.endsWith(".tsx") ? ts.ScriptKind.TSX : path.endsWith(".cjs") || path.endsWith(".mjs")
       ? ts.ScriptKind.JS : ts.ScriptKind.TS;
@@ -353,8 +354,9 @@ test("production runtime has no unclassified cwd or relative data filesystem loo
       ts.forEachChild(node, visit);
     };
     visit(parsed);
-    assert.equal(cwdCount, allowedCwdCounts.get(path) ?? 0, `${path} has an unclassified process.cwd() lookup`);
+    assert.equal(cwdCount, allowedCwdCounts.get(inventoryPath) ?? 0, `${inventoryPath} has an unclassified process.cwd() lookup`);
     assert.deepEqual(unclassifiedData, [], `${path} has an unclassified relative data filesystem lookup`);
   }
-  for (const path of allowedCwdCounts.keys()) assert.equal(files.includes(path), true, `${path} inventory entry is stale`);
+  const inventory = new Set(files.map((path) => path.split(sep).join("/")));
+  for (const path of allowedCwdCounts.keys()) assert.equal(inventory.has(path), true, `${path} inventory entry is stale`);
 });

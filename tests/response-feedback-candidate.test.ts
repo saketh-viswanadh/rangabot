@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import test from "node:test";
 import {
-  collectResponseFeedbackCandidateFiles,
   deriveResponseFeedbackCandidate,
   deriveResponseFeedbackBuildArtifact,
   getRuntimeResponseFeedbackCandidate,
@@ -17,15 +15,10 @@ import {
   responseFeedbackCandidateManifestForTests,
 } from "../lib/response-feedback-candidate.ts";
 
-function createIsolatedCandidateProbeRepository(files: { path: string }[]) {
+function createIsolatedCandidateProbeRepository(ref = "HEAD") {
   const root = mkdtempSync(join(tmpdir(), "rangabot-feedback-candidate-probe-"));
   execFileSync("git", ["clone", "-q", "--shared", "--no-checkout", process.cwd(), root]);
-  execFileSync("git", ["checkout", "-q", "--detach", "HEAD"], { cwd: root });
-  for (const file of files) {
-    const target = join(root, ...file.path.split("/"));
-    mkdirSync(dirname(target), { recursive: true });
-    copyFileSync(file.path, target);
-  }
+  execFileSync("git", ["checkout", "-q", "--detach", ref], { cwd: root });
   return root;
 }
 
@@ -43,25 +36,28 @@ test("candidate digest is deterministic over sorted source evidence", () => {
   assert.equal(forward.build, `0.1.0+rfp.${forward.candidateBuildId.slice(0, 12)}`);
 });
 
-test("the frozen candidate manifest matches every Git-visible file", () => {
+test("the frozen candidate remains internally valid while later committed source fails closed", () => {
   const manifest = responseFeedbackCandidateManifestForTests();
   assert.ok(manifest);
   if (!manifest) return;
-  const files = collectResponseFeedbackCandidateFiles();
-  const derived = deriveResponseFeedbackCandidate(manifest.baseCommit, manifest.sourceVersion, files);
-  assert.deepEqual(manifest.files, derived.files);
+  const derived = deriveResponseFeedbackCandidate(manifest.baseCommit, manifest.sourceVersion, manifest.files);
   assert.equal(manifest.manifestSha256, derived.manifestSha256);
   assert.equal(manifest.candidateBuildId, derived.candidateBuildId);
   assert.equal(manifest.build, derived.build);
-  assert.deepEqual(inspectResponseFeedbackCandidate(), {
-    state: "known",
-    candidateBuildId: manifest.candidateBuildId,
-    build: manifest.build,
-    baseCommit: manifest.baseCommit,
-    manifestSha256: manifest.manifestSha256,
-    artifactSha256: null,
-    sourceVersion: manifest.sourceVersion,
-  });
+  const currentRoot = createIsolatedCandidateProbeRepository();
+  try {
+    assert.deepEqual(inspectResponseFeedbackCandidate({ root: currentRoot }), {
+      state: "mixed",
+      candidateBuildId: null,
+      build: null,
+      baseCommit: null,
+      manifestSha256: null,
+      artifactSha256: null,
+      sourceVersion: null,
+    });
+  } finally {
+    rmSync(currentRoot, { recursive: true, force: true });
+  }
 });
 
 test("launcher environment discards caller-supplied candidate claims", () => {
@@ -70,28 +66,25 @@ test("launcher environment discards caller-supplied candidate claims", () => {
     RANGABOT_CANDIDATE_BUILD_ID: "f".repeat(64),
     RANGABOT_CANDIDATE_BUILD: "spoofed",
   });
-  const manifest = responseFeedbackCandidateManifestForTests();
-  assert.equal(environment.RANGABOT_CANDIDATE_BUILD_ID, manifest?.candidateBuildId);
-  assert.equal(environment.RANGABOT_CANDIDATE_BUILD, manifest?.build);
+  assert.notEqual(environment.RANGABOT_CANDIDATE_STATE, "known");
+  assert.equal(environment.RANGABOT_CANDIDATE_BUILD_ID, undefined);
+  assert.equal(environment.RANGABOT_CANDIDATE_BUILD, undefined);
 });
 
-test("candidate inspection fails closed for dirty, mixed, unknown, and spoofed runtime evidence", () => {
+test("candidate inspection fails closed for changed, mixed, unknown, and spoofed runtime evidence", () => {
   const manifest = responseFeedbackCandidateManifestForTests();
   assert.ok(manifest);
   if (!manifest) return;
 
-  const dirtyRoot = createIsolatedCandidateProbeRepository(manifest.files);
-  const probe = join(dirtyRoot, `.response-feedback-candidate-probe-${process.pid}-${randomUUID()}`);
+  const currentRoot = createIsolatedCandidateProbeRepository();
   try {
-    assert.equal(inspectResponseFeedbackCandidate({ root: dirtyRoot }).state, "known");
-    writeFileSync(probe, "synthetic untracked source evidence\n");
-    assert.equal(inspectResponseFeedbackCandidate({ root: dirtyRoot }).state, "dirty");
-    rmSync(probe, { force: true });
-    assert.equal(inspectResponseFeedbackCandidate({ root: dirtyRoot }).state, "known");
+    assert.equal(inspectResponseFeedbackCandidate({ root: currentRoot }).state, "mixed");
   } finally {
-    rmSync(dirtyRoot, { recursive: true, force: true });
+    rmSync(currentRoot, { recursive: true, force: true });
   }
-  assert.equal(inspectResponseFeedbackCandidate().state, "known");
+  const inspectionSource = readFileSync("lib/response-feedback-candidate.ts", "utf8");
+  assert.match(inspectionSource, /version !== manifest\.sourceVersion\) return emptyInspection\("dirty"\)/);
+  assert.match(inspectionSource, /derived\.build !== manifest\.build\) return emptyInspection\("dirty"\)/);
 
   const unrelated = mkdtempSync(join(tmpdir(), "rangabot-feedback-mixed-"));
   try {
@@ -126,8 +119,11 @@ test("build and runtime wiring fail closed around the exact candidate", () => {
   const startScript = readFileSync("scripts/start-server.ts", "utf8");
   const nextConfig = readFileSync("next.config.ts", "utf8");
   const runtimeRoute = readFileSync("app/api/runtime/candidate/route.ts", "utf8");
-  assert.match(buildScript, /requireKnownResponseFeedbackCandidate\(\)/);
+  assert.match(buildScript, /candidate\.state === "known"/);
+  assert.match(buildScript, /RANGABOT_SOURCE_BUILD_ID: sourceBuildId/);
+  assert.match(buildScript, /response feedback remains disabled/);
   assert.match(nextConfig, /generateBuildId/);
+  assert.match(nextConfig, /sourceBuildId \?\? requireKnownResponseFeedbackCandidate\(\)\.build/);
   assert.match(devScript, /responseFeedbackCandidateEnvironment/);
   assert.match(startScript, /requireBuildArtifact: true/);
   assert.match(buildScript, /writeResponseFeedbackBuildArtifactManifest/);
