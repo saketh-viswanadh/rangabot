@@ -1,9 +1,9 @@
 import { ProviderError, type ChatMessage, type GenerationOptions, type LocalChatProvider, type ProviderStatus } from "./types.ts";
-import { getConfiguredChatModel, getConfiguredContextTokens, getLocalOllamaBaseUrl } from "../local-runtime-config.ts";
+import { getConfiguredContextTokens, getLocalOllamaBaseUrl } from "../local-runtime-config.ts";
 import { localModelGenerationGate } from "../model-generation-gate.ts";
 import { verificationLocalModelDisabled } from "../desktop-external-filesystem-policy.ts";
+import { selectedChatModel } from "../model-manager.ts";
 
-const configuredModel = getConfiguredChatModel();
 
 export const OLLAMA_RESPONSE_LIMITS = Object.freeze({
   bufferedBodyBytes: 2 * 1024 * 1024,
@@ -98,6 +98,7 @@ async function ollamaFetch(path: string, init?: RequestInit, timeoutMs = 120_000
 }
 
 export async function getOllamaStatus(): Promise<ProviderStatus> {
+  const configuredModel = selectedChatModel();
   try {
     const response = await ollamaFetch("/api/tags", undefined, 2_500);
     if (!response.ok) throw await ollamaHttpError(response);
@@ -130,7 +131,7 @@ interface OllamaStreamChunk {
 function resolvedGeneration(modelId: string | undefined, signal: AbortSignal | undefined, timeoutMs: number) {
   const deadline = AbortSignal.timeout(timeoutMs);
   return {
-    modelId: modelId ?? configuredModel,
+    modelId: modelId ?? selectedChatModel(),
     signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
   };
 }

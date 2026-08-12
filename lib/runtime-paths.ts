@@ -152,6 +152,8 @@ export function resolveRuntimePathContract(options: RuntimeRootOptions = {}) {
     runtimeLease: data("rangabot.db-runtime.lock"),
     desktopTemp: data("tmp"),
     desktopPreferences: data("desktop-preferences.json"),
+    modelPreferences: data("model-preferences.json"),
+    managedModels: data("models"),
     knowledgeRoot,
     knowledgeInbox: data("knowledge", "inbox"),
     knowledgeProcessed: data("knowledge", "processed"),

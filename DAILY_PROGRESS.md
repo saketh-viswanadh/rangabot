@@ -1,5 +1,17 @@
 # Daily progress
 
+## 2026-08-12 — Integrated local model runtime
+
+- Embedded the checksum-pinned Ollama 0.32.9 macOS runtime in the generated
+  arm64 desktop artifact and bound every native payload into desktop identity.
+- RangaBot now starts and stops the model engine with the app, binds it to a
+  private OS-assigned loopback port, permits one loaded model at a time, and
+  stores weights only below the app-owned private data root.
+- Added an in-app Model Manager for installed/recommended model discovery,
+  explicit selection, and consent-gated downloads. The full desktop smoke
+  reached `R99_RUNNING` with the Electron window, Next server, and model engine
+  alive together; shutdown left no child processes.
+
 ## 2026-08-10 — Core conversation exact-candidate preparation
 
 - Added a generic Semantic Task Frame above the selected Ollama model. It

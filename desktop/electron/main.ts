@@ -6,6 +6,7 @@ import { createDesktopLaunch, type DesktopVerificationLaunchPolicy } from "./lau
 import { createSecondInstanceFocusCoordinator } from "./lifecycle.ts";
 import { reserveVerifiedLoopbackPort, waitForDesktopServer } from "./loopback.ts";
 import { diagnoseLocalOllama } from "./ollama-diagnostic.ts";
+import { startManagedModelRuntime, type ManagedModelRuntime } from "./model-runtime.ts";
 import { startLeasedDesktopServer, type LeasedSupervisedDesktopServer } from "./process-supervisor.ts";
 import { createDesktopRuntimeBoundaryFromVerifiedResources } from "./resource-boundary.ts";
 import {
@@ -61,6 +62,7 @@ function emitStartupStage(stage: DesktopStartupStage, failure = false) {
 type RuntimeState = {
   window?: BrowserWindowType;
   server?: LeasedSupervisedDesktopServer;
+  modelRuntime?: ManagedModelRuntime;
   stopping: boolean;
   stopPromise?: Promise<void>;
 };
@@ -103,7 +105,11 @@ function stopRuntime(state: RuntimeState) {
   state.stopping = true;
   state.stopPromise = (async () => {
     try { await state.server?.stop(); }
-    finally { state.server = undefined; }
+    finally {
+      state.server = undefined;
+      await state.modelRuntime?.stop();
+      state.modelRuntime = undefined;
+    }
   })();
   return state.stopPromise;
 }
@@ -145,7 +151,18 @@ export async function startDesktopRuntime(input: {
     userDataPath,
   });
   const artifact = verified.artifact;
-  const launch = createDesktopLaunch({ boundary, port, verificationPolicy: input.verificationPolicy });
+  let modelBaseUrl: string | undefined;
+  if (!input.verificationPolicy) {
+    const modelPort = await (input.reservePort ?? reserveVerifiedLoopbackPort)();
+    state.modelRuntime = await startManagedModelRuntime({ boundary, port: modelPort });
+    modelBaseUrl = state.modelRuntime.baseUrl;
+  }
+  const launch = createDesktopLaunch({
+    boundary,
+    port,
+    verificationPolicy: input.verificationPolicy,
+    baseEnvironment: modelBaseUrl ? { ...process.env, OLLAMA_BASE_URL: modelBaseUrl } : process.env,
+  });
   const origin = desktopOrigin(port);
   emitStartupStage("R50_SESSION_GUARDS");
   const desktopSession = input.desktopSession ?? session.fromPartition("rangabot-desktop-session", { cache: false });
@@ -188,7 +205,7 @@ export async function startDesktopRuntime(input: {
     await stopRuntime(state);
     throw error;
   }
-  if (!input.verificationPolicy) {
+  if (!input.verificationPolicy && !state.modelRuntime) {
     void diagnoseLocalOllama({
       baseUrl: launch.environment.OLLAMA_BASE_URL,
       model: launch.environment.OLLAMA_MODEL,

@@ -68,7 +68,9 @@ memory, repository content, or private Knowledge Vault document is shown.
 
 ## First run
 
-1. Install Node.js 24+ and [Ollama](https://ollama.com/).
+1. Install Node.js 24+ and [Ollama](https://ollama.com/) for the current
+   command-line development flow. The upcoming Mac app includes and manages its
+   own local model runtime, so testers will not need either tool.
 2. Run `npm install`.
 3. Run `npm run setup` for guided model selection and private vault setup.
 4. Run `npm run doctor` to verify the installation.

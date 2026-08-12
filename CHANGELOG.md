@@ -9,6 +9,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Added a Mac-first integrated Model Manager. The desktop app now starts and
+  supervises its own pinned local Ollama runtime, keeps model files inside
+  RangaBot's private data root, discovers installed models, persists explicit
+  user selection, and installs reviewed models only after a visible click.
+  Command-line use retains the replaceable provider boundary.
 - Added a signed per-launch local browser capability, strict loopback Host and
   same-origin enforcement, bounded JSON mutations, non-cacheable private APIs,
   a restrictive browser resource policy, and remote-image blocking for model

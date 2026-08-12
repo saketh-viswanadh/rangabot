@@ -29,7 +29,7 @@ const {
 } = identityFilesystem;
 
 export const DESKTOP_ARTIFACT_SCHEMA_VERSION = 1;
-export const DESKTOP_SOURCE_BASELINE_COMMIT = "57419b8dd1f031b542e4de05e5e4f2ccc330feba";
+export const DESKTOP_SOURCE_BASELINE_COMMIT = "a02dc5317c035211de93855a6b8e662102ff9b59";
 
 const sha256Pattern = /^[0-9a-f]{64}$/;
 const gitCommitPattern = /^[0-9a-f]{40}$/;

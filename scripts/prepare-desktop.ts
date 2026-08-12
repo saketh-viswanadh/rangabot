@@ -47,6 +47,8 @@ const requiredResourcePaths = [
 ];
 const WEB_FEEDBACK_ARTIFACT_SHA256 = "37810169b1784d08886840fdfb454175a1255db0ce797594970c1f9cb8781525";
 const NORMAL_REFRESH_PACKAGE_VARIANT = "normal-refresh-20260812-v1";
+const OLLAMA_RUNTIME_VERSION = "0.32.9";
+const OLLAMA_RUNTIME_SHA256 = "17a5b096d4515d00a6415012db847a2b353b389ed7ab33d025e3b98c2f05b49c";
 
 function parseArch(arguments_: string[]): DesktopArtifactArch {
   const values = arguments_.filter((argument) => argument.startsWith("--arch=")).map((argument) => argument.slice(7));
@@ -92,6 +94,54 @@ function copyFile(source: string, destination: string) {
   if (!existsSync(source) || !lstatSync(source).isFile()) throw new Error(`Required desktop resource is missing: ${relative(projectRoot, source)}.`);
   mkdirSync(dirname(destination), { recursive: true });
   cpSync(source, destination, { dereference: true, preserveTimestamps: false });
+}
+
+function stageManagedModelRuntime(arch: DesktopArtifactArch, resourceRoot: string) {
+  const cacheRoot = resolve(outputRoot, "runtime-cache");
+  const archive = resolve(cacheRoot, `ollama-darwin-v${OLLAMA_RUNTIME_VERSION}.tgz`);
+  mkdirSync(cacheRoot, { recursive: true, mode: 0o755 });
+  if (!existsSync(archive) || sha256File(archive) !== OLLAMA_RUNTIME_SHA256) {
+    rmSync(archive, { force: true });
+    execFileSync("/usr/bin/curl", ["--fail", "--location", "--show-error", "--output", archive,
+      `https://github.com/ollama/ollama/releases/download/v${OLLAMA_RUNTIME_VERSION}/ollama-darwin.tgz`], { stdio: "inherit" });
+  }
+  if (sha256File(archive) !== OLLAMA_RUNTIME_SHA256) throw new Error("The managed Ollama runtime checksum is invalid.");
+  const destination = resolve(resourceRoot, "runtime", "ollama");
+  mkdirSync(destination, { recursive: true, mode: 0o755 });
+  execFileSync("/usr/bin/tar", ["-xzf", archive, "-C", destination], { stdio: "inherit" });
+  const thinMachO = (directory: string) => {
+    for (const name of readdirSync(directory)) {
+      const path = resolve(directory, name);
+      const status = lstatSync(path);
+      if (status.isDirectory()) thinMachO(path);
+      else if (status.isFile()) {
+        const probe = spawnSync("/usr/bin/lipo", [path, "-verify_arch", arch]);
+        if (probe.status !== 0) {
+          if (/\.(?:dylib|so)$/i.test(path)) rmSync(path);
+          continue;
+        }
+        const architectures = execFileSync("/usr/bin/lipo", ["-archs", path], { encoding: "utf8" }).trim().split(/\s+/);
+        if (architectures.length === 1 && architectures[0] === arch) continue;
+        const thinned = `${path}.thin`;
+        execFileSync("/usr/bin/lipo", [path, "-thin", arch, "-output", thinned]);
+        rmSync(path);
+        execFileSync("/bin/mv", [thinned, path]);
+      }
+    }
+  };
+  thinMachO(destination);
+  const removeDanglingLinks = (directory: string) => {
+    for (const name of readdirSync(directory)) {
+      const path = resolve(directory, name);
+      const status = lstatSync(path);
+      if (status.isSymbolicLink()) {
+        try { realpathSync(path); } catch { rmSync(path); }
+      } else if (status.isDirectory()) removeDanglingLinks(path);
+    }
+  };
+  removeDanglingLinks(destination);
+  chmodSync(resolve(destination, "ollama"), 0o755);
+  copyFile(resolve(projectRoot, "THIRD_PARTY_NOTICES.md"), resolve(resourceRoot, "THIRD_PARTY_NOTICES.md"));
 }
 
 function removeGeneratedOutput(path: string) {
@@ -293,10 +343,11 @@ if (compilation.status !== 0 || compilation.signal) throw new Error("Electron sh
 
 mkdirSync(resourceRoot, { recursive: true, mode: 0o755 });
 stageStandalone(arch, resourceRoot);
+if (!verification) stageManagedModelRuntime(arch, resourceRoot);
 materializeSafeStagedSymlinks(resourceRoot, resourceRoot);
 const resources = collectDesktopArtifactFiles(resourceRoot);
 assertNoPrivatePayload(resources);
-const natives = resources.filter((file) => /\.(?:node|dylib)$/.test(file.path));
+const natives = resources.filter((file) => /\.(?:node|dylib|so|dll)$/i.test(file.path));
 const generatedAt = new Date().toISOString();
 const manifest = createDesktopArtifactManifest({
   sourceBaselineCommit: DESKTOP_SOURCE_BASELINE_COMMIT,
