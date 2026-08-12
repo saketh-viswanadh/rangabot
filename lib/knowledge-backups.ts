@@ -19,6 +19,10 @@ import {
   ensurePrivateFile,
   hardenPrivateSqliteFiles,
 } from "./private-storage.ts";
+import {
+  assertVerifiedProfileMaintenanceBinding,
+  type ProfileMaintenanceBinding,
+} from "./profile-maintenance.ts";
 import { acquireRuntimeLease } from "./runtime-lease.ts";
 
 export const defaultKnowledgeBackupRetention = 12;
@@ -50,6 +54,7 @@ type RestoreOptions = {
   retention?: number;
   now?: () => Date;
   runtimeLeasePath?: string;
+  maintenanceBinding?: Pick<ProfileMaintenanceBinding, "assertCurrent">;
 };
 
 function sha256File(path: string) {
@@ -289,6 +294,12 @@ async function restoreLatestKnowledgeBackupWithLeaseHeld(options: RestoreOptions
 }
 
 export async function restoreLatestKnowledgeBackup(options: RestoreOptions) {
+  if (options.maintenanceBinding) {
+    assertVerifiedProfileMaintenanceBinding(options.maintenanceBinding);
+    const result = await restoreLatestKnowledgeBackupWithLeaseHeld(options);
+    assertVerifiedProfileMaintenanceBinding(options.maintenanceBinding);
+    return result;
+  }
   // Rollback is an offline operation. Taking the same cross-process lease as
   // the app both refuses an active runtime and prevents a runtime from starting
   // midway through the destructive replace.

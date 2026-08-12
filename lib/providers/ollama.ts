@@ -1,8 +1,8 @@
 import { ProviderError, type ChatMessage, type GenerationOptions, type LocalChatProvider, type ProviderStatus } from "./types.ts";
-import { getConfiguredContextTokens, getLocalOllamaBaseUrl } from "../local-runtime-config.ts";
+import { getLocalOllamaBaseUrl } from "../local-runtime-config.ts";
 import { localModelGenerationGate } from "../model-generation-gate.ts";
 import { verificationLocalModelDisabled } from "../desktop-external-filesystem-policy.ts";
-import { selectedChatModel } from "../model-manager.ts";
+import { selectedChatContextTokens, selectedChatModel } from "../model-manager.ts";
 
 
 export const OLLAMA_RESPONSE_LIMITS = Object.freeze({
@@ -68,7 +68,7 @@ async function ollamaHttpError(response: Response) {
 function generationOptions(options: GenerationOptions | undefined, defaultNumPredict: number) {
   return {
     num_predict: options?.numPredict ?? defaultNumPredict,
-    num_ctx: options?.numContext ?? getConfiguredContextTokens(),
+    num_ctx: options?.numContext ?? selectedChatContextTokens(),
   };
 }
 

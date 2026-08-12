@@ -22,8 +22,8 @@ export type ApprovedDataset = {
 export type DatasetDescriptor = Pick<ApprovedDataset, "id" | "name" | "path" | "format" | "sizeBytes" | "addedAt">;
 type LegacyApprovedDataset = Omit<ApprovedDataset, "approvalVersion" | "fileIdentity">;
 type StoredDataset = ApprovedDataset | LegacyApprovedDataset;
-const defaultRegistryPath = runtimePaths.datasetsRegistry;
-let registryPath = defaultRegistryPath;
+let registryPathOverride: string | undefined;
+function currentRegistryPath() { return registryPathOverride ?? runtimePaths.datasetsRegistry; }
 
 function validFileIdentity(value: unknown): value is DatasetFileIdentity {
   if (!value || typeof value !== "object") return false;
@@ -49,6 +49,7 @@ function isBoundApproval(item: StoredDataset): item is ApprovedDataset {
 }
 
 function readRegistryText() {
+  const registryPath = currentRegistryPath();
   let pathStatus;
   try { pathStatus = lstatSync(/* turbopackIgnore: true */ registryPath, { bigint: true }); }
   catch { throw new Error("The local dataset allowlist is damaged."); }
@@ -69,6 +70,7 @@ function readRegistryText() {
 }
 
 function readRegistry(): StoredDataset[] {
+  const registryPath = currentRegistryPath();
   if (!existsSync(/* turbopackIgnore: true */ registryPath)) return [];
   const value: unknown = JSON.parse(readRegistryText());
   if (!Array.isArray(value) || !value.every((item) => validBaseDataset(item)
@@ -81,7 +83,7 @@ function readRegistry(): StoredDataset[] {
 }
 
 function writeRegistry(datasets: StoredDataset[]) {
-  writePrivateJsonFileAtomic(/* turbopackIgnore: true */ registryPath, datasets);
+  writePrivateJsonFileAtomic(/* turbopackIgnore: true */ currentRegistryPath(), datasets);
 }
 
 export function listApprovedDatasets() { return readRegistry().filter(isBoundApproval); }
@@ -119,5 +121,5 @@ export function revokeDataset(id: string) {
   return true;
 }
 
-export function setDatasetRegistryPathForTests(path: string) { registryPath = path; }
-export function resetDatasetRegistryPathForTests() { registryPath = defaultRegistryPath; }
+export function setDatasetRegistryPathForTests(path: string) { registryPathOverride = path; }
+export function resetDatasetRegistryPathForTests() { registryPathOverride = undefined; }

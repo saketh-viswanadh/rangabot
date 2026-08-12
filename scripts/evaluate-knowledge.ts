@@ -1,8 +1,12 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadKnowledgeEvaluationCases, scoreKnowledgeRetrieval, summarizeKnowledgeEvaluation } from "../lib/knowledge-evaluation.ts";
-import { knowledgeEvaluationFixtures, knowledgeEvaluationResults, searchKnowledge } from "../lib/knowledge.ts";
+import { closeKnowledgeDatabase, knowledgeDatabasePath, knowledgeEvaluationFixtures, searchKnowledge } from "../lib/knowledge.ts";
 import { ensurePrivateDirectory, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
+
+const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Knowledge retrieval evaluation" });
+profileMaintenance.assertDataPath(knowledgeDatabasePath);
 
 const requestedPath = process.argv.find((argument) => argument.startsWith("--file="))?.slice("--file=".length);
 const fixturePath = requestedPath ? resolve(requestedPath) : resolve(knowledgeEvaluationFixtures, "starter.json");
@@ -12,6 +16,7 @@ const cases = loadKnowledgeEvaluationCases(fixturePath);
 const results = [];
 console.log(`Running ${cases.length} local retrieval evaluations from ${fixturePath}`);
 for (const [index, item] of cases.entries()) {
+  profileMaintenance.assertCurrent();
   const started = performance.now();
   const retrieved = await searchKnowledge(item.query, 5);
   const result = scoreKnowledgeRetrieval(item, retrieved, Math.round(performance.now() - started));
@@ -21,10 +26,11 @@ for (const [index, item] of cases.entries()) {
 }
 
 const summary = summarizeKnowledgeEvaluation(results);
-const outputRoot = knowledgeEvaluationResults;
+const outputRoot = profileMaintenance.dataPath("knowledge", "evaluations", "results");
 ensurePrivateDirectory(outputRoot);
 const stamp = new Date().toISOString().replaceAll(/[:.]/g, "-");
 const outputPath = resolve(outputRoot, `retrieval-${stamp}.json`);
+profileMaintenance.assertCurrent();
 writePrivateJsonFileAtomic(outputPath, { generatedAt: new Date().toISOString(), fixturePath, summary, results });
 
 console.log("\nRetrieval quality summary");
@@ -37,3 +43,5 @@ console.log("Subject pass rates:");
 for (const [subject, result] of Object.entries(summary.bySubject)) console.log(`  ${subject}: ${(result.passRate * 100).toFixed(1)}% (${result.cases} cases)`);
 console.log(`Private result: ${outputPath}`);
 if (summary.passRate < .8) process.exitCode = 1;
+closeKnowledgeDatabase();
+profileMaintenance.release();

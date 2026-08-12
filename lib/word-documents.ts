@@ -46,8 +46,8 @@ export type QualityCheck = { id: string; label: string; status: "passed" | "warn
 export type WordArtifact = { id: string; title: string; filename: string; previewPages: number; checks: QualityCheck[] };
 export type StoryDraftPart = { title: string; paragraphs: string[]; reflection: string };
 
-const defaultArtifactsRoot = runtimePaths.artifactsRoot;
-let artifactsRoot = defaultArtifactsRoot;
+let artifactsRootOverride: string | undefined;
+function currentArtifactsRoot() { return artifactsRootOverride ?? runtimePaths.artifactsRoot; }
 const safeId = /^[0-9a-f-]{36}$/;
 
 function boundedText(value: unknown, name: string, max: number) {
@@ -273,6 +273,7 @@ function contentParagraph(text: string) {
 export async function createWordArtifact(brief: WordDocumentBrief, draft: WordDraft, options: { signal?: AbortSignal } = {}): Promise<WordArtifact> {
   validateWordDraftForBrief(brief, draft);
   const id = randomUUID();
+  const artifactsRoot = currentArtifactsRoot();
   const directory = resolve(artifactsRoot, id);
   ensurePrivateDirectory(directory);
   try {
@@ -407,6 +408,7 @@ async function renderPreview(documentPath: string, directory: string, checks: Qu
 
 export function removeWordArtifact(id: string) {
   if (!safeId.test(id)) return false;
+  const artifactsRoot = currentArtifactsRoot();
   const directory = resolve(artifactsRoot, id);
   if (!existsSync(/* turbopackIgnore: true */ directory)) return false;
   rmSync(directory, { recursive: true, force: true });
@@ -415,20 +417,22 @@ export function removeWordArtifact(id: string) {
 
 export function resolveArtifactFile(id: string, filename: string) {
   if (!safeId.test(id) || basename(filename) !== filename) return null;
+  const artifactsRoot = currentArtifactsRoot();
   const path = resolve(artifactsRoot, id, filename);
   return existsSync(/* turbopackIgnore: true */ path) ? path : null;
 }
 
 export function readArtifactMetadata(id: string) {
+  const artifactsRoot = currentArtifactsRoot();
   const path = safeId.test(id) ? resolve(artifactsRoot, id, "artifact.json") : "";
   if (!path || !existsSync(/* turbopackIgnore: true */ path)) return null;
   return JSON.parse(readFileSync(/* turbopackIgnore: true */ path, "utf8")) as { artifact: WordArtifact };
 }
 
 export function setArtifactsRootForTests(path: string) {
-  artifactsRoot = path;
+  artifactsRootOverride = path;
 }
 
 export function resetArtifactsRootForTests() {
-  artifactsRoot = defaultArtifactsRoot;
+  artifactsRootOverride = undefined;
 }

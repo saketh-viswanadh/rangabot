@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { allowRepository, listAllowedRepositories } from "@/lib/repositories";
+import { assertProfileAcceptsExternalUserData, profileBindingFromRequest, StaleProfileRequestError, withProfileRequest } from "@/lib/profile-request";
 
 export const runtime = "nodejs";
 
@@ -8,20 +9,24 @@ function browserRepository(repository: ReturnType<typeof allowRepository>) {
   return { id, name, path, addedAt };
 }
 
-export function GET() {
+export function GET(request: Request) {
   try {
+    profileBindingFromRequest(request);
     return NextResponse.json({ repositories: listAllowedRepositories().map(browserRepository) });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not read the repository allowlist." }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not read the repository allowlist." }, { status: error instanceof StaleProfileRequestError ? 409 : 500 });
   }
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as { path?: unknown };
-  if (typeof body.path !== "string") return NextResponse.json({ error: "An absolute folder path is required." }, { status: 400 });
   try {
-    return NextResponse.json({ repository: browserRepository(allowRepository(body.path)) }, { status: 201 });
+    return await withProfileRequest(request, { kind: "database-mutation", label: "repository approval update" }, async () => {
+      assertProfileAcceptsExternalUserData();
+      const body = (await request.json()) as { path?: unknown };
+      if (typeof body.path !== "string") return NextResponse.json({ error: "An absolute folder path is required." }, { status: 400 });
+      return NextResponse.json({ repository: browserRepository(allowRepository(body.path)) }, { status: 201 });
+    });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not allow this folder." }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not allow this folder." }, { status: error instanceof StaleProfileRequestError ? 409 : 400 });
   }
 }

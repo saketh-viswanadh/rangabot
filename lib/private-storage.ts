@@ -43,8 +43,8 @@ function requireDirectory(path: string) {
 
 function requireRegularFile(path: string) {
   const status = lstatSync(path);
-  if (status.isSymbolicLink() || !status.isFile()) {
-    throw new Error("Private storage file must be a regular local file.");
+  if (status.isSymbolicLink() || !status.isFile() || status.nlink !== 1) {
+    throw new Error("Private storage file must be a non-linked regular local file.");
   }
 }
 
@@ -141,7 +141,9 @@ function hardenVerifiedEntry(path: string, status: Stats, expected: "file" | "di
     descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     const opened = fstatSync(descriptor);
     const expectedType = expected === "file" ? opened.isFile() : opened.isDirectory();
-    if (!expectedType || !sameEntry(status, opened)) {
+    if (!expectedType
+      || (expected === "file" && (status.nlink !== 1 || opened.nlink !== 1))
+      || !sameEntry(status, opened)) {
       throw new UnsafePrivateStoragePathError("Private storage entry changed while it was being secured.");
     }
     fchmodSync(descriptor, expected === "file" ? privateFileMode : privateDirectoryMode);
@@ -163,7 +165,9 @@ function hardenExistingPrivateFile(path: string, options: PrivateStorageOptions 
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
     throw error;
   }
-  if (status.isSymbolicLink() || !status.isFile()) throw new Error("Private storage file must be a regular local file.");
+  if (status.isSymbolicLink() || !status.isFile() || status.nlink !== 1) {
+    throw new Error("Private storage file must be a non-linked regular local file.");
+  }
   hardenVerifiedEntry(path, status, "file");
 }
 
@@ -193,9 +197,11 @@ export function ensurePrivateFile(path: string, options: PrivateStorageOptions =
   }
   try {
     const opened = fstatSync(descriptor);
-    if (!opened.isFile()) throw new Error("Private storage file must be a regular local file.");
+    if (!opened.isFile() || opened.nlink !== 1) {
+      throw new Error("Private storage file must be a non-linked regular local file.");
+    }
     const status = lstatSync(path);
-    if (status.isSymbolicLink() || !status.isFile() || !sameEntry(status, opened)) {
+    if (status.isSymbolicLink() || !status.isFile() || status.nlink !== 1 || !sameEntry(status, opened)) {
       throw new UnsafePrivateStoragePathError("Private storage file changed while it was being secured.");
     }
     if (supportsPosixPermissions()) fchmodSync(descriptor, privateFileMode);

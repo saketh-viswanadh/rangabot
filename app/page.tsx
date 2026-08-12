@@ -3,7 +3,13 @@
 import dynamic from "next/dynamic";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CONVERSATION_TURN_PROTOCOL_VERSION } from "@/lib/conversation-turn-contract";
-import { localApiFetch } from "@/lib/local-api-client";
+import {
+  downloadLocalApiFile,
+  isLegacyLocalProfileContext,
+  localApiBlob,
+  localApiFetch,
+  profileScopedStorageKey,
+} from "@/lib/local-api-client";
 import type { ChatMessage, ConversationTurnStatus, ProviderStatus } from "@/lib/providers/types";
 import { appendWelcomeHistory, chooseWelcomeIndex, parseWelcomeHistory, WELCOME_HISTORY_STORAGE_KEY, welcomeLines } from "@/lib/welcome-content";
 import { chooseGreetingIndex, formatWelcomeGreeting } from "@/lib/welcome-greeting";
@@ -23,6 +29,7 @@ import { SqlAnalysisPanel } from "@/app/components/sql-analysis-panel";
 import { WelcomePreferencesDialog } from "@/app/components/welcome-preferences";
 import { ResponseFeedback } from "@/app/components/response-feedback";
 import { ModelManager } from "@/app/components/model-manager";
+import { ProfileManager } from "@/app/components/profile-manager";
 import type { ResponseFeedbackRating, ResponseFeedbackView } from "@/lib/response-feedback-contract";
 import type { DesktopPreferences } from "@/lib/desktop-preferences";
 import { mergeResponseFeedbackRead, responseFeedbackBindingMatches } from "@/lib/response-feedback-client-state";
@@ -187,7 +194,7 @@ async function startConversationTurn(payload: string, expectedTurnId: string, si
 
 function parseBookWelcomeHistory() {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(BOOK_WELCOME_HISTORY_STORAGE_KEY) ?? "[]");
+    const value: unknown = JSON.parse(localStorage.getItem(profileScopedStorageKey(BOOK_WELCOME_HISTORY_STORAGE_KEY)) ?? "[]");
     if (!Array.isArray(value)) return [];
     return value.filter((id): id is string => typeof id === "string" && /^wf_[A-Za-z0-9_-]{20}$/.test(id)).slice(-60);
   } catch {
@@ -202,6 +209,7 @@ function parseBookWelcomeHistory() {
  */
 function readSameOriginLegacyPreferencePreview(): LegacyPreferencesPreview | null {
   try {
+    if (!isLegacyLocalProfileContext()) return null;
     const welcomeValue = localStorage.getItem(WELCOME_PREFERENCES_STORAGE_KEY);
     const appearanceValue = localStorage.getItem(APPEARANCE_STORAGE_KEY);
     const paletteValue = localStorage.getItem(PALETTE_STORAGE_KEY);
@@ -242,6 +250,10 @@ export default function Home() {
   const [replyTo, setReplyTo] = useState<DisplayMessage | null>(null);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [modelManagerOpen, setModelManagerOpen] = useState(false);
+  const [profileSwitching, setProfileSwitching] = useState(false);
+  const [profileRecoveryRequired, setProfileRecoveryRequired] = useState(false);
+  const [activeProfileContext, setActiveProfileContext] = useState<{ marker: string; kind: "default" | "personal" | "testing" } | null>(null);
+  const [wordPreview, setWordPreview] = useState<{ url: string; title: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [adoptedPendingTurn, setAdoptedPendingTurn] = useState<ActiveConversationTurn | null>(null);
@@ -295,6 +307,12 @@ export default function Home() {
   const toolsPopoverRef = useRef<HTMLDivElement>(null);
   const preferencesTriggerRef = useRef<HTMLButtonElement>(null);
   const bookWelcomeRequestRef = useRef<AbortController | null>(null);
+  const wordPreviewCloseRef = useRef<HTMLButtonElement>(null);
+  const wordPreviewReturnFocusRef = useRef<HTMLElement | null>(null);
+  const closeWordPreview = useCallback(() => {
+    setWordPreview(null);
+    requestAnimationFrame(() => wordPreviewReturnFocusRef.current?.focus());
+  }, []);
   const bindResponseFeedback = useCallback((conversationId: string | null, value: unknown) => {
     responseFeedbackConversationRef.current = conversationId;
     responseFeedbackGenerationRef.current += 1;
@@ -403,9 +421,10 @@ export default function Home() {
   const closeMemoryPanel = useCallback(() => setMemoryPanelOpen(false), []);
   const closeSqlPanel = useCallback(() => setSqlPanelOpen(false), []);
   const nextWelcomeIndex = useCallback((current: number, welcomeMode: WelcomeMode) => {
-    const history = parseWelcomeHistory(localStorage.getItem(WELCOME_HISTORY_STORAGE_KEY));
+    const storageKey = profileScopedStorageKey(WELCOME_HISTORY_STORAGE_KEY);
+    const history = parseWelcomeHistory(localStorage.getItem(storageKey));
     const next = chooseWelcomeIndex(current, history, Math.random, welcomeMode);
-    localStorage.setItem(WELCOME_HISTORY_STORAGE_KEY, JSON.stringify(appendWelcomeHistory(history, next)));
+    localStorage.setItem(storageKey, JSON.stringify(appendWelcomeHistory(history, next)));
     return next;
   }, []);
   const refreshBookWelcome = useCallback(async () => {
@@ -426,7 +445,7 @@ export default function Home() {
       const result = (await response.json()) as BookWelcomeResponse;
       if (result.status !== "ready") return;
       setBookWelcomeFact(result.fact);
-      localStorage.setItem(BOOK_WELCOME_HISTORY_STORAGE_KEY, JSON.stringify([...recent.filter((id) => id !== result.fact.id), result.fact.id].slice(-60)));
+      localStorage.setItem(profileScopedStorageKey(BOOK_WELCOME_HISTORY_STORAGE_KEY), JSON.stringify([...recent.filter((id) => id !== result.fact.id), result.fact.id].slice(-60)));
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) setBookWelcomeFact(null);
     } finally {
@@ -767,7 +786,7 @@ export default function Home() {
           setPreferencesMessage("Desktop preferences could not be loaded safely. No browser preferences were applied.");
         });
     }
-    setReadKnowledgeVersion(localStorage.getItem("rangabot-knowledge-read"));
+    setReadKnowledgeVersion(localStorage.getItem(profileScopedStorageKey("rangabot-knowledge-read")));
     setGreetingIndex((current) => chooseGreetingIndex(current));
     void refreshStatus();
     if (!publicDemo) {
@@ -893,7 +912,7 @@ export default function Home() {
   }, [repositoryPanelOpen]);
   useEffect(() => {
     if (!knowledgePanelOpen || knowledgeTab !== "discover" || !knowledgeUpdates?.weekUpdatedAt) return;
-    localStorage.setItem("rangabot-knowledge-read", knowledgeUpdates.weekUpdatedAt);
+    localStorage.setItem(profileScopedStorageKey("rangabot-knowledge-read"), knowledgeUpdates.weekUpdatedAt);
     setReadKnowledgeVersion(knowledgeUpdates.weekUpdatedAt);
   }, [knowledgePanelOpen, knowledgeTab, knowledgeUpdates?.weekUpdatedAt]);
   useEffect(() => {
@@ -936,7 +955,7 @@ export default function Home() {
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || sendingRef.current || conversationLoadingRef.current) return;
+    if (!content || profileSwitching || sendingRef.current || conversationLoadingRef.current) return;
     sendingRef.current = true;
     setSending(true);
     setAdoptedPendingTurn(null);
@@ -1333,11 +1352,53 @@ export default function Home() {
   }
 
   function chooseStarter(prompt: string) {
+    if (profileSwitching) return;
     setInput(prompt);
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus());
   }
 
+  async function exportOpenConversation() {
+    if (!activeConversationId || profileSwitching) return;
+    setConversationTransferMessage("Preparing the open chat locally…");
+    try {
+      await downloadLocalApiFile(`/api/conversations/${activeConversationId}/export`, "rangabot-conversation.md");
+      setConversationTransferMessage("Open chat export ready.");
+    } catch (error) {
+      setConversationTransferMessage(error instanceof Error ? error.message : "The open chat could not be exported.");
+    }
+  }
+
+  async function downloadWordArtifact(id: string, filename: string) {
+    try {
+      await downloadLocalApiFile(`/api/artifacts/word/${id}/document`, filename);
+    } catch (error) {
+      setConversationTransferMessage(error instanceof Error ? error.message : "The document could not be downloaded.");
+    }
+  }
+
+  async function reviewWordArtifact(id: string, title: string) {
+    try {
+      const blob = await localApiBlob(`/api/artifacts/word/${id}/preview/1`);
+      wordPreviewReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setWordPreview({ url: URL.createObjectURL(blob), title });
+    } catch (error) {
+      setConversationTransferMessage(error instanceof Error ? error.message : "The document preview could not be opened.");
+    }
+  }
+
+  useEffect(() => {
+    if (!wordPreview) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") closeWordPreview(); };
+    document.addEventListener("keydown", closeOnEscape);
+    requestAnimationFrame(() => wordPreviewCloseRef.current?.focus());
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      URL.revokeObjectURL(wordPreview.url);
+    };
+  }, [closeWordPreview, wordPreview]);
+
   const ready = status?.available && status.modelInstalled;
+  const profileWorkspaceBlocked = profileSwitching || profileRecoveryRequired;
   const visibleConversations = conversations;
   const weeklyBrief = useMemo(() => parseKnowledgeBrief(knowledgeUpdates?.week ?? ""), [knowledgeUpdates?.week]);
   const unreadKnowledge = knowledgeUpdates?.weekUpdatedAt && knowledgeUpdates.weekUpdatedAt !== readKnowledgeVersion
@@ -1381,7 +1442,7 @@ export default function Home() {
 
   return (
     <main className="app-shell" data-appearance={appearance} data-palette={palette} onPointerMove={followCursor}>
-      <aside id="chat-navigation" className={`sidebar ${sidebarOpen ? "open" : ""}`}>
+      <aside id="chat-navigation" className={`sidebar ${sidebarOpen ? "open" : ""}`} inert={profileWorkspaceBlocked}>
         <div className="brand"><span className="brand-mark" aria-hidden="true" /><span>Rangabot</span><button ref={sidebarCloseRef} className="sidebar-close" type="button" onClick={() => { setSidebarOpen(false); requestAnimationFrame(() => mobileNavigationRef.current?.focus()); }} aria-label="Close chat navigation"><CraftIcon name="close" /></button></div>
         <button className="new-chat" onClick={() => startNewChat()}><CraftIcon name="add" /> New chat</button>
         <section className="projects" aria-label="Projects">
@@ -1402,7 +1463,7 @@ export default function Home() {
         <div className="conversation-tools">
           <button type="button" onClick={() => conversationImportRef.current?.click()}>Import .md</button>
           {activeConversationId
-            ? <a href={`/api/conversations/${activeConversationId}/export`}>Export open chat</a>
+            ? <button type="button" onClick={() => void exportOpenConversation()} disabled={profileSwitching}>Export open chat</button>
             : <span aria-disabled="true">Export open chat</span>}
           <input ref={conversationImportRef} type="file" accept=".md,text/markdown,text/plain" onChange={(event) => void importConversation(event)} />
         </div>
@@ -1430,10 +1491,12 @@ export default function Home() {
       <section className={`chat-panel ${messages.length === 0 ? "fresh-chat" : ""}`} inert={sidebarOpen}>
         <header className="chat-header">
           <div className="chat-identity">
-            <button ref={mobileNavigationRef} className="mobile-navigation" type="button" onClick={() => setSidebarOpen(true)} aria-label="Open chats and projects" aria-controls="chat-navigation" aria-expanded={sidebarOpen}><CraftIcon name="menu" /></button>
+            <button ref={mobileNavigationRef} className="mobile-navigation" type="button" onClick={() => setSidebarOpen(true)} aria-label="Open chats and projects" aria-controls="chat-navigation" aria-expanded={sidebarOpen} disabled={profileWorkspaceBlocked}><CraftIcon name="menu" /></button>
             <div><h1>Rangabot</h1><p>Code, think, and build privately</p></div>
           </div>
           <div className="header-actions">
+            {!publicDemo && <ProfileManager onSwitchingChange={setProfileSwitching} onActiveProfileChange={setActiveProfileContext} onRecoveryRequiredChange={setProfileRecoveryRequired} />}
+            <div className="profile-gated-header-actions" inert={profileWorkspaceBlocked}>
             <button type="button" className="utility-button brief-button" onClick={() => openKnowledgeBrief()} aria-label={`Open Knowledge Brief${unreadKnowledge ? `, ${unreadKnowledge} new items` : ""}`}>
               <CraftIcon name="knowledge" size={15} /><span>Brief</span>{unreadKnowledge > 0 && <b>{unreadKnowledge}</b>}
             </button>
@@ -1470,11 +1533,15 @@ export default function Home() {
             <button className={`status ${ready ? "ready" : "offline"}`} onClick={() => setModelManagerOpen(true)} title="Open Model Manager">
               <span /> {ready ? `${status.configuredModel} ready` : status?.available ? "Model not installed" : "Ollama offline"}
             </button>
+            </div>
           </div>
         </header>
 
+        {profileRecoveryRequired && <section className="profile-workspace-blocked" role="alert" aria-live="assertive"><strong>Profile Recovery required</strong><span>Normal workspace access is paused. Open Profiles and recover the last validated local state before continuing.</span></section>}
+
         <div
           className="messages"
+          inert={profileWorkspaceBlocked}
           onScroll={(event) => {
             const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
             followLatestRef.current = isNearMessageBottom(scrollTop, clientHeight, scrollHeight);
@@ -1528,7 +1595,7 @@ export default function Home() {
               <div className="message-body">
                 {message.replyTo && <div className="reply-reference"><strong>{message.replyTo.role === "assistant" ? "Rangabot" : "You"}</strong><span>{message.replyTo.excerpt}</span></div>}
                 {message.codeContext && <div className="message-code-reference"><strong>Attached code</strong><span>{message.codeContext.repository} · {message.codeContext.path} · lines {message.codeContext.startLine}–{message.codeContext.endLine}</span></div>}
-                {message.wordArtifact && <div className="chat-word-artifact"><span><CraftIcon name="document" /></span><div><strong>{message.wordArtifact.title}</strong><small>{message.wordArtifact.filename} · {message.wordArtifact.previewPages} rendered page{message.wordArtifact.previewPages === 1 ? "" : "s"}</small><nav><a href={`/api/artifacts/word/${message.wordArtifact.id}/document`}>Download .docx</a>{message.wordArtifact.previewPages > 0 && <a href={`/api/artifacts/word/${message.wordArtifact.id}/preview/1`} target="_blank" rel="noreferrer">Review preview</a>}</nav></div></div>}
+                {message.wordArtifact && <div className="chat-word-artifact"><span><CraftIcon name="document" /></span><div><strong>{message.wordArtifact.title}</strong><small>{message.wordArtifact.filename} · {message.wordArtifact.previewPages} rendered page{message.wordArtifact.previewPages === 1 ? "" : "s"}</small><nav><button type="button" onClick={() => void downloadWordArtifact(message.wordArtifact!.id, message.wordArtifact!.filename)}>Download .docx</button>{message.wordArtifact.previewPages > 0 && <button type="button" onClick={() => void reviewWordArtifact(message.wordArtifact!.id, message.wordArtifact!.title)}>Review preview</button>}</nav></div></div>}
                 {message.source && <span className="source">{formatAnswerReceipt(message)}</span>}
                 {message.content && (message.role === "assistant"
                   ? <MarkdownMessage content={message.content} />
@@ -1566,13 +1633,13 @@ export default function Home() {
           <div ref={endRef} />
         </div>
 
-        <div className={`composer-wrap ${messages.length === 0 ? "empty-chat" : ""}`}>
+        <div className={`composer-wrap ${messages.length === 0 ? "empty-chat" : ""}`} inert={profileWorkspaceBlocked}>
           {!ready && <div className="setup-hint">
             <strong>{status?.available ? "Choose a local model" : "Starting RangaBot’s model engine"}</strong>
             <span>{status?.available ? "Open Model Manager to install or select a model—no terminal required." : "The private model engine is not ready yet."}</span>
             <button type="button" onClick={() => setModelManagerOpen(true)}>Model Manager</button>
           </div>}
-          <form className="composer" onSubmit={sendMessage} aria-busy={conversationLoading}>
+          <form className="composer" onSubmit={sendMessage} aria-busy={conversationLoading || profileWorkspaceBlocked}>
             {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
             {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
             {attachedDataset && <div className="composer-code-context"><span><strong>Local data available to this chat</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>This attachment is remembered for this chat. Analytical requests may run bounded read-only SQL locally; expand the calculation trace to inspect it.</small></span><button type="button" onClick={() => void attachDatasetToChat(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
@@ -1588,9 +1655,10 @@ export default function Home() {
                 }}
                 placeholder="Message Rangabot…"
                 rows={1}
+                disabled={profileWorkspaceBlocked}
               />
               <div className="composer-actions">
-                <select value={mode} onChange={(event) => setMode(event.target.value as Mode)} aria-label="Routing mode" aria-describedby="route-mode-description" title={routeDescription}>
+                <select value={mode} onChange={(event) => setMode(event.target.value as Mode)} aria-label="Routing mode" aria-describedby="route-mode-description" title={routeDescription} disabled={profileWorkspaceBlocked}>
                   <option value="local">Local only</option>
                   <option value="smart">Smart</option>
                   <option value="teach">Teacher</option>
@@ -1600,7 +1668,7 @@ export default function Home() {
                 {sending ? (
                   <button className="stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating"><CraftIcon name="stop" /></button>
                 ) : (
-                  <button type="submit" disabled={!input.trim() || conversationLoading} aria-label="Send"><CraftIcon name="send" /></button>
+                  <button type="submit" disabled={!input.trim() || conversationLoading || profileWorkspaceBlocked} aria-label="Send"><CraftIcon name="send" /></button>
                 )}
               </div>
             </div>
@@ -1609,11 +1677,20 @@ export default function Home() {
         </div>
       </section>
 
-      {knowledgePanelOpen && (
+      {!profileRecoveryRequired && wordPreview && <div className="word-preview-backdrop" onMouseDown={closeWordPreview}>
+        <section className="word-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="word-preview-title" onMouseDown={(event) => event.stopPropagation()}>
+          <header><h2 id="word-preview-title">{wordPreview.title}</h2><button ref={wordPreviewCloseRef} type="button" onClick={closeWordPreview} aria-label="Close document preview"><CraftIcon name="close" /></button></header>
+          {/* The preview bytes arrived through the profile-bound same-origin client before this private blob URL was created. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={wordPreview.url} alt={`First-page preview of ${wordPreview.title}`} />
+        </section>
+      </div>}
+
+      {!profileRecoveryRequired && knowledgePanelOpen && (
         <div className="knowledge-backdrop" onMouseDown={() => setKnowledgePanelOpen(false)}>
           <aside className="knowledge-panel" role="dialog" aria-modal="true" aria-labelledby="knowledge-panel-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="knowledge-panel-header">
-              <div><span>Local intelligence</span><h2 id="knowledge-panel-title">Knowledge Brief</h2></div>
+              <div><span>Local intelligence</span><h2 id="knowledge-panel-title">Knowledge Brief</h2><small>Active profile: {activeProfileContext?.marker ?? "Loading…"}</small></div>
               <button type="button" ref={knowledgeCloseRef} onClick={() => setKnowledgePanelOpen(false)} aria-label="Close Knowledge Brief"><CraftIcon name="close" /></button>
             </div>
             <nav className="knowledge-tabs" aria-label="Knowledge Brief sections">
@@ -1657,7 +1734,7 @@ export default function Home() {
                     <span>{source.status}</span><div><strong>{source.name}</strong><small>{source.detail}</small></div>
                   </div>)}
                 </div>}
-                <div className="vault-note"><strong>Private by design</strong><p>Documents, passages, embeddings and retrieval stay on this computer. Add material to <code>data/knowledge/inbox/</code> and run <code>npm run knowledge:ingest</code>.</p></div>
+                <div className="vault-note"><strong>Private by design</strong><p>Documents, passages, embeddings and retrieval stay in this active profile on this computer. Use the supported Knowledge ingestion flow; it binds ingestion to the exact active profile and never uses the legacy shared data path.</p></div>
               </section>}
               {knowledgeTab === "updates" && <div className="knowledge-markdown changelog"><MarkdownMessage content={knowledgeUpdates?.changelog ?? "No Rangabot changelog is available yet."} /></div>}
             </div>
@@ -1665,11 +1742,11 @@ export default function Home() {
         </div>
       )}
 
-      {repositoryPanelOpen && selectedRepository && (
+      {!profileRecoveryRequired && repositoryPanelOpen && selectedRepository && (
         <div className="knowledge-backdrop" onMouseDown={() => setRepositoryPanelOpen(false)}>
           <aside className="code-panel" role="dialog" aria-modal="true" aria-labelledby="code-panel-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="knowledge-panel-header">
-              <div><span>Approved folder · local only</span><h2 id="code-panel-title">{selectedRepository.name}</h2><small>{selectedRepository.path}</small></div>
+              <div><span>Approved folder · local only</span><h2 id="code-panel-title">{selectedRepository.name}</h2><small>Active profile: {activeProfileContext?.marker ?? "Loading…"}</small><small>{selectedRepository.path}</small></div>
               <button type="button" ref={repositoryCloseRef} onClick={() => setRepositoryPanelOpen(false)} aria-label="Close code search"><CraftIcon name="close" /></button>
             </div>
             <form className="code-search-form" onSubmit={searchAllowedRepository}>
@@ -1695,10 +1772,10 @@ export default function Home() {
           </aside>
         </div>
       )}
-      <MemoryPanel open={memoryPanelOpen} onClose={closeMemoryPanel} />
-      <SqlAnalysisPanel key={sqlDraft ? `${sqlDraft.datasetId}:${sqlDraft.query}` : "manual"} open={sqlPanelOpen} onClose={closeSqlPanel} onAttach={(dataset) => { void attachDatasetToChat(dataset); setSqlDraft(null); }} initialDraft={sqlDraft} />
-      {welcomePreferencesOpen && <WelcomePreferencesDialog preferences={welcomePreferences} appearance={appearance} palette={palette} onClose={closeWelcomePreferences} onSave={saveWelcomePreferences} />}
-      {modelManagerOpen && <ModelManager onClose={() => setModelManagerOpen(false)} onChanged={() => void refreshStatus()} />}
+      <MemoryPanel open={!profileRecoveryRequired && memoryPanelOpen} onClose={closeMemoryPanel} activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} />
+      <SqlAnalysisPanel key={sqlDraft ? `${sqlDraft.datasetId}:${sqlDraft.query}` : "manual"} open={!profileRecoveryRequired && sqlPanelOpen} onClose={closeSqlPanel} onAttach={(dataset) => { void attachDatasetToChat(dataset); setSqlDraft(null); }} initialDraft={sqlDraft} activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} />
+      {!profileRecoveryRequired && welcomePreferencesOpen && <WelcomePreferencesDialog preferences={welcomePreferences} appearance={appearance} palette={palette} activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} onClose={closeWelcomePreferences} onSave={saveWelcomePreferences} />}
+      {!profileRecoveryRequired && modelManagerOpen && <ModelManager activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} onClose={() => setModelManagerOpen(false)} onChanged={() => void refreshStatus()} />}
     </main>
   );
 }

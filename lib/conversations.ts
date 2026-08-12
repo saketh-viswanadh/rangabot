@@ -38,14 +38,21 @@ export interface Conversation extends ConversationSummary {
   messages: ChatMessage[];
 }
 
-const defaultDatabasePath = runtimePaths.conversationDatabase;
-let databasePath = defaultDatabasePath;
+let databasePathOverride: string | undefined;
+let openedDatabasePath: string | undefined;
 let database: Database | undefined;
 
+function currentDatabasePath() {
+  return databasePathOverride ?? runtimePaths.conversationDatabase;
+}
+
 export function getConversationDatabase() {
-  if (database) return database;
+  const databasePath = currentDatabasePath();
+  if (database && openedDatabasePath === databasePath) return database;
+  if (database) closeConversationDatabase();
   preparePrivateSqliteStorage(databasePath);
   database = new DatabaseSync(databasePath);
+  openedDatabasePath = databasePath;
   let transactionStarted = false;
   try {
     database.exec(`
@@ -133,6 +140,7 @@ export function getConversationDatabase() {
     }
     try { database.close(); } catch { /* Preserve the initialization error. */ }
     database = undefined;
+    openedDatabasePath = undefined;
     hardenPrivateSqliteFiles(databasePath);
     throw error;
   }
@@ -398,12 +406,22 @@ export function titleFromMessages(messages: ChatMessage[]): string {
   return firstUserMessage.length > 42 ? `${firstUserMessage.slice(0, 39)}…` : firstUserMessage;
 }
 
-export function closeConversationDatabaseForTests() {
+export function closeConversationDatabase() {
   database?.close();
   database = undefined;
+  openedDatabasePath = undefined;
+}
+
+export function closeConversationDatabaseForTests() {
+  closeConversationDatabase();
 }
 
 export function setConversationDatabasePathForTests(path: string) {
   closeConversationDatabaseForTests();
-  databasePath = path;
+  databasePathOverride = path;
+}
+
+export function resetConversationDatabasePathForTests() {
+  closeConversationDatabaseForTests();
+  databasePathOverride = undefined;
 }

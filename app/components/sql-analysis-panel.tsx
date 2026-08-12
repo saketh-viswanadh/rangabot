@@ -10,7 +10,7 @@ type Dataset = { id: string; name: string; format: "csv" | "parquet" | "duckdb";
 type Preview = { confirmationId: string; token: string; expiresAt: string; dataset: { id: string; name: string; format: string; sizeBytes: number; sha256: string }; query: string; limits: { readOnly: true; externalAccess: false; maxRows: number; timeoutMs: number } };
 type Result = { columns: string[]; rows: unknown[][]; receipt: { engine: "duckdb"; input: { filename: string; sha256: string; sizeBytes: number }; querySha256: string; rowLimit: number; returnedRows: number; truncated: boolean; durationMs: number } };
 
-export function SqlAnalysisPanel({ open, onClose, onAttach, initialDraft }: { open: boolean; onClose: () => void; onAttach: (dataset: AttachedDataset) => void; initialDraft?: SqlDraft | null }) {
+export function SqlAnalysisPanel({ open, onClose, onAttach, initialDraft, activeProfileMarker }: { open: boolean; onClose: () => void; onAttach: (dataset: AttachedDataset) => void; initialDraft?: SqlDraft | null; activeProfileMarker: string }) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [datasetPath, setDatasetPath] = useState("");
   const [datasetId, setDatasetId] = useState(initialDraft?.datasetId ?? "");
@@ -76,7 +76,7 @@ export function SqlAnalysisPanel({ open, onClose, onAttach, initialDraft }: { op
 
   if (!open) return null;
   return <div className="knowledge-backdrop" onMouseDown={onClose}><aside className="sql-panel" role="dialog" aria-modal="true" aria-labelledby="sql-panel-title" onMouseDown={(event) => event.stopPropagation()}>
-    <div className="knowledge-panel-header"><div><span>Private local analysis</span><h2 id="sql-panel-title">SQL workspace</h2><small>Nothing runs until you approve the exact query.</small></div><button ref={closeRef} type="button" onClick={onClose} aria-label="Close SQL workspace"><CraftIcon name="close" /></button></div>
+    <div className="knowledge-panel-header"><div><span>Private local analysis</span><h2 id="sql-panel-title">SQL workspace</h2><small>Active profile: {activeProfileMarker}</small><small>Nothing runs until you approve the exact query.</small></div><button ref={closeRef} type="button" onClick={onClose} aria-label="Close SQL workspace"><CraftIcon name="close" /></button></div>
     <div className="sql-panel-content"><section className="sql-datasets"><header><div><strong>Approved data</strong><small>CSV, Parquet or DuckDB · 100 MB maximum</small></div><span>{datasets.length}</span></header>
       <div className="sql-dataset-list">{datasets.map((dataset) => <div key={dataset.id} className={dataset.id === datasetId ? "selected" : ""}><button type="button" onClick={() => { setDatasetId(dataset.id); setPreview(null); setResult(null); }}><strong>{dataset.name}</strong><small>{dataset.format.toUpperCase()} · {(dataset.sizeBytes / 1024 ** 2).toFixed(1)} MB</small></button><button type="button" onClick={() => void revoke(dataset)} aria-label={`Revoke ${dataset.name}`}><CraftIcon name="close" size={13} /></button></div>)}</div>
       {datasetId && <button type="button" className="sql-attach" onClick={() => { const dataset = datasets.find((item) => item.id === datasetId); if (dataset) { onAttach(dataset); onClose(); } }}>Use selected data in chat</button>}

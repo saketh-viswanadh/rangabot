@@ -113,7 +113,10 @@ test("renderer preferences are explicit, sandboxed, isolated and unprivileged", 
     safeDialogs: true,
   });
   const preload = readFileSync(join(projectRoot, "desktop", "electron", "preload.cjs"), "utf8").trim();
-  assert.equal(preload, '"use strict";');
+  assert.match(preload, /contextBridge\.exposeInMainWorld\("rangabotDesktop"/);
+  assert.match(preload, /saveProfileBackup/);
+  assert.match(preload, /rangabot:save-profile-backup/);
+  assert.doesNotMatch(preload, /require\(["']node:(?:fs|path|child_process|process)["']\)|process\.|readFile|writeFile|exec|spawn/);
 });
 
 test("desktop URL allowlist accepts only its exact loopback HTTP origin", () => {

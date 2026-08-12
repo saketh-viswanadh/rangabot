@@ -1,6 +1,8 @@
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { hardenPrivateTree, UnsafePrivateStoragePathError } from "../lib/private-storage.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
+import { inspectProfileRegistry } from "../lib/profile-registry.ts";
 import { runtimePaths } from "../lib/runtime-paths.ts";
 
 export const managedPaths = [
@@ -45,8 +47,12 @@ const configuredDataPaths = [
 ];
 
 export function repairPrivateStorage(
-  root = runtimePaths.mode === "cli" ? runtimePaths.resourceRoot : runtimePaths.dataRoot,
-  paths = runtimePaths.mode === "cli" ? managedPaths : configuredDataPaths,
+  root = inspectProfileRegistry(runtimePaths.managedDataRoot).kind === "ready"
+    ? runtimePaths.dataRoot
+    : runtimePaths.mode === "cli" ? runtimePaths.resourceRoot : runtimePaths.dataRoot,
+  paths = inspectProfileRegistry(runtimePaths.managedDataRoot).kind === "ready"
+    ? configuredDataPaths
+    : runtimePaths.mode === "cli" ? managedPaths : configuredDataPaths,
 ) {
   const repaired = { directories: 0, files: 0, skippedPaths: [] as string[] };
   for (const path of paths) {
@@ -63,9 +69,12 @@ export function repairPrivateStorage(
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Private storage repair" });
+  profileMaintenance.assertCurrent();
   const repaired = repairPrivateStorage();
   const skipped = repaired.skippedPaths.length
     ? ` ${repaired.skippedPaths.length} unsafe app-managed path(s) were skipped.`
     : "";
   console.log(`Private storage permissions repaired: ${repaired.directories} directories and ${repaired.files} files. Nested symbolic links were skipped and never followed.${skipped}`);
+  profileMaintenance.release();
 }

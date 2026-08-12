@@ -5,6 +5,7 @@ import hljs from "highlight.js/lib/common";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { codeLanguage, isBlockCode } from "@/lib/markdown";
+import { downloadLocalApiFile } from "@/lib/local-api-client";
 
 function CodeBlock({ code, language }: { code: string; language?: string }) {
   const [copied, setCopied] = useState(false);
@@ -33,6 +34,22 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
 }
 
 export function MarkdownMessage({ content }: { content: string }) {
+  const [downloadMessage, setDownloadMessage] = useState("");
+
+  async function downloadLocalLink(path: string) {
+    setDownloadMessage("Preparing the local file…");
+    try {
+      const segment = path.split("?", 1)[0]?.split("/").filter(Boolean).at(-1) ?? "file";
+      const filename = /^\/api\/artifacts\/word\/[^/]+\/document(?:\?|$)/.test(path)
+        ? "rangabot-document.docx"
+        : `rangabot-${segment}`;
+      await downloadLocalApiFile(path, filename);
+      setDownloadMessage("Local file ready.");
+    } catch (error) {
+      setDownloadMessage(error instanceof Error ? error.message : "The local file could not be downloaded.");
+    }
+  }
+
   return (
     <div className="markdown-content">
       <ReactMarkdown
@@ -47,6 +64,9 @@ export function MarkdownMessage({ content }: { content: string }) {
           },
           a({ href, children, ...props }) {
             const external = href?.startsWith("http://") || href?.startsWith("https://");
+            if (href?.startsWith("/api/")) {
+              return <button type="button" className="markdown-download-link" onClick={() => void downloadLocalLink(href)}>{children}</button>;
+            }
             return <a href={href} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined} {...props}>{children}</a>;
           },
           img({ alt }) {
@@ -56,6 +76,7 @@ export function MarkdownMessage({ content }: { content: string }) {
       >
         {content}
       </ReactMarkdown>
+      {downloadMessage && <span className="sr-only" role="status" aria-live="polite">{downloadMessage}</span>}
     </div>
   );
 }

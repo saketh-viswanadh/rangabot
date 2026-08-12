@@ -14,6 +14,7 @@ export type SqlConfirmationRecord = {
   expiresAt: string;
 };
 
+/** @deprecated Prefer runtimePaths.sqlConfirmations at call time so profile switches cannot retain a stale path. */
 export const defaultSqlConfirmationStorePath = runtimePaths.sqlConfirmations;
 export const sqlConfirmationTempMaxAgeMs = 10 * 60 * 1000;
 

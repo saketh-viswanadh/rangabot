@@ -10,6 +10,7 @@ import { completeJsonWithOllama } from "../lib/providers/ollama.ts";
 import type { ChatMessage } from "../lib/providers/types.ts";
 import { executeReadOnlySql, inspectDatasetIdentity, inspectDatasetSchema } from "../lib/sql-runtime.ts";
 import { ensurePrivateDirectory, ensurePrivateFile, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
 
 type HoldoutCase = { id: string; question: string; goldSql?: string; boundary?: "clarify" | "unavailable" };
 const cases: HoldoutCase[] = [
@@ -27,7 +28,8 @@ const cases: HoldoutCase[] = [
   { id: "lh-12", question: "Which hub is best?", boundary: "clarify" },
 ];
 
-const outputDirectory = resolve("data/evaluations/results");
+const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Analytical holdout v1 evaluation" });
+const outputDirectory = profileMaintenance.dataPath("evaluations", "results");
 const databasePath = resolve(outputDirectory, "analytical-holdout-v1.duckdb");
 ensurePrivateDirectory(outputDirectory);
 
@@ -71,7 +73,9 @@ for (const item of cases) {
 }
 const timestamp = new Date().toISOString().replaceAll(":", "-");
 const outputPath = resolve(outputDirectory, `analytical-holdout-v1-${timestamp}.json`);
+profileMaintenance.assertCurrent();
 writePrivateJsonFileAtomic(outputPath, { suite: "analytical-holdout-v1", frozenAt: "2026-08-03", cases: results });
 const passed = results.filter((item) => item.passed).length;
 console.log(`\nFrozen holdout: ${passed}/${results.length} passed.`);
 console.log(`Private result: ${outputPath}`);
+profileMaintenance.release();

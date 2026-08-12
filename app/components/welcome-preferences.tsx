@@ -28,11 +28,12 @@ type WelcomePreferencesDialogProps = {
   preferences: WelcomePreferences;
   appearance: Appearance;
   palette: Palette;
+  activeProfileMarker: string;
   onClose: () => void;
   onSave: (preferences: WelcomePreferences, appearance: Appearance, palette: Palette) => void;
 };
 
-export function WelcomePreferencesDialog({ preferences, appearance, palette, onClose, onSave }: WelcomePreferencesDialogProps) {
+export function WelcomePreferencesDialog({ preferences, appearance, palette, activeProfileMarker, onClose, onSave }: WelcomePreferencesDialogProps) {
   const [preferredName, setPreferredName] = useState(preferences.preferredName ?? "");
   const [mode, setMode] = useState<WelcomeMode>(preferences.mode);
   const [draftAppearance, setDraftAppearance] = useState<Appearance>(appearance);
@@ -113,7 +114,7 @@ export function WelcomePreferencesDialog({ preferences, appearance, palette, onC
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header>
-          <div><span>Local preferences</span><h2 id="welcome-preferences-title">Make Rangabot yours</h2></div>
+          <div><span>Local preferences</span><h2 id="welcome-preferences-title">Make Rangabot yours</h2><small>Active profile: {activeProfileMarker}</small></div>
           <button type="button" onClick={onClose} aria-label="Close Preferences"><CraftIcon name="close" /></button>
         </header>
         <nav ref={tabListRef} className="preferences-tabs" role="tablist" aria-label="Preference sections" onKeyDown={moveSection}>

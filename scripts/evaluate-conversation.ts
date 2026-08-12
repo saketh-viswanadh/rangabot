@@ -20,6 +20,7 @@ import type {
 import { ensurePrivateDirectory, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
 import { readConversationEvaluationGitCandidate } from "../lib/conversation-evaluation-runtime.ts";
 import { assessConversationEvaluation } from "../lib/conversation-evaluation-assessment.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
 
 function baselineMessages(testCase: Case): ChatMessage[] {
   const latest = [...testCase.messages].reverse().find((message) => message.role === "user")?.content ?? "";
@@ -38,6 +39,7 @@ if (process.argv.includes("--validate-only")) {
   console.log(`PASS: ${suite.name} ${suite.version} has 60 cases, 12 capabilities, and five cases per capability.`);
   process.exit(0);
 }
+const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Conversation evaluation" });
 
 async function localRuntimeMetadata() {
   const baseUrl = getLocalOllamaBaseUrl();
@@ -81,6 +83,7 @@ const startedAt = new Date().toISOString();
 const runtime = await localRuntimeMetadata();
 console.log(`Running ${selectedCases.length} synthetic Mind & Memory cases (${mode}, suite ${suite.version}).`);
 for (const [index, testCase] of selectedCases.entries()) {
+  profileMaintenance.assertCurrent();
   const started = Date.now();
   try {
     const directBoundary = mode === "candidate" ? answerDeterministicConversationRequest(testCase.messages) : null;
@@ -122,9 +125,10 @@ const summary = {
   results,
 };
 const assessment = assessConversationEvaluation(summary);
-const outputDirectory = resolve("data/evaluations/results");
+const outputDirectory = profileMaintenance.dataPath("evaluations", "results");
 ensurePrivateDirectory(outputDirectory);
 const output = resolve(outputDirectory, `conversation-${mode}-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+profileMaintenance.assertCurrent();
 writePrivateJsonFileAtomic(output, { ...summary, assessment });
 console.log(`\nPass rate: ${(summary.totals.passRate * 100).toFixed(1)}% (${passed}/${selectedCases.length})`);
 console.log(`Critical trust pass rate: ${summary.critical.passRate === null ? "n/a" : `${(summary.critical.passRate * 100).toFixed(1)}% (${summary.critical.passed}/${summary.critical.total})`}`);
@@ -132,3 +136,4 @@ console.log(`Average latency: ${summary.averageLatencyMs === null ? "n/a" : `${(
 console.log(`Exit assessment: ${assessment.passed ? "PASS" : `FAIL (${assessment.failures.join(" ")})`}`);
 console.log(`Private result: ${output}`);
 if (!assessment.passed) process.exitCode = 1;
+profileMaintenance.release();

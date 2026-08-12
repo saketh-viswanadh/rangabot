@@ -13,7 +13,7 @@ test("model ids are bounded provider identifiers", () => {
 });
 
 test("model catalog separates chat, embedding, and unqualified installed models", () => {
-  const models = buildModelViews(["llama3.2:3b", "nomic-embed-text:latest", "private/custom:latest"], { schemaVersion: 1, selectedModel: "private/custom:latest", revision: 2, updatedAt: null });
+  const models = buildModelViews(["llama3.2:3b", "nomic-embed-text:latest", "private/custom:latest"], { schemaVersion: 2, selectedModel: "private/custom:latest", contextTokens: 8192, revision: 2, updatedAt: null });
   assert.equal(models.find((model) => model.id === "llama3.2:3b")?.recommended, true);
   assert.equal(models.find((model) => model.id === "llama3.2:3b")?.selectable, true);
   assert.equal(models.find((model) => model.id === "nomic-embed-text:latest")?.kind, "embedding");
@@ -34,7 +34,7 @@ test("model preference is private, revisioned, and durable", () => {
     const value = { schemaVersion: 1, selectedModel: "llama3.2:3b", revision: 1, updatedAt: "2026-08-12T00:00:00.000Z" };
     writeFileSync(path, `${JSON.stringify(value)}\n`, { mode: 0o600 });
     chmodSync(path, 0o600);
-    assert.deepEqual(readModelPreference(path), value);
+    assert.deepEqual(readModelPreference(path), { ...value, schemaVersion: 2, contextTokens: 4096 });
     assert.match(readFileSync(path, "utf8"), /llama3\.2:3b/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
@@ -49,4 +49,5 @@ test("model installation requires a reviewed id and uses the local pull API", as
 
 test("production selection writer rejects invalid input before storage", () => {
   assert.throws(() => updateSelectedChatModel({ modelId: "../escape", expectedRevision: 0 }), /valid model/);
+  assert.throws(() => updateSelectedChatModel({ modelId: "llama3.2:3b", contextTokens: 511, expectedRevision: 0 }), /context size/);
 });

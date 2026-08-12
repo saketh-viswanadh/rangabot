@@ -4,6 +4,8 @@ import {
   chmodSync,
   closeSync,
   existsSync,
+  linkSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -137,6 +139,40 @@ test("all private storage operations reject an intermediate symlink below their 
     assert.equal(existsSync(join(external, "nested")), false);
     assert.equal(permissions(external), 0o755);
     assert.equal(permissions(externalFile), 0o644);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("private storage refuses hard-linked files without mutating the external inode", {
+  skip: process.platform === "win32",
+}, () => {
+  const root = mkdtempSync(join(tmpdir(), "rangabot-private-hardlink-"));
+  const managed = join(root, "managed");
+  const external = join(root, "external.txt");
+  const linked = join(managed, "linked.txt");
+  try {
+    mkdirSync(managed, { mode: 0o700 });
+    closeSync(openSync(external, "w", 0o644));
+    linkSync(external, linked);
+    const beforeMode = permissions(external);
+
+    assert.throws(
+      () => ensurePrivateFile(linked, { trustedRoot: managed }),
+      /non-linked regular local file/,
+    );
+    assert.throws(
+      () => writePrivateTextFileAtomic(linked, "must not replace\n", { trustedRoot: managed }),
+      /non-linked regular local file/,
+    );
+    assert.throws(
+      () => hardenPrivateTree(managed, { trustedRoot: managed }),
+      /changed while it was being secured|non-linked regular local file/,
+    );
+
+    assert.equal(readFileSync(external, "utf8"), "");
+    assert.equal(permissions(external), beforeMode);
+    assert.equal(lstatSync(external).nlink, 2);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

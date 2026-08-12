@@ -24,6 +24,8 @@ import {
 import { recordFailedTurnResponse, recordTurnException, responseFromCompletedAssistant, wrapSuccessfulTurnResponse, type TurnLifecycleCallbacks } from "@/lib/chat-turn-lifecycle";
 import { getConversationTurnTimeoutMs } from "@/lib/local-runtime-config";
 import { registerActiveConversationTurn } from "@/lib/active-conversation-turns";
+import { profileBindingFromRequest, StaleProfileRequestError } from "@/lib/profile-request";
+import { profileOperations } from "@/lib/profile-operations";
 
 export const runtime = "nodejs";
 
@@ -311,19 +313,37 @@ function lifecycleCallbacks(
 }
 
 async function handleVersionedChat(request: Request, body: VersionedChatBody) {
+  let binding;
+  try {
+    binding = profileBindingFromRequest(request);
+  } catch (error) {
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : "The active profile could not be verified.",
+      code: "stale-profile",
+    }, { status: error instanceof StaleProfileRequestError ? 409 : 500 });
+  }
+  const profileOperation = profileOperations.begin({
+    binding,
+    kind: "generation",
+    label: "answer generation",
+    cancellable: true,
+  });
   let claim;
   try {
     claim = claimConversationTurn(body.conversationId, body.turnId);
   } catch (error) {
+    profileOperation.release();
     return turnErrorResponse(error);
   }
 
   if (claim.kind === "completed") {
+    profileOperation.release();
     return claim.turn.assistantMessage
       ? responseFromCompletedAssistant(claim.turn.assistantMessage)
       : NextResponse.json({ error: "The completed turn has no saved answer.", code: "integrity" }, { status: 500 });
   }
   if (claim.kind === "in-progress") {
+    profileOperation.release();
     return NextResponse.json({
       error: "This turn is already being processed.",
       code: "turn-in-progress",
@@ -331,6 +351,7 @@ async function handleVersionedChat(request: Request, body: VersionedChatBody) {
     }, { status: 409 });
   }
   if (claim.kind === "terminal") {
+    profileOperation.release();
     return NextResponse.json({
       error: claim.turn.failureMessage ?? `This turn already ended as ${claim.turn.status}.`,
       code: claim.turn.failureCode ?? claim.turn.status,
@@ -338,16 +359,21 @@ async function handleVersionedChat(request: Request, body: VersionedChatBody) {
     }, { status: 409 });
   }
   if (claim.kind !== "claimed") {
+    profileOperation.release();
     return NextResponse.json({ error: "The local turn entered an unknown state.", code: "integrity" }, { status: 500 });
   }
 
   let releaseActiveTurn: () => void = () => undefined;
-  const callbacks = lifecycleCallbacks(body.turnId, claim.candidateBuildId, () => releaseActiveTurn());
+  const callbacks = lifecycleCallbacks(body.turnId, claim.candidateBuildId, () => {
+    releaseActiveTurn();
+    profileOperation.release();
+  });
   let turnSignal: AbortSignal | undefined;
   try {
     const activeTurn = registerActiveConversationTurn(body.turnId, [
       request.signal,
       AbortSignal.timeout(getConversationTurnTimeoutMs()),
+      profileOperation.signal,
     ]);
     releaseActiveTurn = activeTurn.release;
     turnSignal = activeTurn.signal;

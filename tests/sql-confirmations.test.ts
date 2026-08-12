@@ -103,6 +103,7 @@ test("ignores unrelated temporary files while maintaining SQL confirmations", ()
 test("runs lightweight SQL confirmation maintenance before both local server modes", () => {
   for (const script of ["scripts/start-dev.ts", "scripts/start-server.ts"]) {
     const source = readFileSync(resolve(process.cwd(), script), "utf8");
-    assert.match(source, /maintainSqlConfirmationStoreAtPath\(defaultSqlConfirmationStorePath\)/);
+    assert.match(source, /maintainSqlConfirmationStoreAtPath\(runtimePaths\.sqlConfirmations\)/);
+    assert.doesNotMatch(source, /defaultSqlConfirmationStorePath/);
   }
 });

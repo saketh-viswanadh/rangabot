@@ -8,6 +8,7 @@ import { getConversationTimeline, recoverExpiredConversationTurns } from "@/lib/
 import { deleteConversationWhenIdle } from "@/lib/conversation-mutation-guards";
 import { getApprovedDataset } from "@/lib/datasets";
 import { listConversationResponseFeedback } from "@/lib/response-feedback";
+import { profileBindingFromRequest, StaleProfileRequestError, withProfileRequest } from "@/lib/profile-request";
 
 export const runtime = "nodejs";
 
@@ -42,71 +43,89 @@ function setConversationDatasetWhenIdle(id: string, datasetId: string | null): D
   }
 }
 
-export async function GET(_request: Request, context: RouteContext) {
-  const conversation = getConversationTimeline((await context.params).id);
-  const dataset = conversation?.datasetId ? getApprovedDataset(conversation.datasetId) : null;
-  return conversation
-    ? NextResponse.json({
-      conversation,
-      attachedDataset: dataset ? { id: dataset.id, name: dataset.name, format: dataset.format, sizeBytes: dataset.sizeBytes } : null,
-      responseFeedback: listConversationResponseFeedback(getConversationDatabase(), conversation.id),
-    })
-    : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+export async function GET(request: Request, context: RouteContext) {
+  try {
+    const id = (await context.params).id;
+    profileBindingFromRequest(request);
+    const conversation = getConversationTimeline(id);
+    const dataset = conversation?.datasetId ? getApprovedDataset(conversation.datasetId) : null;
+    return conversation
+      ? NextResponse.json({
+        conversation,
+        attachedDataset: dataset ? { id: dataset.id, name: dataset.name, format: dataset.format, sizeBytes: dataset.sizeBytes } : null,
+        responseFeedback: listConversationResponseFeedback(getConversationDatabase(), conversation.id),
+      })
+      : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "The conversation could not be read." }, { status: error instanceof StaleProfileRequestError ? 409 : 500 });
+  }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
-  const result = deleteConversationWhenIdle((await context.params).id);
-  if (result === "turn-in-progress") {
-    return NextResponse.json({
-      error: "Stop or finish the active turn before deleting this conversation.",
-      code: "turn-in-progress",
-    }, { status: 409 });
+export async function DELETE(request: Request, context: RouteContext) {
+  try {
+    return await withProfileRequest(request, { kind: "database-mutation", label: "conversation deletion" }, async () => {
+      const result = deleteConversationWhenIdle((await context.params).id);
+      if (result === "turn-in-progress") {
+        return NextResponse.json({
+          error: "Stop or finish the active turn before deleting this conversation.",
+          code: "turn-in-progress",
+        }, { status: 409 });
+      }
+      if (result === "artifact-cleanup-failed") {
+        return NextResponse.json({
+          error: "This conversation was not deleted because one or more of its local Word artifacts could not be removed. Check local file permissions, then try again.",
+          code: "artifact-cleanup-failed",
+          retriable: true,
+        }, { status: 503 });
+      }
+      if (result === "deleted-cleanup-pending") {
+        return NextResponse.json({
+          warning: "The conversation was deleted, but its private artifact quarantine could not be fully purged. Restart Rangabot to retry cleanup safely.",
+          code: "deleted-cleanup-pending",
+          retriableOnRestart: true,
+        }, { status: 202 });
+      }
+      return result === "deleted"
+        ? new Response(null, { status: 204 })
+        : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+    });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "The conversation was not deleted." }, { status: error instanceof StaleProfileRequestError ? 409 : 500 });
   }
-  if (result === "artifact-cleanup-failed") {
-    return NextResponse.json({
-      error: "This conversation was not deleted because one or more of its local Word artifacts could not be removed. Check local file permissions, then try again.",
-      code: "artifact-cleanup-failed",
-      retriable: true,
-    }, { status: 503 });
-  }
-  if (result === "deleted-cleanup-pending") {
-    return NextResponse.json({
-      warning: "The conversation was deleted, but its private artifact quarantine could not be fully purged. Restart Rangabot to retry cleanup safely.",
-      code: "deleted-cleanup-pending",
-      retriableOnRestart: true,
-    }, { status: 202 });
-  }
-  return result === "deleted"
-    ? new Response(null, { status: 204 })
-    : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const body = (await request.json()) as { pinned?: unknown; datasetId?: unknown };
-  const id = (await context.params).id;
-  if (Object.prototype.hasOwnProperty.call(body, "datasetId")) {
-    if (body.datasetId !== null && typeof body.datasetId !== "string") {
-      return NextResponse.json({ error: "Dataset attachment must be an approved dataset id or null." }, { status: 400 });
-    }
-    if (typeof body.datasetId === "string" && !getApprovedDataset(body.datasetId)) {
-      return NextResponse.json({ error: "That dataset is no longer approved." }, { status: 400 });
-    }
-    const update = setConversationDatasetWhenIdle(id, body.datasetId as string | null);
-    if (update.kind === "turn-in-progress") {
-      return NextResponse.json({
-        error: "Stop or finish the active turn before changing its dataset binding.",
-        code: "turn-in-progress",
-      }, { status: 409 });
-    }
-    return update.kind === "updated"
-      ? NextResponse.json({ conversation: update.conversation })
-      : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+  try {
+    return await withProfileRequest(request, { kind: "database-mutation", label: "conversation update" }, async () => {
+      const body = (await request.json()) as { pinned?: unknown; datasetId?: unknown };
+      const id = (await context.params).id;
+      if (Object.prototype.hasOwnProperty.call(body, "datasetId")) {
+        if (body.datasetId !== null && typeof body.datasetId !== "string") {
+          return NextResponse.json({ error: "Dataset attachment must be an approved dataset id or null." }, { status: 400 });
+        }
+        if (typeof body.datasetId === "string" && !getApprovedDataset(body.datasetId)) {
+          return NextResponse.json({ error: "That dataset is no longer approved." }, { status: 400 });
+        }
+        const update = setConversationDatasetWhenIdle(id, body.datasetId as string | null);
+        if (update.kind === "turn-in-progress") {
+          return NextResponse.json({
+            error: "Stop or finish the active turn before changing its dataset binding.",
+            code: "turn-in-progress",
+          }, { status: 409 });
+        }
+        return update.kind === "updated"
+          ? NextResponse.json({ conversation: update.conversation })
+          : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+      }
+      if (typeof body.pinned !== "boolean") {
+        return NextResponse.json({ error: "A boolean pinned value or dataset attachment is required." }, { status: 400 });
+      }
+      const conversation = setConversationPinned(id, body.pinned);
+      return conversation
+        ? NextResponse.json({ conversation })
+        : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+    });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "The conversation was not updated." }, { status: error instanceof StaleProfileRequestError ? 409 : 500 });
   }
-  if (typeof body.pinned !== "boolean") {
-    return NextResponse.json({ error: "A boolean pinned value or dataset attachment is required." }, { status: 400 });
-  }
-  const conversation = setConversationPinned(id, body.pinned);
-  return conversation
-    ? NextResponse.json({ conversation })
-    : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
 }

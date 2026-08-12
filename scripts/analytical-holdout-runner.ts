@@ -18,6 +18,7 @@ import type { ChatMessage } from "../lib/providers/types.ts";
 import type { SqlProposal } from "../lib/sql-proposals.ts";
 import { executeReadOnlySql, inspectDatasetIdentity, inspectDatasetSchema, type SqlExecutionResult } from "../lib/sql-runtime.ts";
 import { ensurePrivateDirectory, ensurePrivateFile, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
 
 export type ExpectedAnalyticalPlan = {
   operation?: string;
@@ -169,6 +170,10 @@ function packExecutionAudit(input: {
 }
 
 export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefinition, options: AnalyticalHoldoutRunOptions = {}) {
+  // Explicit output roots are reserved for imported synthetic unit fixtures.
+  // Product CLI suites use the captured active profile's private result root.
+  const profileMaintenance = definition.outputDirectory ? null
+    : acquireProfileMaintenanceBinding({ label: `${definition.suite} evaluation` });
   const mode = options.mode ?? "legacy";
   const startedAt = new Date().toISOString();
   const modelId = getConfiguredChatModel();
@@ -192,7 +197,10 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
       logicalCpuCount: cpus().length,
     },
   };
-  const outputDirectory = resolve(definition.outputDirectory ?? "data/evaluations/results"); const databasePath = resolve(outputDirectory, definition.databaseName);
+  const outputDirectory = resolve(definition.outputDirectory
+    ?? profileMaintenance!.dataPath("evaluations", "results"));
+  const databasePath = resolve(outputDirectory, definition.databaseName);
+  profileMaintenance?.assertCurrent();
   ensurePrivateDirectory(outputDirectory); if (existsSync(databasePath)) unlinkSync(databasePath);
   const instance = await DuckDBInstance.create(databasePath); const connection = await instance.connect();
   try { await connection.run(definition.setupSql); } finally { connection.closeSync(); instance.closeSync(); ensurePrivateFile(databasePath); }
@@ -216,6 +224,7 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
   }
   if (process.env.RANGABOT_HOLDOUT_PREFLIGHT_ONLY === "1") {
     console.log(`PASS: ${definition.suite} setup and ${goldResults.size} reference queries are valid; no model cases ran.`);
+    profileMaintenance?.release();
     return { passed: 0, total: definition.cases.length, outputPath: "" };
   }
   for (const item of definition.cases) {
@@ -313,9 +322,11 @@ export async function runAnalyticalHoldout(definition: AnalyticalHoldoutDefiniti
       };
     })(),
   };
+  profileMaintenance?.assertCurrent();
   writePrivateJsonFileAtomic(outputPath, { schemaVersion: 3, suite: definition.suite, frozenAt: definition.frozenAt, mode, startedAt, completedAt, provenance, summary, cases: results });
   const passed = summary.passed;
   const label = definition.evidenceKind === "development" ? "Development suite" : "Frozen holdout";
   console.log(`\n${label} (${mode}): ${passed}/${results.length} passed.`); console.log(`Private result: ${outputPath}`);
+  profileMaintenance?.release();
   return { passed, total: results.length, outputPath };
 }

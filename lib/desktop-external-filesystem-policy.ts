@@ -1,7 +1,6 @@
 import {
   closeSync,
   constants,
-  existsSync,
   fstatSync,
   lstatSync,
   openSync,
@@ -9,6 +8,11 @@ import {
   realpathSync,
 } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  inspectProfileRegistry,
+  PROFILE_DATA_DIRECTORY_NAME,
+  PROFILE_REGISTRY_DIRECTORY_NAME,
+} from "./profile-registry.ts";
 
 /**
  * This environment key is written only by the sealed verification desktop
@@ -37,6 +41,8 @@ export const VERIFICATION_EXTERNAL_PATH_ENTRY_POINTS = Object.freeze([
   "dataset-sql-execution",
   "conversation-import",
   "memory-import",
+  "profile-backup-import",
+  "profile-backup-export",
 ] as const);
 
 type PolicyEnvironment = Readonly<Record<string, string | undefined>>;
@@ -84,10 +90,14 @@ export function assertExternalFilesystemPathAccess(
 }
 
 export function assertExternalImportAccess(
-  entryPoint: "conversation-import" | "memory-import",
+  entryPoint: "conversation-import" | "memory-import" | "profile-backup-import",
   environment: PolicyEnvironment = process.env,
 ) {
   assertExternalFilesystemPathAccess("external-import", entryPoint, environment);
+}
+
+export function assertProfileBackupExportAccess(environment: PolicyEnvironment = process.env) {
+  assertExternalFilesystemPathAccess("profile-backup-export", "profile-backup-export", environment);
 }
 
 export function assertExternalRegistryEntriesAllowed(
@@ -104,6 +114,8 @@ type RegistryKind = "repositories" | "datasets";
 export type VerificationRegistryPreflight = Readonly<{
   kind: RegistryKind;
   path: string;
+  profileId: string | null;
+  scope: "legacy" | "profile";
   status: "missing" | "empty";
 }>;
 
@@ -133,22 +145,29 @@ function readRegistryArray(path: string, dataRoot: string): unknown[] | null {
   if (!pathIsWithin(dataRoot, path) || path === dataRoot) {
     throw new Error("A verification registry path escaped DATA_ROOT.");
   }
-  if (!existsSync(path)) return null;
-  const before = lstatSync(path, { bigint: true });
-  if (before.isSymbolicLink() || !before.isFile() || before.size > BigInt(1024 * 1024)) {
+  let before;
+  try { before = lstatSync(path, { bigint: true }); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  if (before.isSymbolicLink() || !before.isFile() || before.nlink !== BigInt(1)
+    || before.size > BigInt(1024 * 1024)
+    || (process.platform !== "win32" && ((before.mode & BigInt(0o077)) !== BigInt(0)
+      || (typeof process.getuid === "function" && before.uid !== BigInt(process.getuid()))))) {
     throw new Error("A verification external-filesystem registry is unsafe.");
   }
   const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
   const descriptor = openSync(path, constants.O_RDONLY | noFollow);
   try {
     const opened = fstatSync(descriptor, { bigint: true });
-    if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino
+    if (!opened.isFile() || opened.nlink !== BigInt(1) || opened.dev !== before.dev || opened.ino !== before.ino
       || opened.size !== before.size || opened.mtimeNs !== before.mtimeNs || opened.ctimeNs !== before.ctimeNs) {
       throw new Error("A verification external-filesystem registry changed during preflight.");
     }
     const parsed: unknown = JSON.parse(readFileSync(descriptor, "utf8"));
     const after = lstatSync(path, { bigint: true });
-    if (after.isSymbolicLink() || after.dev !== opened.dev || after.ino !== opened.ino
+    if (after.isSymbolicLink() || after.nlink !== BigInt(1) || after.dev !== opened.dev || after.ino !== opened.ino
       || after.size !== opened.size || after.mtimeNs !== opened.mtimeNs || after.ctimeNs !== opened.ctimeNs) {
       throw new Error("A verification external-filesystem registry changed during preflight.");
     }
@@ -170,10 +189,36 @@ export function preflightVerificationExternalFilesystemRegistries(input: {
 }): VerificationRegistryPreflight[] {
   if (verificationExternalFilesystemAccess(input.environment ?? process.env) === null) return [];
   const dataRoot = requireExactPrivateDataRoot(input.dataRoot);
-  return (["repositories", "datasets"] as const).map((kind) => {
-    const path = join(dataRoot, `${kind}.json`);
-    const entries = readRegistryArray(path, dataRoot);
-    if (entries && entries.length > 0) throw new VerificationExternalFilesystemAccessError();
-    return Object.freeze({ kind, path, status: entries === null ? "missing" as const : "empty" as const });
-  });
+  const roots: Array<Readonly<{ profileId: string | null; root: string; scope: "legacy" | "profile" }>> = [
+    Object.freeze({ profileId: null, root: dataRoot, scope: "legacy" as const }),
+  ];
+  const inspection = inspectProfileRegistry(dataRoot);
+  if (inspection.kind === "ready") {
+    if (inspection.source !== "primary") {
+      throw new Error("Profile registry Recovery is required before the verification build can start.");
+    }
+    for (const profile of inspection.snapshot.profiles) {
+      const root = requireExactPrivateDataRoot(join(
+        dataRoot,
+        PROFILE_REGISTRY_DIRECTORY_NAME,
+        PROFILE_DATA_DIRECTORY_NAME,
+        profile.id,
+      ));
+      roots.push(Object.freeze({ profileId: profile.id, root, scope: "profile" as const }));
+    }
+  }
+  return roots.flatMap(({ profileId, root, scope }) => (
+    (["repositories", "datasets"] as const).map((kind) => {
+      const path = join(root, `${kind}.json`);
+      const entries = readRegistryArray(path, root);
+      if (entries && entries.length > 0) throw new VerificationExternalFilesystemAccessError();
+      return Object.freeze({
+        kind,
+        path,
+        profileId,
+        scope,
+        status: entries === null ? "missing" as const : "empty" as const,
+      });
+    })
+  ));
 }
