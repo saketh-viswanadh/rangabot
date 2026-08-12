@@ -4,8 +4,9 @@ import { devServerEnvironment, localBootstrapUrl, localServerPort } from "../lib
 import { defaultSqlConfirmationStorePath, maintainSqlConfirmationStoreAtPath } from "../lib/sql-confirmation-store.ts";
 import { purgeArtifactDeletionQuarantine } from "../lib/conversation-artifacts.ts";
 import { acquireRuntimeLease } from "../lib/runtime-lease.ts";
+import { responseFeedbackCandidateEnvironment } from "../lib/response-feedback-candidate.ts";
 
-const serverEnvironment = devServerEnvironment(process.platform);
+const serverEnvironment = responseFeedbackCandidateEnvironment(devServerEnvironment(process.platform));
 const serverPort = localServerPort(serverEnvironment);
 const bootstrapToken = serverEnvironment.RANGABOT_BOOTSTRAP_TOKEN;
 if (!bootstrapToken) throw new Error("Could not create Rangabot's private startup capability.");
@@ -20,6 +21,9 @@ try {
 }
 
 const nextCli = resolve(process.cwd(), "node_modules", "next", "dist", "bin", "next");
+if (serverEnvironment.RANGABOT_CANDIDATE_STATE !== "known") {
+  console.warn(`Response feedback is disabled because candidate identity is ${serverEnvironment.RANGABOT_CANDIDATE_STATE ?? "unknown"}.`);
+}
 console.log(`\nOpen Rangabot using this private one-launch URL:\n${localBootstrapUrl(bootstrapToken, serverPort)}\n`);
 const child = spawn(process.execPath, [nextCli, "dev", "--hostname", "127.0.0.1", "--port", String(serverPort)], {
   env: serverEnvironment as NodeJS.ProcessEnv,

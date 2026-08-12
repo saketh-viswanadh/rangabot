@@ -127,7 +127,7 @@ test("wires the guard across all API routes and all browser API calls", () => {
   assert.match(proxy, /request\.nextUrl\.pathname === LOCAL_BOOTSTRAP_PATH/);
   assert.match(proxy, /if \(!sessionValid\) return forbidden\(false\)/);
   assert.doesNotMatch(proxy, /if \(!verifyLocalSessionToken\(current, sessionSecret\)\)\s*\{\s*response\.cookies\.set/);
-  for (const path of ["app/page.tsx", "app/components/memory-panel.tsx", "app/components/sql-analysis-panel.tsx"]) {
+  for (const path of ["app/page.tsx", "app/components/memory-panel.tsx", "app/components/sql-analysis-panel.tsx", "app/components/response-feedback.tsx"]) {
     const source = readFileSync(path, "utf8");
     assert.doesNotMatch(source, /\bfetch\(/, `${path} must use the guarded client`);
     assert.match(source, /localApiFetch/);

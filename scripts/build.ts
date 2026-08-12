@@ -1,9 +1,18 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+import {
+  requireKnownResponseFeedbackCandidate,
+  responseFeedbackCandidateEnvironment,
+  writeResponseFeedbackBuildArtifactManifest,
+} from "../lib/response-feedback-candidate.ts";
 
+requireKnownResponseFeedbackCandidate();
 const nextCli = resolve(process.cwd(), "node_modules", "next", "dist", "bin", "next");
 const result = spawnSync(process.execPath, [nextCli, "build"], {
-  env: { ...process.env, NEXT_TELEMETRY_DISABLED: process.env.NEXT_TELEMETRY_DISABLED ?? "1" },
+  env: responseFeedbackCandidateEnvironment({
+    ...process.env,
+    NEXT_TELEMETRY_DISABLED: process.env.NEXT_TELEMETRY_DISABLED ?? "1",
+  }) as NodeJS.ProcessEnv,
   stdio: "inherit",
 });
 
@@ -13,4 +22,10 @@ if (result.signal) {
   process.exitCode = 1;
 } else {
   process.exitCode = result.status ?? 1;
+}
+
+if (result.status === 0 && !result.signal) {
+  const artifact = writeResponseFeedbackBuildArtifactManifest();
+  requireKnownResponseFeedbackCandidate({ requireBuildArtifact: true });
+  console.log(`Verified Rangabot build artifact ${artifact.artifactSha256}.`);
 }

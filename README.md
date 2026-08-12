@@ -146,6 +146,23 @@ model server.
 Conversation data stays in `data/rangabot.db` on this computer. The database and
 its journal files are excluded from Git.
 
+### Unreleased candidate: Local Response Feedback Pulse
+
+The current local candidate adds **Helpful** and **Needs improvement** controls
+only to completed, lifecycle-managed assistant responses. A selection can be
+changed or cleared, is stored in the private conversation database, and never
+changes the answer or triggers model training, regeneration, telemetry, or a
+third-party request. Legacy/imported/demo/failed/cancelled responses and builds
+without an exact manifest-bound identity remain ineligible.
+
+The candidate also provides an explicit local `npm run feedback:export` seam
+for a sanitized, build/day-bound `response_feedback_daily` aggregate. It never
+writes a Control Center database and never exports a turn ID or conversation
+content. This behavior is unreleased and must not be presented as shipped until
+the candidate is independently verified and merged. See
+[docs/RESPONSE_FEEDBACK.md](docs/RESPONSE_FEEDBACK.md) for the storage,
+provenance, exchange, and status contract.
+
 Fresh-chat personalization is deliberately separate from Rangabot memory. The
 optional name or nickname, selected welcome category, and recent welcome item
 identifiers stay in browser-local storage; they are not added to a chat, the

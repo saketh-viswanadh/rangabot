@@ -7,6 +7,7 @@ import {
 import { getConversationTimeline, recoverExpiredConversationTurns } from "@/lib/conversation-turns";
 import { deleteConversationWhenIdle } from "@/lib/conversation-mutation-guards";
 import { getApprovedDataset } from "@/lib/datasets";
+import { listConversationResponseFeedback } from "@/lib/response-feedback";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,7 @@ export async function GET(_request: Request, context: RouteContext) {
     ? NextResponse.json({
       conversation,
       attachedDataset: dataset ? { id: dataset.id, name: dataset.name, format: dataset.format, sizeBytes: dataset.sizeBytes } : null,
+      responseFeedback: listConversationResponseFeedback(getConversationDatabase(), conversation.id),
     })
     : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
 }

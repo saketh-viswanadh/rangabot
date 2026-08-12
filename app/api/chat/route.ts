@@ -277,7 +277,11 @@ function providerErrorResponse(error: unknown) {
   );
 }
 
-function lifecycleCallbacks(turnId: string, onSettled: () => void = () => undefined): TurnLifecycleCallbacks {
+function lifecycleCallbacks(
+  turnId: string,
+  candidateBuildId: string | null,
+  onSettled: () => void = () => undefined,
+): TurnLifecycleCallbacks {
   let settled = false;
   const finish = () => {
     if (settled) return;
@@ -292,7 +296,7 @@ function lifecycleCallbacks(turnId: string, onSettled: () => void = () => undefi
   };
   return {
     complete: (message) => {
-      try { completeConversationTurn(turnId, message); }
+      try { completeConversationTurn(turnId, message, candidateBuildId); }
       finally { finish(); }
     },
     cancel: (partial) => {
@@ -338,7 +342,7 @@ async function handleVersionedChat(request: Request, body: VersionedChatBody) {
   }
 
   let releaseActiveTurn: () => void = () => undefined;
-  const callbacks = lifecycleCallbacks(body.turnId, () => releaseActiveTurn());
+  const callbacks = lifecycleCallbacks(body.turnId, claim.candidateBuildId, () => releaseActiveTurn());
   let turnSignal: AbortSignal | undefined;
   try {
     const activeTurn = registerActiveConversationTurn(body.turnId, [

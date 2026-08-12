@@ -22,6 +22,9 @@ import { CraftIcon } from "@/app/components/craft-icon";
 import { formatAnswerReceipt } from "@/lib/answer-receipt";
 import { SqlAnalysisPanel } from "@/app/components/sql-analysis-panel";
 import { WelcomePreferencesDialog } from "@/app/components/welcome-preferences";
+import { ResponseFeedback } from "@/app/components/response-feedback";
+import type { ResponseFeedbackRating, ResponseFeedbackView } from "@/lib/response-feedback-contract";
+import { mergeResponseFeedbackRead, responseFeedbackBindingMatches } from "@/lib/response-feedback-client-state";
 import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
 import { parseAnalysisTraceHeader, parsePackWarningCodesHeader } from "@/lib/chat-validation";
 import {
@@ -106,6 +109,19 @@ function displayMessagesFromTimeline(messages: ChatMessage[]): DisplayMessage[] 
   return display;
 }
 
+function responseFeedbackMap(value: unknown) {
+  const feedback: Record<string, ResponseFeedbackRating | null> = {};
+  if (!Array.isArray(value)) return feedback;
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item as Partial<ResponseFeedbackView>;
+    if (typeof record.turnId !== "string" || !/^[0-9a-f-]{36}$/i.test(record.turnId)) continue;
+    if (record.rating !== null && record.rating !== "helpful" && record.rating !== "needs-improvement") continue;
+    feedback[record.turnId] = record.rating;
+  }
+  return feedback;
+}
+
 async function requestTurnCancellation(turn: ActiveConversationTurn, keepalive = false) {
   const timeout = new AbortController();
   const timer = window.setTimeout(() => timeout.abort(), TURN_CANCELLATION_TIMEOUT_MS);
@@ -179,6 +195,9 @@ function parseBookWelcomeHistory() {
 
 export default function Home() {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
+  const [responseFeedback, setResponseFeedback] = useState<Record<string, ResponseFeedbackRating | null>>({});
+  const [responseFeedbackGeneration, setResponseFeedbackGeneration] = useState(0);
+  const [publicDemo, setPublicDemo] = useState(false);
   const [welcomeIndex, setWelcomeIndex] = useState(0);
   const [greetingIndex, setGreetingIndex] = useState(0);
   const [welcomePreferences, setWelcomePreferences] = useState<WelcomePreferences>({ ...defaultWelcomePreferences });
@@ -231,6 +250,12 @@ export default function Home() {
   const sendingRef = useRef(false);
   const conversationLoadingRef = useRef(false);
   const conversationOpenEpochRef = useRef(0);
+  const responseFeedbackConversationRef = useRef<string | null>(null);
+  const responseFeedbackGenerationRef = useRef(0);
+  const responseFeedbackOperationRef = useRef(0);
+  const responseFeedbackMutationRevisionsRef = useRef(new Map<string, number>());
+  const responseFeedbackReadRequestRef = useRef(0);
+  const responseFeedbackLatestAppliedReadRef = useRef(0);
   const followLatestRef = useRef(true);
   const knowledgeCloseRef = useRef<HTMLButtonElement>(null);
   const conversationImportRef = useRef<HTMLInputElement>(null);
@@ -241,6 +266,53 @@ export default function Home() {
   const toolsPopoverRef = useRef<HTMLDivElement>(null);
   const preferencesTriggerRef = useRef<HTMLButtonElement>(null);
   const bookWelcomeRequestRef = useRef<AbortController | null>(null);
+  const bindResponseFeedback = useCallback((conversationId: string | null, value: unknown) => {
+    responseFeedbackConversationRef.current = conversationId;
+    responseFeedbackGenerationRef.current += 1;
+    setResponseFeedbackGeneration(responseFeedbackGenerationRef.current);
+    responseFeedbackOperationRef.current += 1;
+    responseFeedbackMutationRevisionsRef.current.clear();
+    responseFeedbackLatestAppliedReadRef.current = ++responseFeedbackReadRequestRef.current;
+    setResponseFeedback(conversationId ? responseFeedbackMap(value) : {});
+  }, []);
+  const applyResponseFeedbackRead = useCallback((
+    conversationId: string,
+    generation: number,
+    requestId: number,
+    startedAtRevision: number,
+    value: unknown,
+  ) => {
+    if (!responseFeedbackBindingMatches(
+      responseFeedbackConversationRef.current,
+      responseFeedbackGenerationRef.current,
+      conversationId,
+      generation,
+    ) || requestId < responseFeedbackLatestAppliedReadRef.current) return;
+    responseFeedbackLatestAppliedReadRef.current = requestId;
+    const remote = responseFeedbackMap(value);
+    setResponseFeedback((current) => mergeResponseFeedbackRead(
+      remote,
+      current,
+      responseFeedbackMutationRevisionsRef.current,
+      startedAtRevision,
+    ));
+  }, []);
+  const updateResponseFeedbackForConversation = useCallback((
+    conversationId: string,
+    generation: number,
+    turnId: string,
+    rating: ResponseFeedbackRating | null,
+  ) => {
+    if (!responseFeedbackBindingMatches(
+      responseFeedbackConversationRef.current,
+      responseFeedbackGenerationRef.current,
+      conversationId,
+      generation,
+    )) return;
+    const revision = ++responseFeedbackOperationRef.current;
+    responseFeedbackMutationRevisionsRef.current.set(turnId, revision);
+    setResponseFeedback((current) => ({ ...current, [turnId]: rating }));
+  }, []);
   const abandonActiveTurn = useCallback(async (keepalive = false, retainSending = false) => {
     const controller = abortRef.current;
     controller?.abort();
@@ -257,16 +329,28 @@ export default function Home() {
     return activeTurn ? requestTurnCancellation(activeTurn, keepalive) : true;
   }, []);
   const reconcileTurnFromServer = useCallback(async (conversationId: string, turnId: string, signal?: AbortSignal): Promise<ConversationTurnStatus | null> => {
+    const feedbackGeneration = responseFeedbackGenerationRef.current;
+    const feedbackRevision = responseFeedbackOperationRef.current;
+    const feedbackRequestId = ++responseFeedbackReadRequestRef.current;
     try {
       const response = await localApiFetch(`/api/conversations/${conversationId}`, { cache: "no-store", signal });
       if (!response.ok) return null;
-      const data = (await response.json()) as { conversation?: { messages?: ChatMessage[] } };
+      const data = (await response.json()) as {
+        conversation?: { messages?: ChatMessage[] };
+        responseFeedback?: unknown;
+      };
       if (!Array.isArray(data.conversation?.messages)) return null;
       const receipt = data.conversation.messages.find((message) => message.turn?.id === turnId)?.turn;
       if (!receipt) return null;
       const authoritative = displayMessagesFromTimeline(data.conversation.messages)
         .filter((message) => message.turn?.id === turnId);
       if (!authoritative.length) return null;
+      if (!responseFeedbackBindingMatches(
+        responseFeedbackConversationRef.current,
+        responseFeedbackGenerationRef.current,
+        conversationId,
+        feedbackGeneration,
+      )) return receipt.status;
       setMessages((current) => {
         const firstIndex = current.findIndex((message) => message.turn?.id === turnId);
         if (firstIndex < 0) return current;
@@ -274,12 +358,19 @@ export default function Home() {
         withoutTurn.splice(firstIndex, 0, ...authoritative);
         return withoutTurn;
       });
+      applyResponseFeedbackRead(
+        conversationId,
+        feedbackGeneration,
+        feedbackRequestId,
+        feedbackRevision,
+        data.responseFeedback,
+      );
       return receipt.status;
     } catch {
       // The terminal receipt remains available on the next local reopen.
       return null;
     }
-  }, []);
+  }, [applyResponseFeedbackRead]);
   const closeMemoryPanel = useCallback(() => setMemoryPanelOpen(false), []);
   const closeSqlPanel = useCallback(() => setSqlPanelOpen(false), []);
   const nextWelcomeIndex = useCallback((current: number, welcomeMode: WelcomeMode) => {
@@ -481,12 +572,17 @@ export default function Home() {
       if (openEpoch !== conversationOpenEpochRef.current) return;
       const response = await localApiFetch(`/api/conversations/${id}`, { cache: "no-store" });
       if (!response.ok || openEpoch !== conversationOpenEpochRef.current) return;
-      const data = (await response.json()) as { conversation: { messages: ChatMessage[] }; attachedDataset: AttachedDataset | null };
+      const data = (await response.json()) as {
+        conversation: { messages: ChatMessage[] };
+        attachedDataset: AttachedDataset | null;
+        responseFeedback?: unknown;
+      };
       if (openEpoch !== conversationOpenEpochRef.current) return;
       const displayMessages = displayMessagesFromTimeline(data.conversation.messages);
       const pendingTurn = data.conversation.messages.find((message) => message.turn?.status === "pending")?.turn;
       followLatestRef.current = true;
       setMessages(displayMessages);
+      bindResponseFeedback(id, data.responseFeedback);
       setActiveConversationId(id);
       setReplyTo(null);
       if (pendingTurn) {
@@ -511,6 +607,22 @@ export default function Home() {
         conversationLoadingRef.current = false;
         setConversationLoading(false);
       }
+    }
+  }
+
+  async function refreshResponseFeedback(id: string, expectedEpoch = conversationOpenEpochRef.current) {
+    const feedbackGeneration = responseFeedbackGenerationRef.current;
+    const feedbackRevision = responseFeedbackOperationRef.current;
+    const feedbackRequestId = ++responseFeedbackReadRequestRef.current;
+    try {
+      const response = await localApiFetch(`/api/conversations/${id}/feedback`, { cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json() as { responseFeedback?: unknown };
+      if (expectedEpoch !== conversationOpenEpochRef.current) return;
+      applyResponseFeedbackRead(id, feedbackGeneration, feedbackRequestId, feedbackRevision, data.responseFeedback);
+    } catch {
+      // Feedback eligibility is optional UI metadata. Keep the current state if
+      // the private local read is temporarily unavailable.
     }
   }
 
@@ -587,6 +699,7 @@ export default function Home() {
   useEffect(() => {
     const parameters = new URLSearchParams(window.location.search);
     const publicDemo = PUBLIC_DEMO_MODES.has(parameters.get("demo") ?? "");
+    setPublicDemo(publicDemo);
     const savedAppearance = parseAppearance(localStorage.getItem(APPEARANCE_STORAGE_KEY));
     const savedPalette = normalizeStoredPalette(localStorage.getItem(PALETTE_STORAGE_KEY));
     const savedWelcomePreferences = publicDemo
@@ -840,6 +953,7 @@ export default function Home() {
         throw abortController.signal.reason ?? new DOMException("Stopped", "AbortError");
       }
       followLatestRef.current = true;
+      if (responseFeedbackConversationRef.current !== conversationId) bindResponseFeedback(conversationId, []);
       setActiveConversationId(conversationId);
       setMessages((current) => [...current, userMessage, assistantMessage]);
       void refreshConversations();
@@ -928,6 +1042,7 @@ export default function Home() {
       setMessages((current) => current.map((message) => message.turn?.id === turnId
         ? { ...message, active: false, turn: { id: turnId, status: "completed" } }
         : message));
+      if (conversationId) await refreshResponseFeedback(conversationId, sendEpoch);
     } catch (error) {
       const stopped = abortController.signal.aborted;
       if (turnStarted) {
@@ -966,6 +1081,7 @@ export default function Home() {
         }
       } else if (!stopped) {
         if (responseFailureCode === "not-found") {
+          bindResponseFeedback(null, []);
           setActiveConversationId(null);
           setAttachedDataset(null);
         }
@@ -1037,6 +1153,7 @@ export default function Home() {
     setAdoptedPendingTurn(null);
     followLatestRef.current = true;
     setMessages([]);
+    bindResponseFeedback(null, []);
     setActiveConversationId(null);
     setActiveProjectId(projectId);
     setInput("");
@@ -1282,6 +1399,20 @@ export default function Home() {
                   : <p>{message.content}</p>)}
                 {message.answerDisposition === "verified-fallback" && <div className="answer-disposition" role="status"><CraftIcon name="shield" size={13} /><span><strong>Verified result fallback</strong>Rangabot answered directly from the checked local calculation.</span></div>}
                 {message.analysisTrace && <details className="analysis-trace"><summary><CraftIcon name="analysis" size={14} />How this was calculated</summary><div><span><strong>{message.analysisTrace.dataset}</strong>{message.analysisTrace.returnedRows} verified row{message.analysisTrace.returnedRows === 1 ? "" : "s"} · {message.analysisTrace.durationMs} ms{message.analysisTrace.truncated ? " · bounded result" : ""}</span><pre><code>{message.analysisTrace.query}</code></pre><small>Input {message.analysisTrace.inputSha256.slice(0, 12)}… · Query {message.analysisTrace.querySha256.slice(0, 12)}… · local DuckDB{message.analysisTrace.packId ? ` · ${message.analysisTrace.packId} pack ${message.analysisTrace.packVersion ?? ""}` : ""}{message.analysisTrace.modelId ? ` · ${message.analysisTrace.modelMode ?? "general"} model ${message.analysisTrace.modelId}` : ""}</small></div></details>}
+                {message.role === "assistant" && message.turn?.status === "completed"
+                  && activeConversationId && !publicDemo
+                  && Object.prototype.hasOwnProperty.call(responseFeedback, message.turn.id)
+                  && <ResponseFeedback
+                    conversationId={activeConversationId}
+                    turnId={message.turn.id}
+                    rating={responseFeedback[message.turn.id]}
+                    onRatingChange={(turnId, rating) => updateResponseFeedbackForConversation(
+                      activeConversationId,
+                      responseFeedbackGeneration,
+                      turnId,
+                      rating,
+                    )}
+                  />}
                 {message.active && (
                   <div className="message-activity" role="status" aria-label="Rangabot is thinking">
                     <span className="thinking-runner" aria-hidden="true"><i /></span>
