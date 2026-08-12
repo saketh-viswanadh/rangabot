@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -32,6 +33,7 @@ import {
 } from "../lib/desktop-launch-profile.ts";
 
 const sha = (character: string) => character.repeat(64);
+const require = createRequire(import.meta.url);
 
 function nativeModules(arch: DesktopArtifactArch): DesktopNativeModuleVersion[] {
   return [
@@ -433,7 +435,7 @@ test("Electron inventories app.asar as one raw file instead of virtual ASAR cont
   writeFileSync(join(source, "main.js"), "module.exports = true;\n");
   try {
     await createPackage(source, join(resources, "app.asar"));
-    const electron = join(process.cwd(), "node_modules", "electron", "dist", "Electron.app", "Contents", "MacOS", "Electron");
+    const electron = require("electron") as string;
     const fixture = join(process.cwd(), "tests", "fixtures", "desktop-electron-raw-asar-check.ts");
     const result = spawnSync(electron, ["--experimental-strip-types", fixture, resources], {
       cwd: process.cwd(),
