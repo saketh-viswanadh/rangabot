@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
-import { resolve } from "node:path";
 import type { DatabaseSync as Database } from "node:sqlite";
 import { memoryConflictsWithContract, type AnswerContract } from "./conversation-contract.ts";
 import { hardenPrivateSqliteFiles, preparePrivateSqliteStorage } from "./private-storage.ts";
+import { runtimePaths } from "./runtime-paths.ts";
 
-const serverRequire = createRequire(resolve(process.cwd(), "package.json"));
+const serverRequire = createRequire(runtimePaths.packageJson);
 const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sqlite");
 
 export type MemoryKind = "preference" | "fact" | "instruction";
@@ -34,7 +34,7 @@ export type RelevantMemoryContext = {
 export const maxMemoryImportBytes = 300_000;
 export const maxMemoryImportItems = 200;
 
-const defaultDatabasePath = resolve(process.cwd(), "data", "rangabot-memory.db");
+const defaultDatabasePath = runtimePaths.memoryDatabase;
 let databasePath = defaultDatabasePath;
 let database: Database | undefined;
 

@@ -1,8 +1,8 @@
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { hardenPrivateTree, UnsafePrivateStoragePathError } from "../lib/private-storage.ts";
+import { runtimePaths } from "../lib/runtime-paths.ts";
 
-const projectRoot = process.cwd();
 export const managedPaths = [
   ".env.local",
   "data/rangabot.db",
@@ -25,7 +25,29 @@ export const managedPaths = [
   "outputs",
 ];
 
-export function repairPrivateStorage(root = process.cwd(), paths = managedPaths) {
+const configuredDataPaths = [
+  "rangabot.db",
+  "rangabot.db-wal",
+  "rangabot.db-shm",
+  "rangabot-memory.db",
+  "rangabot-memory.db-wal",
+  "rangabot-memory.db-shm",
+  "datasets.json",
+  "repositories.json",
+  "sql-confirmations.json",
+  "artifacts",
+  "knowledge/inbox",
+  "knowledge/processed",
+  "knowledge/indexes",
+  "knowledge/backups",
+  "knowledge/evaluations",
+  "evaluations/results",
+];
+
+export function repairPrivateStorage(
+  root = runtimePaths.mode === "cli" ? runtimePaths.resourceRoot : runtimePaths.dataRoot,
+  paths = runtimePaths.mode === "cli" ? managedPaths : configuredDataPaths,
+) {
   const repaired = { directories: 0, files: 0, skippedPaths: [] as string[] };
   for (const path of paths) {
     try {
@@ -41,7 +63,7 @@ export function repairPrivateStorage(root = process.cwd(), paths = managedPaths)
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
-  const repaired = repairPrivateStorage(projectRoot);
+  const repaired = repairPrivateStorage();
   const skipped = repaired.skippedPaths.length
     ? ` ${repaired.skippedPaths.length} unsafe app-managed path(s) were skipped.`
     : "";

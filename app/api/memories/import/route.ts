@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { applyMemoryImport, maxMemoryImportBytes, previewMemoryImport } from "@/lib/memories";
+import { assertExternalImportAccess } from "@/lib/desktop-external-filesystem-policy";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,7 @@ async function readBoundedBody(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    assertExternalImportAccess("memory-import");
     const text = await readBoundedBody(request);
     const body = JSON.parse(text) as { action?: unknown; export?: unknown; replaceSourceIds?: unknown };
     if (body.action === "preview") return NextResponse.json({ preview: previewMemoryImport(body.export) });

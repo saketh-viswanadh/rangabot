@@ -1,0 +1,297 @@
+import type { App, BrowserWindow as BrowserWindowType, Dialog, Session } from "electron";
+import { app, BrowserWindow, dialog, session, utilityProcess } from "electron";
+import { join } from "node:path";
+import type { DesktopArtifactVerification } from "../../lib/desktop-artifact-identity.ts";
+import { createDesktopLaunch, type DesktopVerificationLaunchPolicy } from "./launch-environment.ts";
+import { createSecondInstanceFocusCoordinator } from "./lifecycle.ts";
+import { reserveVerifiedLoopbackPort, waitForDesktopServer } from "./loopback.ts";
+import { diagnoseLocalOllama } from "./ollama-diagnostic.ts";
+import { startLeasedDesktopServer, type LeasedSupervisedDesktopServer } from "./process-supervisor.ts";
+import { createDesktopRuntimeBoundaryFromVerifiedResources } from "./resource-boundary.ts";
+import {
+  DESKTOP_RENDERER_WEB_PREFERENCES,
+  installDesktopSessionGuards,
+  installDesktopWebContentsGuards,
+} from "./security.ts";
+import {
+  verifyDesktopResourcesBeforeMutation,
+  type VerifiedDesktopResources,
+} from "./startup-verification.ts";
+import { prepareDesktopStartupProfileBeforeLock, type PreparedDesktopStartupProfile } from "./verification-profile.ts";
+
+const PRELOAD_PATH = join(import.meta.dirname, "preload.cjs");
+const STARTUP_TIMEOUT_MS = 30_000;
+
+type DesktopStartupStage =
+  | "S10_ARTIFACT_VERIFY"
+  | "S20_PROFILE_BIND"
+  | "S30_SANDBOX_ENABLE"
+  | "S40_LOCK_REQUEST"
+  | "S41_LOCK_PRIMARY"
+  | "S42_LOCK_SECONDARY"
+  | "S50_APP_READY"
+  | "A10_RESOURCE_BOUNDARY"
+  | "A20_RUNTIME_EVIDENCE"
+  | "A30_ARTIFACT_INSPECTION"
+  | "A41_MANIFEST_INVALID"
+  | "A42_MANIFEST_UNAVAILABLE"
+  | "A43_IDENTITY_MISMATCH"
+  | "A44_RUNTIME_MISMATCH"
+  | "A45_RESOURCE_MISMATCH"
+  | "R10_RESOURCES"
+  | "R20_USER_DATA"
+  | "R30_PORT"
+  | "R40_BOUNDARY_LAUNCH"
+  | "R50_SESSION_GUARDS"
+  | "R60_SERVER_START"
+  | "R70_READINESS"
+  | "R80_WINDOW_CREATE"
+  | "R90_WINDOW_LOAD"
+  | "R99_RUNNING"
+  | "X90_RUNTIME_FAILURE";
+
+function emitStartupStage(stage: DesktopStartupStage, failure = false) {
+  try {
+    console.error(`RANGABOT_DESKTOP_${failure ? "FAILURE" : "STAGE"}=${stage}`);
+  } catch {
+    // Diagnostic output must never influence startup.
+  }
+}
+
+type RuntimeState = {
+  window?: BrowserWindowType;
+  server?: LeasedSupervisedDesktopServer;
+  stopping: boolean;
+  stopPromise?: Promise<void>;
+};
+
+function desktopOrigin(port: number) {
+  return `http://127.0.0.1:${port}`;
+}
+
+function showStartupError(error: unknown, nativeDialog: Pick<Dialog, "showErrorBox"> = dialog) {
+  const detail = error instanceof Error ? error.message : "An unknown local startup error occurred.";
+  nativeDialog.showErrorBox(
+    "Rangabot could not open",
+    `${detail}\n\nNo remote service was contacted. Your existing local data was left untouched.`,
+  );
+}
+
+function createMainWindow(allowedOrigin: string, desktopSession: Session, title: "Rangabot" | "Rangabot Verification") {
+  const window = new BrowserWindow({
+    width: 1280,
+    height: 820,
+    minWidth: 900,
+    minHeight: 620,
+    show: false,
+    backgroundColor: "#17130f",
+    title,
+    autoHideMenuBar: true,
+    webPreferences: {
+      ...DESKTOP_RENDERER_WEB_PREFERENCES,
+      preload: PRELOAD_PATH,
+      session: desktopSession,
+    },
+  });
+  installDesktopWebContentsGuards(window.webContents, allowedOrigin);
+  window.once("ready-to-show", () => window.show());
+  return window;
+}
+
+function stopRuntime(state: RuntimeState) {
+  if (state.stopPromise) return state.stopPromise;
+  state.stopping = true;
+  state.stopPromise = (async () => {
+    try { await state.server?.stop(); }
+    finally { state.server = undefined; }
+  })();
+  return state.stopPromise;
+}
+
+export async function startDesktopRuntime(input: {
+  electronApp?: App;
+  resourcesPath?: string;
+  developmentResourceRoot?: string;
+  fork?: typeof utilityProcess.fork;
+  desktopSession?: Session;
+  signal?: AbortSignal;
+  acquireLease?: Parameters<typeof startLeasedDesktopServer>[0]["acquireLease"];
+  verifyArtifact?: (artifactRoot: string, resourceRoot: string, manifestPath: string) => DesktopArtifactVerification;
+  verifiedResources?: VerifiedDesktopResources;
+  userDataPath?: string;
+  windowTitle?: "Rangabot" | "Rangabot Verification";
+  verificationPolicy?: DesktopVerificationLaunchPolicy;
+  reservePort?: typeof reserveVerifiedLoopbackPort;
+} = {}) {
+  emitStartupStage("R10_RESOURCES");
+  const electronApp = input.electronApp ?? app;
+  const state: RuntimeState = { stopping: false };
+  input.signal?.throwIfAborted();
+  const verified = input.verifiedResources ?? verifyDesktopResourcesBeforeMutation({
+    resourcesPath: input.resourcesPath ?? process.resourcesPath,
+    isPackaged: electronApp.isPackaged,
+    developmentResourceRoot: input.developmentResourceRoot,
+    verifyArtifact: input.verifyArtifact,
+  });
+  input.signal?.throwIfAborted();
+  emitStartupStage("R20_USER_DATA");
+  const userDataPath = input.userDataPath ?? electronApp.getPath("userData");
+  emitStartupStage("R30_PORT");
+  const port = await (input.reservePort ?? reserveVerifiedLoopbackPort)();
+  input.signal?.throwIfAborted();
+  emitStartupStage("R40_BOUNDARY_LAUNCH");
+  const boundary = createDesktopRuntimeBoundaryFromVerifiedResources({
+    resources: verified.resources,
+    userDataPath,
+  });
+  const artifact = verified.artifact;
+  const launch = createDesktopLaunch({ boundary, port, verificationPolicy: input.verificationPolicy });
+  const origin = desktopOrigin(port);
+  emitStartupStage("R50_SESSION_GUARDS");
+  const desktopSession = input.desktopSession ?? session.fromPartition("rangabot-desktop-session", { cache: false });
+  installDesktopSessionGuards(desktopSession as unknown as Parameters<typeof installDesktopSessionGuards>[0], origin);
+  try {
+    emitStartupStage("R60_SERVER_START");
+    state.server = await startLeasedDesktopServer({
+      fork: (input.fork ?? utilityProcess.fork) as unknown as Parameters<typeof startLeasedDesktopServer>[0]["fork"],
+      boundary,
+      launch,
+      acquireLease: input.acquireLease,
+    });
+    const serverProcessId = state.server.processId;
+    emitStartupStage("R70_READINESS");
+    await waitForDesktopServer({
+      port,
+      readiness: launch.readiness,
+      expectedProcessId: serverProcessId,
+      timeoutMs: STARTUP_TIMEOUT_MS,
+      exited: state.server.exit,
+      signal: input.signal,
+    });
+    input.signal?.throwIfAborted();
+    emitStartupStage("R80_WINDOW_CREATE");
+    state.window = createMainWindow(origin, desktopSession, input.windowTitle ?? "Rangabot");
+    emitStartupStage("R90_WINDOW_LOAD");
+    await state.window.loadURL(launch.bootstrapUrl);
+    emitStartupStage("R99_RUNNING");
+    if (artifact.state === "dirty") {
+      void dialog.showMessageBox(state.window, {
+        type: "warning",
+        title: "Unverified development build",
+        message: "This local desktop build is not release-verified.",
+        detail: "Response feedback remains ineligible for known-build aggregation. Your local conversations and preferences remain private.",
+        buttons: ["Continue"],
+        noLink: true,
+      });
+    }
+  } catch (error) {
+    await stopRuntime(state);
+    throw error;
+  }
+  if (!input.verificationPolicy) {
+    void diagnoseLocalOllama({
+      baseUrl: launch.environment.OLLAMA_BASE_URL,
+      model: launch.environment.OLLAMA_MODEL,
+    }).then((diagnostic) => {
+      if (diagnostic.kind !== "ready" && state.window && !state.window.isDestroyed()) {
+        void dialog.showMessageBox(state.window, {
+          type: "warning",
+          title: diagnostic.title,
+          message: diagnostic.title,
+          detail: diagnostic.message,
+          buttons: ["Continue"],
+          noLink: true,
+        });
+      }
+    });
+  }
+  state.server.exit.then(({ code }) => {
+    if (!state.stopping) {
+      showStartupError(new Error(`Rangabot's local server stopped unexpectedly (exit ${code}).`));
+      electronApp.quit();
+    }
+  });
+  return Object.freeze({ state, stop: () => stopRuntime(state) });
+}
+
+let initialVerification: VerifiedDesktopResources | undefined;
+let initialProfile: PreparedDesktopStartupProfile | undefined;
+let startupPreludeStage: DesktopStartupStage = "S10_ARTIFACT_VERIFY";
+try {
+  emitStartupStage(startupPreludeStage);
+  initialVerification = verifyDesktopResourcesBeforeMutation({
+    resourcesPath: process.resourcesPath,
+    isPackaged: app.isPackaged,
+    reportStage(stage) {
+      startupPreludeStage = stage;
+      emitStartupStage(stage);
+    },
+  });
+  const launchProfile = initialVerification.artifact.manifest?.launchProfile;
+  if (!launchProfile) throw new Error("The verified desktop artifact has no sealed launch profile.");
+  startupPreludeStage = "S20_PROFILE_BIND";
+  emitStartupStage(startupPreludeStage);
+  initialProfile = prepareDesktopStartupProfileBeforeLock({
+    electronApp: app,
+    launchProfile,
+  });
+} catch {
+  emitStartupStage(startupPreludeStage, true);
+  // Reject an untrusted app without resolving private paths, presenting UI or
+  // installing lifecycle hooks that may cause Electron-managed state writes.
+  app.exit(1);
+}
+
+if (initialVerification && initialProfile) {
+  emitStartupStage("S30_SANDBOX_ENABLE");
+  app.enableSandbox();
+  emitStartupStage("S40_LOCK_REQUEST");
+  const primaryInstance = app.requestSingleInstanceLock();
+  if (!primaryInstance) {
+    emitStartupStage("S42_LOCK_SECONDARY");
+    app.quit();
+  } else {
+    emitStartupStage("S41_LOCK_PRIMARY");
+    let runtime: Awaited<ReturnType<typeof startDesktopRuntime>> | undefined;
+    let startup: Promise<Awaited<ReturnType<typeof startDesktopRuntime>>> | undefined;
+    let finalExitStarted = false;
+    const startupAbort = new AbortController();
+    const focusCoordinator = createSecondInstanceFocusCoordinator(() => runtime?.state.window);
+    app.on("second-instance", () => focusCoordinator.onSecondInstance());
+    const shutDown = async (exitCode: number) => {
+      if (finalExitStarted) return;
+      finalExitStarted = true;
+      startupAbort.abort(new Error("Rangabot desktop startup was cancelled."));
+      try {
+        const started = runtime ?? await startup?.catch(() => undefined);
+        await started?.stop();
+      } finally {
+        app.exit(exitCode);
+      }
+    };
+    app.on("before-quit", (event) => {
+      if (finalExitStarted) return;
+      event.preventDefault();
+      void shutDown(0);
+    });
+    app.on("window-all-closed", () => app.quit());
+    app.whenReady().then(async () => {
+      emitStartupStage("S50_APP_READY");
+      try {
+        startup = startDesktopRuntime({
+          signal: startupAbort.signal,
+          verifiedResources: initialVerification,
+          userDataPath: initialProfile.userDataPath,
+          windowTitle: initialProfile.windowTitle,
+          verificationPolicy: initialProfile.verificationPolicy,
+        });
+        runtime = await startup;
+        focusCoordinator.onWindowReady();
+      } catch (error) {
+        emitStartupStage("X90_RUNTIME_FAILURE", true);
+        if (!startupAbort.signal.aborted) showStartupError(error);
+        await shutDown(1);
+      }
+    });
+  }
+}

@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
-import { resolve } from "node:path";
 import { NextResponse } from "next/server";
-import { knowledgeRoot } from "@/lib/knowledge";
+import { knowledgeMonthlyBrief, knowledgeWeeklyBrief } from "@/lib/knowledge";
+import { runtimePaths } from "@/lib/runtime-paths";
 
 export const runtime = "nodejs";
 
@@ -14,15 +14,11 @@ async function readPath(path: string) {
   }
 }
 
-async function readReport(name: string) {
-  return readPath(resolve(knowledgeRoot, name));
-}
-
 export async function GET() {
   const [week, month, changelog] = await Promise.all([
-    readReport("NEW_THIS_WEEK.md"),
-    readReport("NEW_THIS_MONTH.md"),
-    readPath(resolve(knowledgeRoot, "..", "..", "CHANGELOG.md")),
+    readPath(knowledgeWeeklyBrief),
+    readPath(knowledgeMonthlyBrief),
+    readPath(runtimePaths.changelog),
   ]);
   return NextResponse.json({
     week: week.content,

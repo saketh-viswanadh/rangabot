@@ -10,7 +10,6 @@ import { chooseGreetingIndex, formatWelcomeGreeting } from "@/lib/welcome-greeti
 import {
   defaultWelcomePreferences,
   parseWelcomePreferences,
-  serializeWelcomePreferences,
   WELCOME_PREFERENCES_STORAGE_KEY,
   type WelcomeMode,
   type WelcomePreferences,
@@ -24,6 +23,7 @@ import { SqlAnalysisPanel } from "@/app/components/sql-analysis-panel";
 import { WelcomePreferencesDialog } from "@/app/components/welcome-preferences";
 import { ResponseFeedback } from "@/app/components/response-feedback";
 import type { ResponseFeedbackRating, ResponseFeedbackView } from "@/lib/response-feedback-contract";
+import type { DesktopPreferences } from "@/lib/desktop-preferences";
 import { mergeResponseFeedbackRead, responseFeedbackBindingMatches } from "@/lib/response-feedback-client-state";
 import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
 import { parseAnalysisTraceHeader, parsePackWarningCodesHeader } from "@/lib/chat-validation";
@@ -76,6 +76,7 @@ type KnowledgeUpdates = { week: string; month: string; changelog: string; weekUp
 type KnowledgeTab = "discover" | "vault" | "updates";
 type ActiveConversationTurn = { conversationId: string; turnId: string };
 type TurnStartResult = { ok: boolean; conversationId?: string; error?: string; code?: string };
+type LegacyPreferencesPreview = Pick<DesktopPreferences, "preferredName" | "welcomeMode" | "appearance" | "palette">;
 const BOOK_WELCOME_HISTORY_STORAGE_KEY = "rangabot-book-welcome-history-v1";
 const TURN_CANCELLATION_TIMEOUT_MS = 2_500;
 const ADOPTED_TURN_POLL_INTERVAL_MS = 2_000;
@@ -193,6 +194,29 @@ function parseBookWelcomeHistory() {
   }
 }
 
+/**
+ * Reads only the current private loopback origin. Packaged Rangabot never
+ * scans browser profiles or other historical ports. The result is a preview;
+ * it is not applied or copied until the user confirms the import.
+ */
+function readSameOriginLegacyPreferencePreview(): LegacyPreferencesPreview | null {
+  try {
+    const welcomeValue = localStorage.getItem(WELCOME_PREFERENCES_STORAGE_KEY);
+    const appearanceValue = localStorage.getItem(APPEARANCE_STORAGE_KEY);
+    const paletteValue = localStorage.getItem(PALETTE_STORAGE_KEY);
+    if (welcomeValue === null && appearanceValue === null && paletteValue === null) return null;
+    const welcome = parseWelcomePreferences(welcomeValue);
+    return {
+      preferredName: welcome.preferredName ?? "",
+      welcomeMode: welcome.mode,
+      appearance: parseAppearance(appearanceValue),
+      palette: normalizeStoredPalette(paletteValue).palette,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [responseFeedback, setResponseFeedback] = useState<Record<string, ResponseFeedbackRating | null>>({});
@@ -211,6 +235,9 @@ export default function Home() {
   const [mode, setMode] = useState<Mode>("smart");
   const [appearance, setAppearance] = useState<Appearance>("dark");
   const [palette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
+  const [desktopPreferencesRevision, setDesktopPreferencesRevision] = useState(0);
+  const [preferencesMessage, setPreferencesMessage] = useState("");
+  const [legacyPreferencesPreview, setLegacyPreferencesPreview] = useState<LegacyPreferencesPreview | null>(null);
   const [replyTo, setReplyTo] = useState<DisplayMessage | null>(null);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [sending, setSending] = useState(false);
@@ -700,21 +727,46 @@ export default function Home() {
     const parameters = new URLSearchParams(window.location.search);
     const publicDemo = PUBLIC_DEMO_MODES.has(parameters.get("demo") ?? "");
     setPublicDemo(publicDemo);
-    const savedAppearance = parseAppearance(localStorage.getItem(APPEARANCE_STORAGE_KEY));
-    const savedPalette = normalizeStoredPalette(localStorage.getItem(PALETTE_STORAGE_KEY));
-    const savedWelcomePreferences = publicDemo
-      ? { ...defaultWelcomePreferences }
-      : parseWelcomePreferences(localStorage.getItem(WELCOME_PREFERENCES_STORAGE_KEY));
-    if (savedAppearance) setAppearance(savedAppearance);
-    else setAppearance(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    setPalette(savedPalette.palette);
-    if (!publicDemo && savedPalette.shouldPersist) localStorage.setItem(PALETTE_STORAGE_KEY, savedPalette.palette);
-    setWelcomePreferences(savedWelcomePreferences);
-    setWelcomePreferencesReady(true);
+    const applyPreferences = (savedWelcomePreferences: WelcomePreferences, savedAppearance: Appearance | null, savedPalette: Palette) => {
+      setAppearance(savedAppearance ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+      setPalette(savedPalette);
+      setWelcomePreferences(savedWelcomePreferences);
+      setWelcomePreferencesReady(true);
+      if (savedWelcomePreferences.mode === "books") void refreshBookWelcome();
+      else setWelcomeIndex((current) => nextWelcomeIndex(current, savedWelcomePreferences.mode));
+    };
+    if (publicDemo) {
+      applyPreferences({ ...defaultWelcomePreferences }, null, DEFAULT_PALETTE);
+    } else {
+      void localApiFetch("/api/preferences", { cache: "no-store" })
+        .then(async (response) => {
+          if (!response.ok) throw new Error("preferences unavailable");
+          const data = await response.json() as { preferences?: DesktopPreferences };
+          if (!data.preferences) throw new Error("preferences missing");
+          setDesktopPreferencesRevision(data.preferences.revision);
+          applyPreferences(
+            { version: 1, preferredName: data.preferences.preferredName || null, mode: data.preferences.welcomeMode },
+            data.preferences.appearance,
+            data.preferences.palette,
+          );
+          const legacyPreview = data.preferences.revision === 0 && data.preferences.import === null
+            ? readSameOriginLegacyPreferencePreview()
+            : null;
+          setLegacyPreferencesPreview(legacyPreview);
+          if (data.preferences.revision === 0 && data.preferences.import === null && !legacyPreview) {
+            setPreferencesMessage(
+              "Legacy preferences from a different local origin: MISSING. Rangabot does not scan old browser origins; use Preferences to re-enter them manually.",
+            );
+          }
+        })
+        .catch(() => {
+          applyPreferences({ ...defaultWelcomePreferences }, null, DEFAULT_PALETTE);
+          setLegacyPreferencesPreview(null);
+          setPreferencesMessage("Desktop preferences could not be loaded safely. No browser preferences were applied.");
+        });
+    }
     setReadKnowledgeVersion(localStorage.getItem("rangabot-knowledge-read"));
     setGreetingIndex((current) => chooseGreetingIndex(current));
-    if (savedWelcomePreferences.mode === "books") void refreshBookWelcome();
-    else setWelcomeIndex((current) => nextWelcomeIndex(current, savedWelcomePreferences.mode));
     void refreshStatus();
     if (!publicDemo) {
       void refreshProjects();
@@ -1190,16 +1242,92 @@ export default function Home() {
     requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
   }
 
-  function saveWelcomePreferences(preferences: WelcomePreferences, nextAppearance: Appearance, nextPalette: Palette) {
+  async function saveWelcomePreferences(preferences: WelcomePreferences, nextAppearance: Appearance, nextPalette: Palette) {
+    const previous = { preferences: welcomePreferences, appearance, palette };
+    let rollback = previous;
     setWelcomePreferences(preferences);
     setAppearance(nextAppearance);
     setPalette(nextPalette);
-    localStorage.setItem(WELCOME_PREFERENCES_STORAGE_KEY, serializeWelcomePreferences(preferences));
-    localStorage.setItem(APPEARANCE_STORAGE_KEY, nextAppearance);
-    localStorage.setItem(PALETTE_STORAGE_KEY, nextPalette);
-    setWelcomePreferencesOpen(false);
-    rotateWelcome(preferences.mode);
+    setPreferencesMessage("");
+    try {
+      const response = await localApiFetch("/api/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          expectedRevision: desktopPreferencesRevision,
+          preferredName: preferences.preferredName ?? "",
+          welcomeMode: preferences.mode,
+          appearance: nextAppearance,
+          palette: nextPalette,
+        }),
+      });
+      const data = await response.json() as { preferences?: DesktopPreferences; error?: string };
+      if (!response.ok || !data.preferences) {
+        if (response.status === 409 && data.preferences) {
+          rollback = {
+            preferences: {
+              version: 1,
+              preferredName: data.preferences.preferredName || null,
+              mode: data.preferences.welcomeMode,
+            },
+            appearance: data.preferences.appearance ?? previous.appearance,
+            palette: data.preferences.palette,
+          };
+          setDesktopPreferencesRevision(data.preferences.revision);
+        }
+        throw new Error(data.error ?? "save failed");
+      }
+      setDesktopPreferencesRevision(data.preferences.revision);
+      setLegacyPreferencesPreview(null);
+      setPreferencesMessage("Preferences saved locally.");
+      setWelcomePreferencesOpen(false);
+      rotateWelcome(preferences.mode);
+    } catch {
+      setWelcomePreferences(rollback.preferences);
+      setAppearance(rollback.appearance);
+      setPalette(rollback.palette);
+      setPreferencesMessage("Couldn’t save preferences on this device. Try again.");
+    }
     requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
+  }
+
+  async function importLegacyPreferences() {
+    const preview = legacyPreferencesPreview;
+    if (!preview) return;
+    const nameSummary = preview.preferredName ? `Name: ${preview.preferredName}\n` : "Name: not set\n";
+    const appearanceSummary = preview.appearance ?? "system default";
+    const confirmed = window.confirm(
+      `Import this legacy same-origin preference preview?\n\n${nameSummary}Welcome: ${preview.welcomeMode}\nAppearance: ${appearanceSummary}\nPalette: ${preview.palette}\n\nExisting desktop preferences always win.`,
+    );
+    if (!confirmed) return;
+    setPreferencesMessage("");
+    try {
+      const response = await localApiFetch("/api/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirmed: true,
+          expectedRevision: desktopPreferencesRevision,
+          ...preview,
+        }),
+      });
+      const data = await response.json() as {
+        kind?: "imported" | "existing-wins";
+        preferences?: DesktopPreferences;
+        error?: string;
+      };
+      if (!response.ok || !data.preferences || !data.kind) throw new Error(data.error ?? "import failed");
+      const saved = data.preferences;
+      setDesktopPreferencesRevision(saved.revision);
+      setWelcomePreferences({ version: 1, preferredName: saved.preferredName || null, mode: saved.welcomeMode });
+      setAppearance(saved.appearance ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+      setPalette(saved.palette);
+      setLegacyPreferencesPreview(null);
+      setPreferencesMessage(data.kind === "imported" ? "Legacy preferences imported locally." : "Existing desktop preferences kept.");
+      rotateWelcome(saved.welcomeMode);
+    } catch {
+      setPreferencesMessage("Legacy preferences were not imported. Your existing desktop preferences were not changed.");
+    }
   }
 
   function chooseStarter(prompt: string) {
@@ -1277,6 +1405,12 @@ export default function Home() {
           <input ref={conversationImportRef} type="file" accept=".md,text/markdown,text/plain" onChange={(event) => void importConversation(event)} />
         </div>
         {conversationTransferMessage && <p className="conversation-transfer-status" role="status">{conversationTransferMessage}</p>}
+        {preferencesMessage && <p className="conversation-transfer-status" role="status" aria-live="polite">{preferencesMessage}</p>}
+        {legacyPreferencesPreview && (
+          <button type="button" className="utility-button" onClick={() => void importLegacyPreferences()}>
+            Review legacy preferences
+          </button>
+        )}
         <nav className="history">
           <span className="nav-label">{conversationSearch ? "Search results" : activeProjectId ? "Project chats" : "Recent chats"}</span>
           {visibleConversations.length === 0 && <p className="history-empty">{conversationSearch ? "No local conversations match this search." : "Your local conversations will appear here."}</p>}

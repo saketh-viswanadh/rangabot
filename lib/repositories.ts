@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, isAbsolute, parse, resolve } from "node:path";
+import { basename, isAbsolute, parse } from "node:path";
+import {
+  assertExternalFilesystemPathAccess,
+  assertExternalRegistryEntriesAllowed,
+} from "./desktop-external-filesystem-policy.ts";
 import { ensurePrivateFile, writePrivateJsonFileAtomic } from "./private-storage.ts";
+import { runtimePaths } from "./runtime-paths.ts";
 
 export interface AllowedRepository {
   id: string;
@@ -21,7 +26,7 @@ export interface RepositoryRootIdentity {
   inode: string;
 }
 
-const defaultRegistryPath = resolve(process.cwd(), "data", "repositories.json");
+const defaultRegistryPath = runtimePaths.repositoriesRegistry;
 let registryPath = defaultRegistryPath;
 
 function readRegistry(): AllowedRepository[] {
@@ -41,6 +46,7 @@ function readRegistry(): AllowedRepository[] {
       && /^\d+$/.test((item as AllowedRepository).rootIdentity?.inode ?? "")
     ))
   ))) throw new Error("The local repository allowlist is damaged.");
+  assertExternalRegistryEntriesAllowed(value);
   return value as AllowedRepository[];
 }
 
@@ -75,6 +81,7 @@ export function getAllowedRepository(id: string) {
  * retargeted through a symbolic link after approval.
  */
 export function validateAllowedRepositoryRoot(repository: AllowedRepository) {
+  assertExternalFilesystemPathAccess(repository.path, "repository-registry-validation");
   if (!repository.rootIdentity) {
     throw new Error("This repository approval predates identity checks. Approve the folder again before reading it.");
   }
@@ -105,6 +112,7 @@ export function validateAllowedRepositoryRoot(repository: AllowedRepository) {
 }
 
 export function allowRepository(inputPath: string): AllowedRepository {
+  assertExternalFilesystemPathAccess(inputPath, "repository-approval");
   const candidate = inputPath.trim();
   if (!candidate || candidate.length > 1024 || !isAbsolute(candidate)) {
     throw new Error("Enter an absolute folder path.");

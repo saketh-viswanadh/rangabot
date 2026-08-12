@@ -5,9 +5,10 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { ensurePrivateDirectory, ensurePrivateFile } from "../lib/private-storage.ts";
+import { runtimePaths } from "../lib/runtime-paths.ts";
 
 type Registry = { models: Array<{ id: string; label: string; tier: string; minimumMemoryGb: number; recommendedContextTokens: number; uses: string[]; notes: string }>; embeddingModels: Array<{ id: string; label: string }> };
-const registry = JSON.parse(readFileSync(resolve("config/models.json"), "utf8")) as Registry;
+const registry = JSON.parse(readFileSync(resolve(runtimePaths.resourceRoot, "config", "models.json"), "utf8")) as Registry;
 const memoryGb = Math.round(totalmem() / 1024 ** 3);
 const modelArgument = process.argv.find((argument) => argument.startsWith("--model="))?.slice("--model=".length);
 const skipPull = process.argv.includes("--skip-pull");
@@ -44,7 +45,7 @@ if (shouldPull) {
   }
 }
 
-const envPath = resolve(".env.local");
+const envPath = resolve(runtimePaths.resourceRoot, ".env.local");
 if (existsSync(envPath)) {
   ensurePrivateFile(envPath);
   console.log("\n.env.local already exists; setup did not overwrite it.");
@@ -60,6 +61,12 @@ if (existsSync(envPath)) {
   console.log("\nCreated private .env.local configuration.");
 }
 
-for (const directory of ["data/artifacts", "data/knowledge/inbox", "data/knowledge/indexes", "data/knowledge/processed", "data/knowledge/backups"]) ensurePrivateDirectory(resolve(directory));
+for (const directory of [
+  runtimePaths.artifactsRoot,
+  runtimePaths.knowledgeInbox,
+  runtimePaths.knowledgeIndexes,
+  runtimePaths.knowledgeProcessed,
+  runtimePaths.knowledgeBackups,
+]) ensurePrivateDirectory(directory);
 console.log("Initialized the private Knowledge Vault.");
 console.log("\nNext: add documents to data/knowledge/inbox, run npm run knowledge:ingest, then npm run dev.\n");

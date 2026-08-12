@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { runtimePaths } from "./runtime-paths.ts";
 
-const defaultDatabasePath = resolve(/*turbopackIgnore: true*/ process.cwd(), "data", "knowledge", "indexes", "knowledge.db");
+const defaultDatabasePath = runtimePaths.knowledgeDatabase;
 const maximumExcludedIds = 60;
 const maximumDocuments = 12;
 const maximumChunksPerWindow = 8;

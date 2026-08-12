@@ -85,6 +85,12 @@ the desktop session's low file-watcher limit. Linux and Windows retain native
 watching. Override with `WATCHPACK_POLLING=false npm run dev` only if your macOS
 file limit has been raised and verified.
 
+**Major update coming soon: Rangabot for Mac.** An unreleased macOS Electron
+development foundation is being validated as an easier Finder-launched path.
+It is not a supported download or release. Local build architecture, privacy
+boundaries, unsigned limitations, and the distinct verification-only profile are documented in
+[docs/MACOS_DESKTOP_DEVELOPMENT.md](docs/MACOS_DESKTOP_DEVELOPMENT.md).
+
 Experienced users can copy `.env.example` to `.env.local` and use the manual
 model guidance in [docs/models.md](docs/models.md).
 

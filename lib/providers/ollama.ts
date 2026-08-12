@@ -1,6 +1,7 @@
 import { ProviderError, type ChatMessage, type GenerationOptions, type LocalChatProvider, type ProviderStatus } from "./types.ts";
 import { getConfiguredChatModel, getConfiguredContextTokens, getLocalOllamaBaseUrl } from "../local-runtime-config.ts";
 import { localModelGenerationGate } from "../model-generation-gate.ts";
+import { verificationLocalModelDisabled } from "../desktop-external-filesystem-policy.ts";
 
 const configuredModel = getConfiguredChatModel();
 
@@ -79,6 +80,9 @@ export function providerErrorFrom(error: unknown): ProviderError {
 }
 
 async function ollamaFetch(path: string, init?: RequestInit, timeoutMs = 120_000) {
+  if (verificationLocalModelDisabled()) {
+    throw new ProviderError("unavailable", "Local-model access is disabled in this sealed verification build.");
+  }
   const timeout = AbortSignal.timeout(timeoutMs);
   const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
   try {
