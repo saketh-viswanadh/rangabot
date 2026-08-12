@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { lstatSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { lstatSync, mkdirSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, join, resolve } from "node:path";
 import type { DesktopRuntimeBoundary } from "./resource-boundary.ts";
 
 const START_TIMEOUT_MS = 30_000;
@@ -20,13 +20,34 @@ async function waitUntilReady(baseUrl: string, child: ChildProcess, timeoutMs: n
   throw new Error("Rangabot's model runtime did not become ready in time.");
 }
 
-export async function startManagedModelRuntime(input: { boundary: DesktopRuntimeBoundary; port: number }): Promise<ManagedModelRuntime> {
+export function selectManagedModelStore(input: { privateModelsRoot: string; standardModelsRoot?: string }) {
+  const privateRoot = resolve(input.privateModelsRoot);
+  if (!isAbsolute(input.privateModelsRoot) || privateRoot !== input.privateModelsRoot) throw new Error("Rangabot's private model store path is invalid.");
+  if (input.standardModelsRoot) {
+    const standardRoot = resolve(input.standardModelsRoot);
+    if (!isAbsolute(input.standardModelsRoot) || standardRoot !== input.standardModelsRoot) throw new Error("The standard model store path is invalid.");
+    try {
+      const status = lstatSync(standardRoot);
+      const manifests = lstatSync(join(standardRoot, "manifests"));
+      const blobs = lstatSync(join(standardRoot, "blobs"));
+      if (!status.isSymbolicLink() && status.isDirectory() && !manifests.isSymbolicLink() && manifests.isDirectory()
+        && !blobs.isSymbolicLink() && blobs.isDirectory() && realpathSync(standardRoot) === standardRoot
+        && (typeof process.getuid !== "function" || statSync(standardRoot).uid === process.getuid())) return standardRoot;
+    } catch { /* Missing or unsafe external store falls back to app-private storage. */ }
+  }
+  mkdirSync(privateRoot, { recursive: true, mode: 0o700 });
+  return realpathSync(privateRoot);
+}
+
+export async function startManagedModelRuntime(input: { boundary: DesktopRuntimeBoundary; port: number; standardModelsRoot?: string }): Promise<ManagedModelRuntime> {
   const runtimeRoot = join(input.boundary.resourceRoot, "runtime", "ollama");
   const executable = join(runtimeRoot, "ollama");
   const status = lstatSync(executable);
   if (status.isSymbolicLink() || !status.isFile()) throw new Error("Rangabot's packaged model runtime is unavailable.");
-  const modelsRoot = join(input.boundary.dataRoot, "models");
-  mkdirSync(modelsRoot, { recursive: true, mode: 0o700 });
+  const modelsRoot = selectManagedModelStore({
+    privateModelsRoot: join(input.boundary.dataRoot, "models"),
+    standardModelsRoot: input.standardModelsRoot,
+  });
   const baseUrl = `http://127.0.0.1:${input.port}`;
   const child: ChildProcess = spawn(executable, ["serve"], {
     cwd: runtimeRoot,

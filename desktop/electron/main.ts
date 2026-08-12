@@ -154,7 +154,11 @@ export async function startDesktopRuntime(input: {
   let modelBaseUrl: string | undefined;
   if (!input.verificationPolicy) {
     const modelPort = await (input.reservePort ?? reserveVerifiedLoopbackPort)();
-    state.modelRuntime = await startManagedModelRuntime({ boundary, port: modelPort });
+    state.modelRuntime = await startManagedModelRuntime({
+      boundary,
+      port: modelPort,
+      standardModelsRoot: join(electronApp.getPath("home"), ".ollama", "models"),
+    });
     modelBaseUrl = state.modelRuntime.baseUrl;
   }
   const launch = createDesktopLaunch({

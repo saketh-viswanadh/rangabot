@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { buildModelViews, pullRecommendedModel, readModelPreference, updateSelectedChatModel, validModelId } from "../lib/model-manager.ts";
+import { buildModelViews, isSelectableChatModel, pullRecommendedModel, readModelPreference, updateSelectedChatModel, validModelId } from "../lib/model-manager.ts";
 
 test("model ids are bounded provider identifiers", () => {
   assert.equal(validModelId("llama3.2:3b"), true);
@@ -12,11 +12,16 @@ test("model ids are bounded provider identifiers", () => {
   assert.equal(validModelId("model name"), false);
 });
 
-test("model catalog combines reviewed and installed models without pretending qualification", () => {
-  const models = buildModelViews(["llama3.2:3b", "private/custom:latest"], { schemaVersion: 1, selectedModel: "private/custom:latest", revision: 2, updatedAt: null });
+test("model catalog separates chat, embedding, and unqualified installed models", () => {
+  const models = buildModelViews(["llama3.2:3b", "nomic-embed-text:latest", "private/custom:latest"], { schemaVersion: 1, selectedModel: "private/custom:latest", revision: 2, updatedAt: null });
   assert.equal(models.find((model) => model.id === "llama3.2:3b")?.recommended, true);
+  assert.equal(models.find((model) => model.id === "llama3.2:3b")?.selectable, true);
+  assert.equal(models.find((model) => model.id === "nomic-embed-text:latest")?.kind, "embedding");
+  assert.equal(models.find((model) => model.id === "nomic-embed-text:latest")?.selectable, false);
   assert.equal(models.find((model) => model.id === "private/custom:latest")?.recommended, false);
-  assert.equal(models.find((model) => model.id === "private/custom:latest")?.selected, true);
+  assert.equal(models.find((model) => model.id === "private/custom:latest")?.selected, false);
+  assert.equal(isSelectableChatModel("llama3.2:3b", ["llama3.2:3b"]), true);
+  assert.equal(isSelectableChatModel("nomic-embed-text:latest", ["nomic-embed-text:latest"]), false);
 });
 
 test("model preference is private, revisioned, and durable", () => {

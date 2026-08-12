@@ -14,6 +14,9 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
   RangaBot's private data root, discovers installed models, persists explicit
   user selection, and installs reviewed models only after a visible click.
   Command-line use retains the replaceable provider boundary.
+- Existing user-owned models in the standard Ollama store are used in place by
+  the bundled engine, so RangaBot discovers them without duplicating large
+  weights. An absent or unsafe store falls back to app-private model storage.
 - Added a signed per-launch local browser capability, strict loopback Host and
   same-origin enforcement, bounded JSON mutations, non-cacheable private APIs,
   a restrictive browser resource policy, and remote-image blocking for model

@@ -10,7 +10,7 @@ export const MODEL_PREFERENCES_MAX_BYTES = 2_048;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}(?::[A-Za-z0-9][A-Za-z0-9._-]{0,63})?$/;
 
 export type ModelPreference = Readonly<{ schemaVersion: 1; selectedModel: string; revision: number; updatedAt: string | null }>;
-export type ManagedModelView = Readonly<{ id: string; label: string; installed: boolean; selected: boolean; recommended: boolean; tier?: string; downloadSize?: string; minimumMemoryGb?: number; uses?: readonly string[] }>;
+export type ManagedModelView = Readonly<{ id: string; label: string; installed: boolean; selected: boolean; recommended: boolean; kind: "chat" | "embedding" | "unqualified"; selectable: boolean; tier?: string; downloadSize?: string; minimumMemoryGb?: number; uses?: readonly string[] }>;
 
 const defaultPreference = (): ModelPreference => Object.freeze({ schemaVersion: 1, selectedModel: getConfiguredChatModel(), revision: 0, updatedAt: null });
 
@@ -71,14 +71,21 @@ export async function readInstalledModels(fetcher: typeof fetch = fetch) {
 
 export function buildModelViews(installed: readonly string[], preference = readModelPreference()): ManagedModelView[] {
   const catalog = new Map(modelRegistry.models.map((model) => [model.id, model]));
+  const embeddingCatalog = new Map(modelRegistry.embeddingModels.map((model) => [model.id, model]));
   return [...new Set([...modelRegistry.models.map((model) => model.id), ...installed])].map((id) => {
     const model = catalog.get(id);
-    return Object.freeze({ id, label: model?.label ?? id, installed: installed.includes(id), selected: preference.selectedModel === id, recommended: Boolean(model),
-      ...(model ? { tier: model.tier, downloadSize: model.downloadSize, minimumMemoryGb: model.minimumMemoryGb, uses: Object.freeze([...model.uses]) } : {}) });
+    const embedding = embeddingCatalog.get(id) ?? embeddingCatalog.get(id.replace(/:latest$/, ""));
+    const kind = model ? "chat" : embedding ? "embedding" : "unqualified";
+    const selectable = Boolean(model) && installed.includes(id);
+    return Object.freeze({ id, label: model?.label ?? embedding?.label ?? id, installed: installed.includes(id), selected: selectable && preference.selectedModel === id,
+      recommended: Boolean(model), kind, selectable,
+      ...(model ? { tier: model.tier, downloadSize: model.downloadSize, minimumMemoryGb: model.minimumMemoryGb, uses: Object.freeze([...model.uses]) }
+        : embedding ? { downloadSize: embedding.downloadSize, uses: Object.freeze([...embedding.uses]) } : {}) });
   });
 }
 
 export function isRecommendedModel(modelId: string) { return modelRegistry.models.some((model) => model.id === modelId); }
+export function isSelectableChatModel(modelId: string, installed: readonly string[]) { return installed.includes(modelId) && isRecommendedModel(modelId); }
 
 export async function pullRecommendedModel(modelId: unknown, fetcher: typeof fetch = fetch) {
   if (!validModelId(modelId) || !isRecommendedModel(modelId)) throw new Error("Only a reviewed RangaBot model may be installed here.");

@@ -11,6 +11,10 @@
   explicit selection, and consent-gated downloads. The full desktop smoke
   reached `R99_RUNNING` with the Electron window, Next server, and model engine
   alive together; shutdown left no child processes.
+- Corrected first-run storage selection to use a valid current-user standard
+  Ollama model store in place. This Mac's existing `llama3.2:3b` and
+  `nomic-embed-text:latest` remain single-copy and visible to the bundled engine;
+  no model migration or duplication is performed.
 
 ## 2026-08-10 — Core conversation exact-candidate preparation
 
