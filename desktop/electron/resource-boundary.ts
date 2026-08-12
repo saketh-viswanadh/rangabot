@@ -156,7 +156,7 @@ export function ensurePrivateDesktopDataRoot(userDataPath: string) {
   assertInside(userDataRoot, dataRoot, "Rangabot private data root");
   chmodSync(dataRoot, 0o700);
   const privateStat = statSync(dataRoot);
-  if ((privateStat.mode & 0o077) !== 0) {
+  if (process.platform !== "win32" && (privateStat.mode & 0o077) !== 0) {
     throw new Error("Rangabot's desktop data root is not owner-only.");
   }
   if (typeof process.getuid === "function" && privateStat.uid !== process.getuid()) {

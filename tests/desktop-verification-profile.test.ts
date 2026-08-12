@@ -96,12 +96,15 @@ test("capsule validation rejects missing, unexpected, unsafe-mode, marker, and s
     assert.deepEqual(readdirSync(missingAppData), before);
   } finally { rmSync(missingAppData, { recursive: true, force: true }); }
 
-  for (const mutate of [
+  const mutations = [
     (fixture: ReturnType<typeof createCapsule>) => writeFileSync(join(fixture.capsuleRoot, "unexpected"), "x", { mode: 0o600 }),
     (fixture: ReturnType<typeof createCapsule>) => writeFileSync(join(fixture.capsuleRoot, "capsule-profile.json"), "{}\n", { mode: 0o600 }),
-    (fixture: ReturnType<typeof createCapsule>) => chmodSync(join(fixture.capsuleRoot, "logs"), 0o755),
     (fixture: ReturnType<typeof createCapsule>) => symlinkSync(join(fixture.capsuleRoot, "logs"), join(fixture.capsuleRoot, "sessionData", "escape")),
-  ]) {
+  ];
+  if (process.platform !== "win32") {
+    mutations.push((fixture: ReturnType<typeof createCapsule>) => chmodSync(join(fixture.capsuleRoot, "logs"), 0o755));
+  }
+  for (const mutate of mutations) {
     const fixture = createCapsule();
     try {
       mutate(fixture);
