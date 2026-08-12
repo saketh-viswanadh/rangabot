@@ -244,6 +244,25 @@ untouched, and the shared synthetic model marker hash does not change.
 
 ## Candidate limits and release gate
 
+The unsigned arm64 development package uses the explicitly named
+`electron-43-arm64-launchable-v1` fuse policy. Its required V1 wire is
+`010011001`: index 6, `LoadBrowserProcessSpecificV8Snapshot`, remains disabled.
+The Electron 43 arm64 payload does not include
+`browser_v8_context_snapshot.bin`, and prior native launch testing found that
+enabling index 6 without that file prevents startup before application code
+runs. Packaging directly inspects all nine named fuse states after mutation and
+after the final ad-hoc signature, and the installed manifest binds the policy
+name, the disabled index, the exact wire, the original source merge, the
+Profiles behavior commit, and the clean packaging commit. This is a documented
+runtime-compatibility policy, not a release or signing claim.
+
+For this candidate line, `sourceBaseCommit` is the original merged source
+`8b161635f79ac6a572524ba22e3af7364fe08a5b` and
+`sourceBaselineCommit` is the Profiles behavior commit
+`0ba5b2416a596e0302768be4b24c7632a531c118`. The generated v2 manifest records
+the exact clean packaging HEAD as `sourceCommit`; the installed verifier uses
+that value as its commit identity and does not require `.git`.
+
 - Profiles isolate normal product-managed paths; they do not prevent the Node
   main/backend process from technically accessing other local files. Existing
   repository and dataset access still depends on explicit approvals.

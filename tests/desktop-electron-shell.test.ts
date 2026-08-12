@@ -7,8 +7,13 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { FuseState, FuseV1Options } from "@electron/fuses";
-import { ELECTRON_FUSE_OPTIONS, ELECTRON_FUSE_POLICY, ELECTRON_MAJOR_VERSION } from "../desktop/electron/fuses.ts";
-import { REQUIRED_DESKTOP_FUSE_WIRE_STATES } from "../lib/desktop-artifact-identity.ts";
+import {
+  ELECTRON_FUSE_OPTIONS,
+  ELECTRON_FUSE_POLICY,
+  ELECTRON_FUSE_POLICY_NAME,
+  ELECTRON_MAJOR_VERSION,
+} from "../desktop/electron/fuses.ts";
+import { DESKTOP_FUSE_POLICY_NAME, REQUIRED_DESKTOP_FUSE_WIRE_STATES } from "../lib/desktop-artifact-identity.ts";
 import {
   createDesktopReadinessCapability,
   DESKTOP_READINESS_CHALLENGE_HEADER,
@@ -63,7 +68,9 @@ function fixture() {
 
 test("Electron 43 fuse policy disables Node escape hatches and requires ASAR integrity", () => {
   assert.equal(ELECTRON_MAJOR_VERSION, 43);
+  assert.equal(ELECTRON_FUSE_POLICY_NAME, DESKTOP_FUSE_POLICY_NAME);
   assert.deepEqual(ELECTRON_FUSE_POLICY, {
+    policyName: "electron-43-arm64-launchable-v1",
     RunAsNode: false,
     EnableCookieEncryption: true,
     EnableNodeOptionsEnvironmentVariable: false,
@@ -88,12 +95,15 @@ test("Electron 43 fuse policy disables Node escape hatches and requires ASAR int
   ]);
   assert.deepEqual([...namedStates.keys()], [0, 1, 2, 3, 4, 5, 6, 7, 8]);
   assert.deepEqual([...namedStates.values()], [...REQUIRED_DESKTOP_FUSE_WIRE_STATES]);
+  assert.equal(String.fromCharCode(...REQUIRED_DESKTOP_FUSE_WIRE_STATES), "010011001");
   const packageRecord = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf8")) as {
     devDependencies?: Record<string, string>;
   };
   assert.equal(packageRecord.devDependencies?.["@electron/fuses"], "2.1.3");
   const forgeSource = readFileSync(join(projectRoot, "forge.config.cjs"), "utf8");
+  assert.match(forgeSource, /FUSE_POLICY_NAME\s*=\s*"electron-43-arm64-launchable-v1"/);
   assert.match(forgeSource, /strictlyRequireAllFuses:\s*true/);
+  assert.match(forgeSource, /\[FuseV1Options\.LoadBrowserProcessSpecificV8Snapshot\]:\s*false/);
   assert.match(forgeSource, /\[FuseV1Options\.WasmTrapHandlers\]:\s*true/);
 });
 

@@ -15,6 +15,7 @@ import {
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import {
   DESKTOP_FUSE_BINARY_PATH,
+  DESKTOP_SOURCE_BASE_COMMIT,
   DESKTOP_SOURCE_BASELINE_COMMIT,
   REQUIRED_DESKTOP_FUSE_NAMES,
   REQUIRED_DESKTOP_FUSE_POLICY,
@@ -73,9 +74,22 @@ function sourceDirty() {
 
 function assertBaseline() {
   const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: projectRoot, encoding: "utf8" }).trim();
-  if (head !== DESKTOP_SOURCE_BASELINE_COMMIT) {
+  const parent = execFileSync("git", ["rev-parse", "HEAD^"], { cwd: projectRoot, encoding: "utf8" }).trim();
+  if (head !== DESKTOP_SOURCE_BASELINE_COMMIT && parent !== DESKTOP_SOURCE_BASELINE_COMMIT) {
     throw new Error(`Desktop packaging must start from ${DESKTOP_SOURCE_BASELINE_COMMIT}; found ${head || "unknown"}.`);
   }
+}
+
+function sourceCommits() {
+  const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: projectRoot, encoding: "utf8" }).trim();
+  const base = execFileSync("git", ["merge-base", "HEAD", DESKTOP_SOURCE_BASE_COMMIT], {
+    cwd: projectRoot,
+    encoding: "utf8",
+  }).trim();
+  if (base !== DESKTOP_SOURCE_BASE_COMMIT) {
+    throw new Error("Desktop packaging source is not descended from the approved Profiles v1 base.");
+  }
+  return { base, head };
 }
 
 function packageVersion(name: string) {
@@ -244,6 +258,9 @@ function stageStandalone(arch: DesktopArtifactArch, resourceRoot: string) {
   rmSync(resolve(resourceRoot, "data"), { recursive: true, force: true });
   rmSync(resolve(resourceRoot, "out"), { recursive: true, force: true });
   rmSync(resolve(resourceRoot, "desktop"), { recursive: true, force: true });
+  // Node middleware tracing does not currently honor the global Next tracing
+  // exclusion, so remove its conservative source-only test capture as well.
+  rmSync(resolve(resourceRoot, "tests"), { recursive: true, force: true });
   rmSync(resolve(resourceRoot, "tsconfig.json"), { force: true });
   copyDirectory(resolve(projectRoot, ".next", "static"), resolve(resourceRoot, ".next", "static"));
   copyDirectory(resolve(projectRoot, "public"), resolve(resourceRoot, "public"));
@@ -319,6 +336,8 @@ if (launchProfile.kind === DESKTOP_FINDER_VERIFICATION_BUILD_PROFILE && arch !==
   throw new Error("The Finder verification artifact is currently bound to arm64 only.");
 }
 assertBaseline();
+const commits = sourceCommits();
+if (sourceDirty()) throw new Error("Desktop packaging requires an exact clean source commit.");
 const source = sourceManifest();
 const stagingBuildId = `desktop-stage-${source.sha256.slice(0, 16)}`;
 const electronZipPath = prepareOfflineElectronZip(arch);
@@ -348,10 +367,21 @@ materializeSafeStagedSymlinks(resourceRoot, resourceRoot);
 const resources = collectDesktopArtifactFiles(resourceRoot);
 assertNoPrivatePayload(resources);
 const natives = resources.filter((file) => /\.(?:node|dylib|so|dll)$/i.test(file.path));
+const confirmedCommits = sourceCommits();
+const confirmedSource = sourceManifest();
+if (sourceDirty()
+  || confirmedCommits.base !== commits.base
+  || confirmedCommits.head !== commits.head
+  || confirmedSource.sha256 !== source.sha256
+  || JSON.stringify(confirmedSource.files) !== JSON.stringify(source.files)) {
+  throw new Error("Desktop source identity changed during packaging preparation.");
+}
 const generatedAt = new Date().toISOString();
 const manifest = createDesktopArtifactManifest({
+  sourceBaseCommit: commits.base,
   sourceBaselineCommit: DESKTOP_SOURCE_BASELINE_COMMIT,
-  sourceDirty: sourceDirty(),
+  sourceCommit: commits.head,
+  sourceDirty: false,
   sourceManifestSha256: source.sha256,
   sourceFiles: source.files,
   packageLockSha256: sha256File(resolve(projectRoot, "package-lock.json")),
@@ -396,6 +426,9 @@ mkdirSync(dirname(manifestPath), { recursive: true });
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o444 });
 console.log(JSON.stringify({
   desktopArtifactId: manifest.desktopArtifactId,
+  sourceBaseCommit: manifest.sourceBaseCommit,
+  profilesBehaviorCommit: manifest.sourceBaselineCommit,
+  packagingCommit: manifest.sourceCommit,
   sourceDirty: manifest.sourceDirty,
   target: manifest.target,
   launchProfile: manifest.launchProfile,
