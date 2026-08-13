@@ -19,6 +19,19 @@ test("keeps the sidebar focused on chats", () => {
   assert.match(sidebar, /conversation-search/);
   assert.match(sidebar, /className="history"/);
   assert.doesNotMatch(sidebar, /Knowledge Brief|Path to Mastery|Local memory|Local repositories/);
+  assert.doesNotMatch(sidebar, /Cmd K|<kbd>/, "The search control must not advertise an unimplemented shortcut");
+});
+
+test("keeps recent chats visible and supports project drag and drop", () => {
+  assert.doesNotMatch(page, /parameters\.set\("projectId", activeProjectId\)/,
+    "Selecting or creating a project must not filter recent chats out of the sidebar");
+  assert.match(sidebar, /draggable/);
+  assert.match(sidebar, /onDragStart/);
+  assert.match(sidebar, /onDrop=\{\(event\) => dropConversation\(event, project\.id\)\}/);
+  assert.match(sidebar, /onDrop=\{\(event\) => dropConversation\(event, null\)\}/);
+  assert.match(sidebar, /Drag a chat onto a project—or All chats—to move it/);
+  assert.match(styles, /\.project-item\.conversation-drop-target/);
+  assert.match(styles, /\.history-row\.dragging/);
 });
 
 test("places secondary tools in one compact, disclosed workbench", () => {

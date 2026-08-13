@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CONVERSATION_TURN_PROTOCOL_VERSION } from "@/lib/conversation-turn-contract";
 import {
   downloadLocalApiFile,
@@ -264,6 +264,8 @@ export default function Home() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationSearch, setConversationSearch] = useState("");
   const [conversationTransferMessage, setConversationTransferMessage] = useState("");
+  const [draggedConversationId, setDraggedConversationId] = useState<string | null>(null);
+  const [conversationDropTarget, setConversationDropTarget] = useState<string | "all" | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [allowedRepositories, setAllowedRepositories] = useState<AllowedRepository[]>([]);
   const [repositoryPath, setRepositoryPath] = useState("");
@@ -472,10 +474,9 @@ export default function Home() {
     }
   }
 
-  async function refreshConversations(query = conversationSearch, projectId = activeProjectId) {
+  async function refreshConversations(query = conversationSearch) {
     const parameters = new URLSearchParams();
     if (query.trim()) parameters.set("query", query.trim());
-    if (projectId) parameters.set("projectId", projectId);
     const response = await localApiFetch(`/api/conversations${parameters.size ? `?${parameters}` : ""}`, { cache: "no-store" });
     if (response.ok) {
       const data = (await response.json()) as { conversations: ConversationSummary[] };
@@ -765,6 +766,29 @@ export default function Home() {
     await refreshConversations();
   }
 
+  function beginConversationDrag(event: DragEvent<HTMLDivElement>, conversation: ConversationSummary) {
+    setDraggedConversationId(conversation.id);
+    setConversationTransferMessage("");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", conversation.id);
+  }
+
+  function allowConversationDrop(event: DragEvent<HTMLElement>, target: string | "all") {
+    if (!draggedConversationId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setConversationDropTarget(target);
+  }
+
+  function dropConversation(event: DragEvent<HTMLElement>, projectId: string | null) {
+    event.preventDefault();
+    const conversationId = draggedConversationId ?? event.dataTransfer.getData("text/plain");
+    const conversation = conversations.find(({ id }) => id === conversationId);
+    setDraggedConversationId(null);
+    setConversationDropTarget(null);
+    if (conversation && conversation.projectId !== projectId) void moveConversation(conversation, projectId);
+  }
+
   async function importConversation(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -921,7 +945,6 @@ export default function Home() {
     const timer = window.setTimeout(async () => {
       const parameters = new URLSearchParams();
       if (conversationSearch.trim()) parameters.set("query", conversationSearch.trim());
-      if (activeProjectId) parameters.set("projectId", activeProjectId);
       const response = await localApiFetch(`/api/conversations${parameters.size ? `?${parameters}` : ""}`, {
         cache: "no-store",
         signal: controller.signal,
@@ -935,7 +958,7 @@ export default function Home() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [conversationSearch, activeProjectId]);
+  }, [conversationSearch]);
   useEffect(() => {
     if (!knowledgePanelOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -1490,14 +1513,14 @@ export default function Home() {
       <aside id="chat-navigation" className={`sidebar ${sidebarOpen ? "open" : ""}`} inert={profileWorkspaceBlocked}>
         <div className="brand"><span className="brand-mark" aria-hidden="true" /><span>Rangabot</span><button ref={sidebarCloseRef} className="sidebar-close" type="button" onClick={() => { setSidebarOpen(false); requestAnimationFrame(() => mobileNavigationRef.current?.focus()); }} aria-label="Close chat navigation"><CraftIcon name="close" /></button></div>
         <button className="new-chat" onClick={() => startNewChat()}><CraftIcon name="add" /> New chat</button>
-        <button type="button" className="sidebar-search-trigger" onClick={() => document.querySelector<HTMLInputElement>(".conversation-search input")?.focus()}><span><CraftIcon name="search" size={16} /> Search</span><kbd>Cmd K</kbd></button>
+        <button type="button" className="sidebar-search-trigger" onClick={() => document.querySelector<HTMLInputElement>(".conversation-search input")?.focus()}><span><CraftIcon name="search" size={16} /> Search</span></button>
         <nav className="sidebar-destinations" aria-label="Workspace">
-          <button type="button" className={!activeProjectId ? "active" : ""} onClick={() => { setActiveProjectId(null); startNewChat(null); }}><CraftIcon name="chat" size={17} /> All chats</button>
+          <button type="button" className={`${!activeProjectId ? "active" : ""} ${conversationDropTarget === "all" ? "conversation-drop-target" : ""}`} onClick={() => { setActiveProjectId(null); startNewChat(null); }} onDragOver={(event) => allowConversationDrop(event, "all")} onDragLeave={() => setConversationDropTarget(null)} onDrop={(event) => dropConversation(event, null)}><CraftIcon name="chat" size={17} /> All chats</button>
           <button type="button" onClick={() => openKnowledgeBrief("vault")}><CraftIcon name="knowledge" size={17} /> Library</button>
         </nav>
         <section className="projects" aria-label="Projects">
           <div className="project-heading"><span>Projects</span><button type="button" onClick={() => setProjectCreateOpen((open) => !open)} aria-label="Create a project"><CraftIcon name="add" size={14} /></button></div>
-          {projects.map((project) => <div className={`project-item ${activeProjectId === project.id ? "active" : ""}`} key={project.id}>
+          {projects.map((project) => <div className={`project-item ${activeProjectId === project.id ? "active" : ""} ${conversationDropTarget === project.id ? "conversation-drop-target" : ""}`} key={project.id} onDragOver={(event) => allowConversationDrop(event, project.id)} onDragLeave={() => setConversationDropTarget(null)} onDrop={(event) => dropConversation(event, project.id)}>
             <button type="button" className="project-row" onClick={() => { setActiveProjectId(project.id); startNewChat(project.id); }}><CraftIcon name="folder" />{project.name}</button>
             <button type="button" className="project-more" onClick={() => setProjectMenuId((id) => id === project.id ? null : project.id)} aria-label={`More options for ${project.name}`} aria-expanded={projectMenuId === project.id}><CraftIcon name="more" size={14} /></button>
             {projectMenuId === project.id && <div className="project-menu"><button type="button" onClick={() => { setProjectMenuId(null); void renameProject(project); }}>Rename</button><button type="button" className="danger" onClick={() => { setProjectMenuId(null); void removeProject(project); }}>Delete</button></div>}
@@ -1518,11 +1541,12 @@ export default function Home() {
           </button>
         )}
         <nav className="history">
-          <span className="nav-label">{conversationSearch ? "Search results" : activeProjectId ? "Project chats" : "Recent chats"}</span>
+          <span className="nav-label">{conversationSearch ? "Search results" : "Recent chats"}</span>
+          {!conversationSearch && conversations.length > 0 && <span className="history-guidance">Drag a chat onto a project—or All chats—to move it.</span>}
           {visibleConversations.length === 0 && <p className="history-empty">{conversationSearch ? "No local conversations match this search." : "Your local conversations will appear here."}</p>}
           {visibleConversations.map((conversation) => (
-            <div className={`history-row ${conversation.id === activeConversationId ? "active" : ""} ${conversation.pinned ? "pinned" : ""}`} key={conversation.id}>
-              <button type="button" onClick={() => void openConversation(conversation.id)}>{conversation.title}</button>
+            <div className={`history-row ${conversation.id === activeConversationId ? "active" : ""} ${conversation.pinned ? "pinned" : ""} ${draggedConversationId === conversation.id ? "dragging" : ""}`} key={conversation.id} draggable onDragStart={(event) => beginConversationDrag(event, conversation)} onDragEnd={() => { setDraggedConversationId(null); setConversationDropTarget(null); }}>
+              <button type="button" onClick={() => void openConversation(conversation.id)}><span>{conversation.title}</span>{conversation.projectId && <small>{projects.find(({ id }) => id === conversation.projectId)?.name ?? "Project"}</small>}</button>
               <button type="button" className="conversation-more" onClick={() => setConversationMenuId((id) => id === conversation.id ? null : conversation.id)} aria-label={`More options for ${conversation.title}`} aria-expanded={conversationMenuId === conversation.id}><CraftIcon name="more" size={14} /></button>
               {conversationMenuId === conversation.id && <div className="conversation-menu">
                 <button type="button" onClick={() => void toggleConversationPin(conversation)}>{conversation.pinned ? "Unpin chat" : "Pin chat"}</button>
