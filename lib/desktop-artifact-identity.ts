@@ -30,7 +30,7 @@ const {
 
 export const DESKTOP_ARTIFACT_SCHEMA_VERSION = 2;
 export const DESKTOP_SOURCE_BASE_COMMIT = "8b161635f79ac6a572524ba22e3af7364fe08a5b";
-export const DESKTOP_SOURCE_BASELINE_COMMIT = "53b8d906bef9bbb71911975b8bfbdeefdeb4812f";
+export const DESKTOP_SOURCE_BASELINE_COMMIT = "2e1c3a6f0a9aadea74e6b483114c403e7bf8511d";
 export const DESKTOP_FUSE_POLICY_NAME = "electron-43-arm64-launchable-v1";
 
 const sha256Pattern = /^[0-9a-f]{64}$/;
