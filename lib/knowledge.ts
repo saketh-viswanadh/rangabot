@@ -320,10 +320,10 @@ export function getKnowledgeSourceStates(): KnowledgeSourceState[] {
   return listKnowledgeFiles().map((path) => {
     const document = indexed.get(path);
     if (document?.ingestionVersion === knowledgeIngestionVersion) return { name: path.split("/").at(-1) ?? path, status: "indexed" as const, detail: `${document.chunkCount} searchable passages with hierarchy`, chunks: document.chunkCount };
-    if (document) return { name: path.split("/").at(-1) ?? path, status: "pending" as const, detail: "Run npm run knowledge:ingest to add chapter and page metadata", chunks: document.chunkCount };
+    if (document) return { name: path.split("/").at(-1) ?? path, status: "pending" as const, detail: "Select Import in Library to refresh chapter and page metadata", chunks: document.chunkCount };
     const issue = issues.get(path);
     if (issue) return { name: path.split("/").at(-1) ?? path, status: "incompatible" as const, detail: issue, chunks: 0 };
-    return { name: path.split("/").at(-1) ?? path, status: "pending" as const, detail: "Run npm run knowledge:ingest", chunks: 0 };
+    return { name: path.split("/").at(-1) ?? path, status: "pending" as const, detail: "Select Import in Library to index this document", chunks: 0 };
   }).sort((left, right) => left.status.localeCompare(right.status) || left.name.localeCompare(right.name));
 }
 
