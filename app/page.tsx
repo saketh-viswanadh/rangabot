@@ -256,7 +256,7 @@ export default function Home() {
   const [modelManagerOpen, setModelManagerOpen] = useState(false);
   const [profileSwitching, setProfileSwitching] = useState(false);
   const [profileRecoveryRequired, setProfileRecoveryRequired] = useState(false);
-  const [activeProfileContext, setActiveProfileContext] = useState<{ marker: string; kind: "default" | "personal" | "testing" } | null>(null);
+  const [activeProfileContext, setActiveProfileContext] = useState<{ displayName: string; marker: string; kind: "default" | "personal" | "testing" } | null>(null);
   const [wordPreview, setWordPreview] = useState<{ url: string; title: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
@@ -1545,6 +1545,11 @@ export default function Home() {
           </div>
           <div className="header-actions">
             <div className="profile-gated-header-actions" inert={profileWorkspaceBlocked}>
+            <button type="button" className={`header-model-status ${ready ? "ready" : "attention"}`} onClick={() => setModelManagerOpen(true)} aria-label={`${ready ? status.configuredModel : status?.available ? "Choose a model" : "Model engine starting"}. Local model status`}>
+              <span className="header-model-light" aria-hidden="true" />
+              <strong>{ready ? status.configuredModel : status?.available ? "Choose a model" : "Model engine starting"}</strong>
+              <small><CraftIcon name="shield" size={12} /> On this Mac</small>
+            </button>
             <div className="tools-menu">
               <button ref={toolsTriggerRef} type="button" className="toolbar-more" onClick={() => setToolsOpen((open) => !open)} aria-label="Conversation and workspace options" aria-expanded={toolsOpen} aria-controls="rangabot-tools"><CraftIcon name="more" size={18} /></button>
               {toolsOpen && <div ref={toolsPopoverRef} id="rangabot-tools" className="tools-popover" role="region" aria-label="Rangabot tools">
@@ -1596,7 +1601,7 @@ export default function Home() {
                 <div className="ranga-scene" aria-hidden="true"><div className="welcome-orbit" /></div>
                 <div className="welcome-heading">
                   {welcomePreferencesReady ? <div className="welcome-greeting-line">
-                    <h2 id="welcome-title">{formatWelcomeGreeting(greetingIndex, welcomePreferences.preferredName ?? "")}</h2>
+                    <h2 id="welcome-title">{formatWelcomeGreeting(greetingIndex, welcomePreferences.preferredName?.trim() || activeProfileContext?.displayName || "")}</h2>
                   </div> : <div className="welcome-loading" role="status">Preparing your private workspace…</div>}
                 </div>
               </div>
@@ -1670,10 +1675,6 @@ export default function Home() {
             {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
             {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
             {attachedDataset && <div className="composer-code-context"><span><strong>Local data available to this chat</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>This attachment is remembered for this chat. Analytical requests may run bounded read-only SQL locally; expand the calculation trace to inspect it.</small></span><button type="button" onClick={() => void attachDatasetToChat(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
-            <div className="composer-status-row">
-              <button type="button" className={`composer-model-status ${ready ? "ready" : "attention"}`} onClick={() => setModelManagerOpen(true)}><span />{ready ? status.configuredModel : status?.available ? "Choose a model" : "Model engine starting"}</button>
-              <span><CraftIcon name="shield" size={13} /> On this Mac</span>
-            </div>
             <div className="composer-main-row">
               <button type="button" className="composer-add" onClick={() => { setSqlPanelOpen(true); }} aria-label="Add local context"><CraftIcon name="add" size={18} /></button>
               <textarea

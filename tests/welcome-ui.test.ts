@@ -69,12 +69,14 @@ test("offers optional local personalization and every approved fresh-chat conten
   assert.match(preferences, /welcomeModeOptions\.map/);
   assert.match(preferences, /stay in Rangabot’s private local data on this device/);
   assert.match(page, /<WelcomePreferencesDialog/);
-  assert.match(page, /formatWelcomeGreeting\(greetingIndex, welcomePreferences\.preferredName/);
+  assert.match(page, /formatWelcomeGreeting\(greetingIndex, welcomePreferences\.preferredName\?\.trim\(\) \|\| activeProfileContext\?\.displayName/,
+    "The active profile name should personalize greetings when no separate nickname was saved");
 });
 
 test("keeps the fresh-chat composition compact, passive and intentional", () => {
   const welcome = sliceBetween(page, '<section className="welcome-state"', "{messages.map");
   const composer = sliceBetween(page, '<div className={`composer-wrap', "</form>");
+  const header = sliceBetween(page, '<header className="chat-header">', "</header>");
   const starters = sliceBetween(composer, '<div className="starter-grid"', "</div>");
 
   assert.equal(countMatches(welcome, /className="welcome-intro"/g), 1, "Fresh chat needs one compact intro");
@@ -92,6 +94,10 @@ test("keeps the fresh-chat composition compact, passive and intentional", () => 
     "The rotating joke, quote, or thought must remain visible");
   assert.match(welcome, /<blockquote>/, "The welcome card should keep one calm content surface");
   assert.match(welcome, /<cite>/, "The welcome card should keep its provenance visible");
+  assert.doesNotMatch(composer, /composer-model-status|On this Mac/,
+    "Model metadata must not compete with writing inside the composer");
+  assert.match(header, /header-model-status/);
+  assert.match(header, /On this Mac/);
 
   assert.equal(countMatches(starters, /<button\b/g), 3, "Fresh chat keeps three quiet conversation starters");
   assert.equal(countMatches(starters, /<strong>/g), 3, "Every starter exposes one concise title");

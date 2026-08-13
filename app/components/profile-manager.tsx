@@ -101,7 +101,7 @@ async function saveBlob(bytes: Blob, filename: string) {
 
 export function ProfileManager({ onSwitchingChange, onActiveProfileChange, onRecoveryRequiredChange }: {
   onSwitchingChange?: (switching: boolean) => void;
-  onActiveProfileChange?: (profile: { marker: string; kind: ProfileView["kind"] } | null) => void;
+  onActiveProfileChange?: (profile: { displayName: string; marker: string; kind: ProfileView["kind"] } | null) => void;
   onRecoveryRequiredChange?: (required: boolean) => void;
 }) {
   const [view, setView] = useState<ProfilesView | null>(null);
@@ -171,7 +171,7 @@ export function ProfileManager({ onSwitchingChange, onActiveProfileChange, onRec
   const selected = view?.profiles.find(({ id }) => id === selectedId) ?? active;
 
   useEffect(() => {
-    onActiveProfileChange?.(active ? { marker: `${active.displayName} · ${active.marker}`, kind: active.kind } : null);
+    onActiveProfileChange?.(active ? { displayName: active.displayName, marker: `${active.displayName} · ${active.marker}`, kind: active.kind } : null);
   }, [active, onActiveProfileChange]);
 
   useEffect(() => {

@@ -553,9 +553,7 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 .composer select { height: 38px; border-radius: 9px; font-size: 11px; }
 .composer-actions > button { width: 38px; height: 38px; border-radius: 10px; }
 .composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 4px 1px 45px; }
-.composer-footer > span, .composer-model-status { display: flex; align-items: center; gap: 6px; border: 0; color: var(--muted); background: transparent; font-size: 11px; }
-.composer-model-status { cursor: pointer; }.composer-model-status:hover { color: var(--text); }
-.composer-model-status > span { width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }.composer-model-status.ready > span { background: var(--success); }
+.composer-footer > span { display: flex; align-items: center; gap: 6px; border: 0; color: var(--muted); background: transparent; font-size: 11px; }
 .composer-wrap > small { font-size: 11px; }
 
 /* Profiles are an identity workspace, not entertainment tiles. */
@@ -624,10 +622,6 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 .welcome-note { min-height: 54px; }.welcome-note blockquote { color: var(--muted); font-size: 14px; }
 .composer-wrap.empty-chat .starter-grid { width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0 0 8px; }
 .composer-wrap.empty-chat .starter-grid button { min-height: 38px; justify-content: center; border: 1px solid color-mix(in srgb, var(--line) 75%, transparent); background: color-mix(in srgb, var(--surface) 78%, transparent); }
-.composer-status-row { min-height: 26px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 1px 7px 3px 46px; }
-.composer-status-row > span, .composer-model-status { display: flex; align-items: center; gap: 6px; border: 0; color: var(--muted); background: transparent; font-size: 11px; }
-.composer-model-status { max-width: min(440px, 68%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.composer-model-status:hover { color: var(--text); }.composer-model-status > span { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 12%, transparent); }.composer-model-status.ready > span { background: var(--success); box-shadow: 0 0 9px color-mix(in srgb, var(--success) 70%, transparent); }
 .composer-main-row { align-items: center; }.composer textarea { align-self: center; }.composer-actions { align-self: center; }
 .profile-backdrop { background: radial-gradient(circle at 20% 15%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 32%), radial-gradient(circle at 82% 78%, color-mix(in srgb, var(--canvas-glow) 8%, transparent), transparent 34%), var(--canvas); }
 .profile-dialog[data-mode="choose"], .profile-dialog[data-mode="create"] { height: auto; min-height: min(640px, 100dvh); align-content: center; grid-template-rows: auto auto auto; }
@@ -643,7 +637,7 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 .vault-import-actions { display: flex; gap: 7px; }.vault-import-actions button { min-height: 36px; display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; color: var(--text); background: var(--surface); cursor: pointer; }.vault-import-actions button.primary { color: var(--on-accent); border-color: var(--accent); background: var(--accent); }.vault-import-actions button:disabled { opacity: .45; }
 .vault-import-card ul { display: grid; gap: 3px; margin: 0; padding-left: 18px; color: var(--muted); font-size: 10px; }
 .sql-allow-form { grid-template-columns: 1fr auto; }.sql-allow-form .sql-file-picker { justify-content: flex-start; }.sql-allow-form span { grid-column: 1 / -1; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 720px) { .composer-wrap.empty-chat .starter-grid { grid-template-columns: 1fr; }.composer-status-row { padding-left: 5px; }.profile-dialog[data-mode="choose"], .profile-dialog[data-mode="create"] { min-height: 100dvh; }.profile-cards { gap: 10px; } }
+@media (max-width: 720px) { .composer-wrap.empty-chat .starter-grid { grid-template-columns: 1fr; }.profile-dialog[data-mode="choose"], .profile-dialog[data-mode="create"] { min-height: 100dvh; }.profile-cards { gap: 10px; } }
 
 /* Composer polish: metadata is readable; nearby starters stay visually weightless. */
 .composer-wrap.empty-chat .starter-grid { gap: 14px; margin-bottom: 7px; padding-inline: 6px; }
@@ -653,18 +647,20 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 }
 .composer-wrap.empty-chat .starter-grid button:hover { border: 0; background: var(--surface-raised); box-shadow: none; }
 .composer-wrap.empty-chat .starter-icon { width: 22px; height: 22px; }
-.composer-status-row { min-height: 28px; padding: 2px 7px 4px; }
-.composer .composer-model-status {
-  width: auto !important; max-width: min(520px, 74%); height: 24px !important; min-height: 24px;
-  flex: 0 1 auto; justify-content: flex-start; margin: 0; padding: 0 4px;
-  border: 0; border-radius: 6px; color: var(--text); background: transparent;
-  font-size: 11px; font-weight: 620; line-height: 1; box-shadow: none;
-}
-.composer .composer-model-status:hover { transform: none; color: var(--accent-strong); background: var(--hover); }
-.composer-status-row > span { flex: 0 0 auto; white-space: nowrap; }
 .composer-main-row { min-height: 44px; }
+.header-model-status {
+  min-width: 0; max-width: 340px; min-height: 34px; display: flex; align-items: center; gap: 7px;
+  border: 0; border-radius: 10px; padding: 5px 8px; color: var(--muted); background: transparent;
+  box-shadow: none; cursor: pointer;
+}
+.header-model-status:hover { color: var(--text); background: var(--surface-raised); transform: none; }
+.header-model-light { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 12%, transparent); }
+.header-model-status.ready .header-model-light { background: var(--success); box-shadow: 0 0 8px color-mix(in srgb, var(--success) 68%, transparent); }
+.header-model-status strong { min-width: 0; max-width: 180px; overflow: hidden; color: var(--text); font-size: 11px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+.header-model-status small { display: flex; align-items: center; gap: 4px; border-left: 1px solid var(--line); padding-left: 7px; font-size: 9px; white-space: nowrap; }
 @media (max-width: 520px) {
   .composer-wrap.empty-chat .starter-grid { gap: 2px; }
   .composer-wrap.empty-chat .starter-grid button { justify-content: flex-start; }
-  .composer .composer-model-status { max-width: 62%; }
+  .header-model-status { max-width: 170px; }
+  .header-model-status small { display: none; }
 }
