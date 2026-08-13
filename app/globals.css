@@ -191,6 +191,7 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 .source { display: block; color: var(--muted); font-size: 9px; font-weight: 650; letter-spacing: .06em; margin-bottom: 4px; }
 .message p { white-space: pre-wrap; line-height: 1.42; font-size: 14px; letter-spacing: -.005em; margin: 0; }
 .response-feedback { min-height: 28px; display: flex; align-items: center; gap: 6px; width: min(260px, 100%); margin: 5px 0 0; padding: 0; border: 0; opacity: .48; transition: opacity .16s ease; }
+.visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
 .message-body:hover .response-feedback, .message-body:focus-within .response-feedback, .response-feedback:has(button.selected) { opacity: 1; }
 .response-feedback-options { display: flex; flex-wrap: nowrap; gap: 2px; }
 .response-feedback-options button { width: 28px; height: 28px; min-height: 28px; display: grid; place-items: center; border: 0; border-radius: 8px; padding: 0; color: var(--muted); background: transparent; cursor: pointer; }
