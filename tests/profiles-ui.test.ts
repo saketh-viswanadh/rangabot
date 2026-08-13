@@ -138,7 +138,7 @@ test("rotates the browser profile receipt after every registry generation mutati
   assert.match(manager, /Who’s using RangaBot\?/);
   assert.match(manager, /profileInitials/);
   assert.match(manager, /createPortal/);
-  assert.match(manager, /document\.body/);
+  assert.ok(manager.includes('document.querySelector<HTMLElement>(".app-shell") ?? document.body'));
   assert.match(manager, /Add profile/);
   assert.match(manager, /Profile name/);
   assert.match(manager, /createName\.trim\(\) &&/);
