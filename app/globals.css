@@ -644,3 +644,27 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 .vault-import-card ul { display: grid; gap: 3px; margin: 0; padding-left: 18px; color: var(--muted); font-size: 10px; }
 .sql-allow-form { grid-template-columns: 1fr auto; }.sql-allow-form .sql-file-picker { justify-content: flex-start; }.sql-allow-form span { grid-column: 1 / -1; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 720px) { .composer-wrap.empty-chat .starter-grid { grid-template-columns: 1fr; }.composer-status-row { padding-left: 5px; }.profile-dialog[data-mode="choose"], .profile-dialog[data-mode="create"] { min-height: 100dvh; }.profile-cards { gap: 10px; } }
+
+/* Composer polish: metadata is readable; nearby starters stay visually weightless. */
+.composer-wrap.empty-chat .starter-grid { gap: 14px; margin-bottom: 7px; padding-inline: 6px; }
+.composer-wrap.empty-chat .starter-grid button {
+  min-height: 32px; justify-content: center; border: 0; border-radius: 9px;
+  padding: 5px 8px; background: transparent; box-shadow: none;
+}
+.composer-wrap.empty-chat .starter-grid button:hover { border: 0; background: var(--surface-raised); box-shadow: none; }
+.composer-wrap.empty-chat .starter-icon { width: 22px; height: 22px; }
+.composer-status-row { min-height: 28px; padding: 2px 7px 4px; }
+.composer .composer-model-status {
+  width: auto !important; max-width: min(520px, 74%); height: 24px !important; min-height: 24px;
+  flex: 0 1 auto; justify-content: flex-start; margin: 0; padding: 0 4px;
+  border: 0; border-radius: 6px; color: var(--text); background: transparent;
+  font-size: 11px; font-weight: 620; line-height: 1; box-shadow: none;
+}
+.composer .composer-model-status:hover { transform: none; color: var(--accent-strong); background: var(--hover); }
+.composer-status-row > span { flex: 0 0 auto; white-space: nowrap; }
+.composer-main-row { min-height: 44px; }
+@media (max-width: 520px) {
+  .composer-wrap.empty-chat .starter-grid { gap: 2px; }
+  .composer-wrap.empty-chat .starter-grid button { justify-content: flex-start; }
+  .composer .composer-model-status { max-width: 62%; }
+}
