@@ -29,9 +29,13 @@ test("keeps recent chats visible and supports project drag and drop", () => {
   assert.match(sidebar, /onDragStart/);
   assert.match(sidebar, /onDrop=\{\(event\) => dropConversation\(event, project\.id\)\}/);
   assert.match(sidebar, /onDrop=\{\(event\) => dropConversation\(event, null\)\}/);
-  assert.match(sidebar, /Drag a chat onto a project—or All chats—to move it/);
+  assert.match(sidebar, /Drag chats into a project/);
+  assert.match(sidebar, /className="project-conversations"/);
+  assert.match(sidebar, /const projectConversations = conversations\.filter/);
+  assert.match(page, /conversations\.filter\(\(\{ projectId \}\) => projectId === null\)/);
   assert.match(styles, /\.project-item\.conversation-drop-target/);
   assert.match(styles, /\.history-row\.dragging/);
+  assert.match(styles, /\.project-conversations/);
 });
 
 test("places secondary tools in one compact, disclosed workbench", () => {

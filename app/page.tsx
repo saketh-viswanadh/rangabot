@@ -1466,7 +1466,9 @@ export default function Home() {
 
   const ready = status?.available && status.modelInstalled;
   const profileWorkspaceBlocked = profileSwitching || profileRecoveryRequired;
-  const visibleConversations = conversations;
+  const visibleConversations = conversationSearch
+    ? conversations
+    : conversations.filter(({ projectId }) => projectId === null);
   const activeConversationTitle = conversations.find(({ id }) => id === activeConversationId)?.title ?? "New conversation";
   const weeklyBrief = useMemo(() => parseKnowledgeBrief(knowledgeUpdates?.week ?? ""), [knowledgeUpdates?.week]);
   const unreadKnowledge = knowledgeUpdates?.weekUpdatedAt && knowledgeUpdates.weekUpdatedAt !== readKnowledgeVersion
@@ -1520,11 +1522,23 @@ export default function Home() {
         </nav>
         <section className="projects" aria-label="Projects">
           <div className="project-heading"><span>Projects</span><button type="button" onClick={() => setProjectCreateOpen((open) => !open)} aria-label="Create a project"><CraftIcon name="add" size={14} /></button></div>
-          {projects.map((project) => <div className={`project-item ${activeProjectId === project.id ? "active" : ""} ${conversationDropTarget === project.id ? "conversation-drop-target" : ""}`} key={project.id} onDragOver={(event) => allowConversationDrop(event, project.id)} onDragLeave={() => setConversationDropTarget(null)} onDrop={(event) => dropConversation(event, project.id)}>
-            <button type="button" className="project-row" onClick={() => { setActiveProjectId(project.id); startNewChat(project.id); }}><CraftIcon name="folder" />{project.name}</button>
-            <button type="button" className="project-more" onClick={() => setProjectMenuId((id) => id === project.id ? null : project.id)} aria-label={`More options for ${project.name}`} aria-expanded={projectMenuId === project.id}><CraftIcon name="more" size={14} /></button>
-            {projectMenuId === project.id && <div className="project-menu"><button type="button" onClick={() => { setProjectMenuId(null); void renameProject(project); }}>Rename</button><button type="button" className="danger" onClick={() => { setProjectMenuId(null); void removeProject(project); }}>Delete</button></div>}
-          </div>)}
+          {projects.map((project) => {
+            const projectConversations = conversations.filter(({ projectId }) => projectId === project.id);
+            return <div className={`project-group ${activeProjectId === project.id ? "active" : ""}`} key={project.id}>
+              <div className={`project-item ${activeProjectId === project.id ? "active" : ""} ${conversationDropTarget === project.id ? "conversation-drop-target" : ""}`} onDragOver={(event) => allowConversationDrop(event, project.id)} onDragLeave={() => setConversationDropTarget(null)} onDrop={(event) => dropConversation(event, project.id)}>
+                <button type="button" className="project-row" onClick={() => { setActiveProjectId(project.id); startNewChat(project.id); }}><CraftIcon name="folder" />{project.name}<small>{projectConversations.length || ""}</small></button>
+                <button type="button" className="project-more" onClick={() => setProjectMenuId((id) => id === project.id ? null : project.id)} aria-label={`More options for ${project.name}`} aria-expanded={projectMenuId === project.id}><CraftIcon name="more" size={14} /></button>
+                {projectMenuId === project.id && <div className="project-menu"><button type="button" onClick={() => { setProjectMenuId(null); void renameProject(project); }}>Rename</button><button type="button" className="danger" onClick={() => { setProjectMenuId(null); void removeProject(project); }}>Delete</button></div>}
+              </div>
+              {projectConversations.length > 0 && <div className="project-conversations" aria-label={`${project.name} chats`}>
+                {projectConversations.map((conversation) => <div className={`project-conversation ${conversation.id === activeConversationId ? "active" : ""} ${draggedConversationId === conversation.id ? "dragging" : ""}`} key={conversation.id} draggable onDragStart={(event) => beginConversationDrag(event, conversation)} onDragEnd={() => { setDraggedConversationId(null); setConversationDropTarget(null); }}>
+                  <button type="button" onClick={() => void openConversation(conversation.id)}>{conversation.title}</button>
+                  <button type="button" onClick={() => setConversationMenuId((id) => id === conversation.id ? null : conversation.id)} aria-label={`More options for ${conversation.title}`} aria-expanded={conversationMenuId === conversation.id}><CraftIcon name="more" size={13} /></button>
+                  {conversationMenuId === conversation.id && <div className="conversation-menu project-conversation-menu"><button type="button" onClick={() => void toggleConversationPin(conversation)}>{conversation.pinned ? "Unpin chat" : "Pin chat"}</button><label><span>Move to</span><select value={conversation.projectId ?? ""} onChange={(event) => void moveConversation(conversation, event.target.value || null)}><option value="">All chats</option>{projects.map((targetProject) => <option key={targetProject.id} value={targetProject.id}>{targetProject.name}</option>)}</select></label><button type="button" className="danger" onClick={() => { setConversationMenuId(null); void removeConversation(conversation.id); }}>Delete chat</button></div>}
+                </div>)}
+              </div>}
+            </div>;
+          })}
           {projectCreateOpen && <form className="project-create" onSubmit={(event) => { void createNewProject(event); setProjectCreateOpen(false); }}><input autoFocus value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="Project name" maxLength={60} aria-label="New project name" /><button type="submit" disabled={!newProjectName.trim()} aria-label="Create project"><CraftIcon name="arrow" /></button></form>}
         </section>
         <label className="conversation-search">
@@ -1542,11 +1556,11 @@ export default function Home() {
         )}
         <nav className="history">
           <span className="nav-label">{conversationSearch ? "Search results" : "Recent chats"}</span>
-          {!conversationSearch && conversations.length > 0 && <span className="history-guidance">Drag a chat onto a project—or All chats—to move it.</span>}
+          {!conversationSearch && visibleConversations.length > 0 && projects.length > 0 && <span className="history-guidance">Drag chats into a project.</span>}
           {visibleConversations.length === 0 && <p className="history-empty">{conversationSearch ? "No local conversations match this search." : "Your local conversations will appear here."}</p>}
           {visibleConversations.map((conversation) => (
             <div className={`history-row ${conversation.id === activeConversationId ? "active" : ""} ${conversation.pinned ? "pinned" : ""} ${draggedConversationId === conversation.id ? "dragging" : ""}`} key={conversation.id} draggable onDragStart={(event) => beginConversationDrag(event, conversation)} onDragEnd={() => { setDraggedConversationId(null); setConversationDropTarget(null); }}>
-              <button type="button" onClick={() => void openConversation(conversation.id)}><span>{conversation.title}</span>{conversation.projectId && <small>{projects.find(({ id }) => id === conversation.projectId)?.name ?? "Project"}</small>}</button>
+              <button type="button" onClick={() => void openConversation(conversation.id)}><span>{conversation.title}</span></button>
               <button type="button" className="conversation-more" onClick={() => setConversationMenuId((id) => id === conversation.id ? null : conversation.id)} aria-label={`More options for ${conversation.title}`} aria-expanded={conversationMenuId === conversation.id}><CraftIcon name="more" size={14} /></button>
               {conversationMenuId === conversation.id && <div className="conversation-menu">
                 <button type="button" onClick={() => void toggleConversationPin(conversation)}>{conversation.pinned ? "Unpin chat" : "Pin chat"}</button>
