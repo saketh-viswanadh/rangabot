@@ -386,5 +386,85 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 @media (max-width: 720px) { .profile-trigger { min-height: 44px; max-width: min(150px, 34vw); width: auto; justify-content: flex-start; padding: 0 10px; }.profile-trigger span { min-width: 0; }.profile-trigger > b { display: inline; }.profile-workspace-blocked { inset-block-start: 64px; }.profile-backdrop { align-items: end; padding: max(8px, env(safe-area-inset-top)) 0 0; }.profile-dialog { width: 100%; max-height: calc(100dvh - max(8px, env(safe-area-inset-top))); border-radius: 22px 22px 0 0; }.profile-content { grid-template-columns: 1fr; }.profile-content > nav { grid-auto-flow: column; grid-auto-columns: minmax(145px, 1fr); overflow-x: auto; border-right: 0; border-bottom: .5px solid var(--line); }.profile-create { grid-template-columns: 1fr; }.profile-create h3, .profile-create > button { grid-column: auto; }.word-preview-backdrop { align-items: end; padding: 0; }.word-preview-dialog { width: 100%; max-height: 92dvh; border-radius: 22px 22px 0 0; } }
 
 @media (max-height: 620px) and (min-width: 721px) { .profile-backdrop { place-items: start center; padding: 8px 18px; }.profile-dialog { max-height: calc(100dvh - 16px); }.profile-dialog > header { min-height: 68px; padding: 10px 16px; }.profile-details { padding-block: 12px; } }
+
+/* RangaBot product language: calm hierarchy, one radius system, theme-native brand. */
+.app-shell {
+  --ui-radius-xs: 8px;
+  --ui-radius-sm: 11px;
+  --ui-radius-md: 15px;
+  --ui-radius-lg: 20px;
+  --ui-shadow: 0 16px 40px color-mix(in srgb, #000 12%, transparent);
+  grid-template-columns: 272px minmax(0, 1fr);
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  letter-spacing: -.006em;
+}
+.sidebar {
+  padding: 22px 16px 16px;
+  border-right: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  background: var(--sidebar-surface);
+  backdrop-filter: none;
+}
+.brand { min-height: 42px; gap: 12px; padding: 0 8px 20px; font-size: 17px; font-weight: 720; letter-spacing: -.025em; }
+.brand-mark, .avatar, .welcome-orbit {
+  background: var(--accent);
+  -webkit-mask: url("/ranga/ranga-idle.png") center / contain no-repeat;
+  mask: url("/ranga/ranga-idle.png") center / contain no-repeat;
+  filter: none;
+}
+.brand-mark { width: 32px; height: 32px; opacity: .96; }
+.new-chat { min-height: 44px; border: 0; border-radius: var(--ui-radius-sm); padding: 11px 13px; color: var(--on-accent); background: var(--accent); font-weight: 670; box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 20%, transparent); }
+.new-chat:hover { background: var(--accent-strong); }
+.projects { margin-top: 24px; }
+.project-heading, .nav-label { padding-inline: 9px; color: var(--muted); font-size: 9px; font-weight: 720; letter-spacing: .12em; }
+.project-row, .history-row { border-radius: var(--ui-radius-sm); }
+.project-item.active, .project-item:hover, .project-row.active, .history-row.active { background: color-mix(in srgb, var(--accent) 9%, var(--surface-raised)); }
+.project-create input, .conversation-search { border: 0; border-radius: var(--ui-radius-sm); background: color-mix(in srgb, var(--surface-raised) 78%, transparent); }
+.conversation-search { min-height: 40px; margin-top: 14px; }
+.conversation-tools { grid-template-columns: 1fr 1fr; }
+.conversation-tools button, .conversation-tools a, .conversation-tools span { min-height: 32px; display: grid; place-items: center; border: 0; border-radius: var(--ui-radius-xs); background: color-mix(in srgb, var(--surface-raised) 70%, transparent); }
+.history { margin-top: 18px; }
+.history-row { border: 0; }
+.history-row:hover, .history-row:focus-within { transform: none; border-color: transparent; box-shadow: none; }
+.history:has(.history-row:hover) .history-row:not(:hover), .history:has(.history-row:focus-within) .history-row:not(:focus-within) { opacity: .72; transform: none; }
+.chat-panel, .chat-panel.fresh-chat { background: var(--canvas); }
+.chat-header { height: 76px; padding: 0 26px; border-bottom: 1px solid color-mix(in srgb, var(--line) 68%, transparent); background: color-mix(in srgb, var(--canvas) 92%, transparent); backdrop-filter: blur(20px); }
+.chat-header h1 { font-size: 15px; font-weight: 720; letter-spacing: -.025em; }
+.chat-header p { margin-top: 3px; font-size: 10px; }
+.header-actions { gap: 8px; }
+.profile-trigger, .utility-button, .privacy-indicator, .status { min-height: 36px; border: 1px solid color-mix(in srgb, var(--line) 72%, transparent); border-radius: var(--ui-radius-sm); padding: 8px 10px; background: color-mix(in srgb, var(--surface-raised) 66%, transparent); box-shadow: none; }
+.profile-trigger:hover, .utility-button:hover, .status:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); background: var(--surface-raised); }
+.profile-trigger { max-width: 188px; }
+.status span { width: 6px; height: 6px; }
+.messages { width: min(820px, calc(100% - 48px)); padding-top: 40px; }
+.welcome-state { justify-content: center; padding: 30px 0 54px; }
+.welcome-intro { display: grid; justify-items: center; gap: 16px; margin-bottom: 20px; }
+.ranga-scene { width: 56px; height: 56px; border-radius: 18px; background: color-mix(in srgb, var(--accent) 11%, var(--surface-raised)); }
+.welcome-orbit { width: 38px; height: 38px; animation: none; transform: none; }
+.welcome-orbit::before { display: none; }
+.welcome-state h2 { font-size: clamp(32px, 4vw, 44px); font-weight: 720; letter-spacing: -.055em; }
+.welcome-note { min-height: 56px; }
+.welcome-note blockquote { max-width: 560px; color: var(--muted); font-size: 15px; line-height: 1.55; }
+.welcome-note cite { font-size: 10px; }
+.starter-grid { width: min(680px, 100%); gap: 10px; margin-top: 30px; }
+.starter-grid button { min-height: 58px; border: 1px solid color-mix(in srgb, var(--line) 72%, transparent); border-radius: var(--ui-radius-md); padding: 10px 12px; background: var(--surface); box-shadow: 0 1px 2px #0000000a; }
+.starter-grid button:hover { border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); background: var(--surface-raised); box-shadow: var(--ui-shadow); transform: translateY(-2px); }
+.starter-icon { width: 30px; height: 30px; border-radius: 9px; }
+.composer-wrap, .composer-wrap.empty-chat { width: min(820px, calc(100% - 48px)); padding-bottom: 16px; }
+.composer { border: 1px solid color-mix(in srgb, var(--line) 76%, transparent); border-radius: var(--ui-radius-lg); padding: 8px 9px; background: var(--surface); box-shadow: 0 14px 38px #00000012; }
+.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 62%, var(--line)); box-shadow: 0 0 0 3px var(--accent-soft), 0 16px 42px #00000016; }
+.composer select { border: 0; border-radius: var(--ui-radius-sm); background: var(--surface-raised); }
+.composer button { border-radius: 13px; }
+.message { margin-bottom: 18px; }
+.message:hover, .message:focus-within { background: transparent; }
+.message-body { padding: 11px 15px; }
+.message.assistant .message-body { border: 1px solid color-mix(in srgb, var(--line) 65%, transparent); background: var(--surface); }
+.avatar { background-color: var(--accent); }
+.tools-popover, .welcome-preferences-dialog, .model-manager-dialog, .knowledge-panel, .memory-panel, .sql-panel { border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); border-radius: var(--ui-radius-lg); background: var(--surface); box-shadow: 0 28px 80px #00000030; }
+.profile-backdrop { background: var(--canvas); }
+.profile-dialog > header { background: var(--canvas); }
+.profile-card { color: var(--muted); }
+.profile-avatar { border-radius: 28px; box-shadow: 0 20px 44px #00000026; }
+.profile-card:hover .profile-avatar, .profile-card:focus-visible .profile-avatar { transform: translateY(-4px) scale(1.015); }
+@media (max-width: 1100px) { .app-shell { grid-template-columns: 232px minmax(0, 1fr); }.sidebar { padding-inline: 12px; }.utility-button > span { display: none; } }
 @media (max-width: 520px) { .profile-trigger { max-width: 108px; }.chat-identity > div { display: none; }.profile-gated-header-actions { gap: 4px; } }
 @media (max-width: 520px) { .profile-details { padding: 14px; }.profile-dialog > header { padding: 15px; }.profile-selected { align-items: flex-start; }.profile-selected button { flex: 0 0 auto; }.profile-create { grid-template-columns: 1fr; } }

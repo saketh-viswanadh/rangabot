@@ -1492,7 +1492,7 @@ export default function Home() {
         <header className="chat-header">
           <div className="chat-identity">
             <button ref={mobileNavigationRef} className="mobile-navigation" type="button" onClick={() => setSidebarOpen(true)} aria-label="Open chats and projects" aria-controls="chat-navigation" aria-expanded={sidebarOpen} disabled={profileWorkspaceBlocked}><CraftIcon name="menu" /></button>
-            <div><h1>Rangabot</h1><p>Code, think, and build privately</p></div>
+            <div><h1>RangaBot</h1><p>Your private AI workspace</p></div>
           </div>
           <div className="header-actions">
             {!publicDemo && <ProfileManager onSwitchingChange={setProfileSwitching} onActiveProfileChange={setActiveProfileContext} onRecoveryRequiredChange={setProfileRecoveryRequired} />}
