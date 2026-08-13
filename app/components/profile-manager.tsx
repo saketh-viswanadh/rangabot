@@ -145,6 +145,12 @@ export function ProfileManager({ onSwitchingChange, onActiveProfileChange, onRec
   useEffect(() => { busyRef.current = busy; }, [busy]);
 
   useEffect(() => {
+    if (!message || busy) return;
+    const timer = window.setTimeout(() => setMessage(""), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [busy, message]);
+
+  useEffect(() => {
     if (!open) return;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !busyRef.current) closeProfiles();

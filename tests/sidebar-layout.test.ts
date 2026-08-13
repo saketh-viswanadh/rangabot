@@ -17,7 +17,7 @@ const header = page.slice(chatPanelStart, messagesStart);
 test("keeps the sidebar focused on chats", () => {
   assert.match(sidebar, /Projects/);
   assert.match(sidebar, /conversation-search/);
-  assert.match(sidebar, /className="history"/);
+  assert.match(sidebar, /className=\{`history /);
   assert.doesNotMatch(sidebar, /Knowledge Brief|Path to Mastery|Local memory|Local repositories/);
   assert.doesNotMatch(sidebar, /Cmd K|<kbd>/, "The search control must not advertise an unimplemented shortcut");
 });
@@ -29,13 +29,18 @@ test("keeps recent chats visible and supports project drag and drop", () => {
   assert.match(sidebar, /onDragStart/);
   assert.match(sidebar, /onDrop=\{\(event\) => dropConversation\(event, project\.id\)\}/);
   assert.match(sidebar, /onDrop=\{\(event\) => dropConversation\(event, null\)\}/);
-  assert.match(sidebar, /Drag chats into a project/);
+  assert.doesNotMatch(sidebar, /Drag chats into a project/,
+    "Drag guidance should appear only as contextual drop feedback, not permanent clutter");
+  assert.match(sidebar, /Drop here to remove from project/);
+  assert.match(sidebar, /className=\{`history \$\{conversationDropTarget === "all"/);
+  assert.match(sidebar, /onDrop=\{\(event\) => dropConversation\(event, null\)\}/);
   assert.match(sidebar, /className="project-conversations"/);
   assert.match(sidebar, /const projectConversations = conversations\.filter/);
   assert.match(page, /conversations\.filter\(\(\{ projectId \}\) => projectId === null\)/);
   assert.match(styles, /\.project-item\.conversation-drop-target/);
   assert.match(styles, /\.history-row\.dragging/);
   assert.match(styles, /\.project-conversations/);
+  assert.match(styles, /\.history\.conversation-drop-target/);
 });
 
 test("places secondary tools in one compact, disclosed workbench", () => {

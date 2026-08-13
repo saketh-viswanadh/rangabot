@@ -83,7 +83,7 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 .history { display: grid; gap: 5px; margin-top: 14px; min-height: 0; padding: 0 4px 8px; overflow-x: clip; overflow-y: auto; }
 .nav-label { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .06em; padding: 0 10px 7px; text-transform: uppercase; }
 .history-empty { color: var(--muted); font-size: 11px; line-height: 1.45; margin: 2px 10px; }
-.history-guidance { margin: -3px 10px 4px; color: var(--muted); font-size: 9px; line-height: 1.35; }
+.history.conversation-drop-target { outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent); outline-offset: -2px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .history-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 0 0; align-items: center; border: .5px solid transparent; border-radius: 12px; transform-origin: center; transition: grid-template-columns .24s cubic-bezier(.2,.75,.25,1), transform .24s cubic-bezier(.2,.75,.25,1), opacity .2s ease, background .2s ease, border-color .2s ease, box-shadow .24s ease; }
 .history-row[draggable="true"] { cursor: grab; }.history-row.dragging { opacity: .42; }.history-row[draggable="true"]:active { cursor: grabbing; }
 .history-row:hover, .history-row:focus-within { z-index: 1; grid-template-columns: minmax(0, 1fr) 28px 28px; border-color: var(--line); background: var(--surface-raised); box-shadow: 0 9px 24px #0002; transform: scale(1.02); }

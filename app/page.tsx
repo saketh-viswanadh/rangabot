@@ -875,6 +875,11 @@ export default function Home() {
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [sidebarOpen]);
   useEffect(() => {
+    if (!conversationTransferMessage) return;
+    const timer = window.setTimeout(() => setConversationTransferMessage(""), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [conversationTransferMessage]);
+  useEffect(() => {
     if (!toolsOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -1554,9 +1559,8 @@ export default function Home() {
             Review legacy preferences
           </button>
         )}
-        <nav className="history">
-          <span className="nav-label">{conversationSearch ? "Search results" : "Recent chats"}</span>
-          {!conversationSearch && visibleConversations.length > 0 && projects.length > 0 && <span className="history-guidance">Drag chats into a project.</span>}
+        <nav className={`history ${conversationDropTarget === "all" ? "conversation-drop-target" : ""}`} onDragOver={(event) => allowConversationDrop(event, "all")} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setConversationDropTarget(null); }} onDrop={(event) => dropConversation(event, null)}>
+          <span className="nav-label">{conversationSearch ? "Search results" : conversationDropTarget === "all" ? "Drop here to remove from project" : "Recent chats"}</span>
           {visibleConversations.length === 0 && <p className="history-empty">{conversationSearch ? "No local conversations match this search." : "Your local conversations will appear here."}</p>}
           {visibleConversations.map((conversation) => (
             <div className={`history-row ${conversation.id === activeConversationId ? "active" : ""} ${conversation.pinned ? "pinned" : ""} ${draggedConversationId === conversation.id ? "dragging" : ""}`} key={conversation.id} draggable onDragStart={(event) => beginConversationDrag(event, conversation)} onDragEnd={() => { setDraggedConversationId(null); setConversationDropTarget(null); }}>
