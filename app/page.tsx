@@ -1587,11 +1587,23 @@ export default function Home() {
           </div>
           <div className="header-actions">
             <div className="profile-gated-header-actions" inert={profileWorkspaceBlocked}>
-            <button type="button" className={`header-model-status ${ready ? "ready" : "attention"}`} onClick={() => setModelManagerOpen(true)} aria-label={`${ready ? status.configuredModel : status?.available ? "Choose a model" : "Model engine starting"}. Local model status`}>
-              <span className="header-model-light" aria-hidden="true" />
-              <strong>{ready ? status.configuredModel : status?.available ? "Choose a model" : "Model engine starting"}</strong>
-              <small><CraftIcon name="shield" size={12} /> On this Mac</small>
-            </button>
+            <div className="header-intelligence-controls">
+              <button type="button" className={`header-model-status ${ready ? "ready" : "attention"}`} onClick={() => setModelManagerOpen(true)} aria-label={`${ready ? status.configuredModel : status?.available ? "Choose a model" : "Model engine starting"}. Local model status`}>
+                <span className="header-model-light" aria-hidden="true" />
+                <strong>{ready ? status.configuredModel : status?.available ? "Choose a model" : "Model engine starting"}</strong>
+                <small><CraftIcon name="shield" size={12} /> On this Mac</small>
+              </button>
+              <label className="header-route-control" title={routeDescription}>
+                <span className="sr-only">Response mode</span>
+                <select value={mode} onChange={(event) => setMode(event.target.value as Mode)} aria-label="Response mode" aria-describedby="route-mode-description" disabled={profileWorkspaceBlocked}>
+                  <option value="local">Local only</option>
+                  <option value="smart">Smart</option>
+                  <option value="teach">Teacher</option>
+                  <option value="codex">Codex</option>
+                </select>
+              </label>
+              <span id="route-mode-description" className="sr-only">{routeDescription}</span>
+            </div>
             <div className="tools-menu">
               <button ref={toolsTriggerRef} type="button" className="toolbar-more" onClick={() => setToolsOpen((open) => !open)} aria-label="Conversation and workspace options" aria-expanded={toolsOpen} aria-controls="rangabot-tools"><CraftIcon name="more" size={18} /></button>
               {toolsOpen && <div ref={toolsPopoverRef} id="rangabot-tools" className="tools-popover" role="region" aria-label="Rangabot tools">
@@ -1733,17 +1745,10 @@ export default function Home() {
                 disabled={profileWorkspaceBlocked}
               />
               <div className="composer-actions">
-                <select value={mode} onChange={(event) => setMode(event.target.value as Mode)} aria-label="Routing mode" aria-describedby="route-mode-description" title={routeDescription} disabled={profileWorkspaceBlocked}>
-                  <option value="local">Local only</option>
-                  <option value="smart">Smart</option>
-                  <option value="teach">Teacher</option>
-                  <option value="codex">Codex</option>
-                </select>
-                <span id="route-mode-description" className="sr-only">{routeDescription}</span>
                 {sending ? (
-                  <button className="stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating"><CraftIcon name="stop" /></button>
+                  <button className="composer-submit stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating"><CraftIcon name="stop" /></button>
                 ) : (
-                  <button type="submit" disabled={!input.trim() || conversationLoading || profileWorkspaceBlocked} aria-label="Send"><CraftIcon name="send" /></button>
+                  <button className="composer-submit send-button" type="submit" disabled={!input.trim() || conversationLoading || profileWorkspaceBlocked} aria-label="Send"><CraftIcon name="send" /></button>
                 )}
               </div>
             </div>

@@ -203,6 +203,14 @@ test("keeps the empty-chat composer to one compact row", () => {
   assert.match(composer, /className="composer-main-row"/);
   assert.match(composer, /<textarea[\s\S]*?rows=\{1\}/);
   assert.equal(countMatches(composer, /className="composer-main-row"/g), 1);
+  assert.doesNotMatch(composer, /<select|Routing mode|Response mode/,
+    "Routing policy belongs with model controls, not inside the writing surface");
+  assert.match(page, /className="header-route-control"/);
+  assert.match(page, /aria-label="Response mode"/);
+  assert.match(composer, /className="composer-submit send-button"/);
+  assert.match(composer, /className="composer-submit stop-button"/);
+  assert.match(styles, /\.composer-actions \{[^}]*place-items: center/);
+  assert.match(styles, /\.composer button \{[^}]*place-items: center/);
 });
 
 test("never places welcome preferences or a preferred name in chat request payloads", () => {
