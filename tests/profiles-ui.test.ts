@@ -100,7 +100,7 @@ test("a new document replaces stale session storage from the newly issued profil
 
 test("keeps the active profile visible and blocks chat admission during switching", () => {
   assert.match(page, /<ProfileManager onSwitchingChange=\{setProfileSwitching\}/);
-  assert.match(manager, /Active: <strong>\{marker\}<\/strong>/);
+  assert.match(manager, /profile\.active \? "Active" : profile\.marker/);
   assert.match(manager, /window\.location\.reload\(\)/);
   assert.match(manager, /role="status" aria-live="polite" aria-atomic="true"/);
   assert.match(manager, /recoveryRequired\?: boolean/);
@@ -135,6 +135,11 @@ test("rotates the browser profile receipt after every registry generation mutati
   assert.equal((manager.match(/adoptLocalProfileSession\(response\)/g) ?? []).length, 7);
   assert.match(manager, /Set up your protected Default profile/);
   assert.match(manager, /Testing · Temporary/);
+  assert.match(manager, /Who’s using RangaBot\?/);
+  assert.match(manager, /profileInitials/);
+  assert.match(manager, /Add profile/);
+  assert.match(manager, /Profile name/);
+  assert.match(manager, /createName\.trim\(\) &&/);
   assert.match(manager, /Enter the exact profile name to confirm/);
 });
 

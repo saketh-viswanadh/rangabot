@@ -43,6 +43,11 @@ function profileFrom(view: ProfilesView | null) {
   return view?.profiles.find(({ active }) => active) ?? null;
 }
 
+function profileInitials(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? `${words[0][0]}${words.at(-1)?.[0] ?? ""}` : words[0]?.slice(0, 2) ?? "RB").toUpperCase();
+}
+
 async function jsonResponse<T>(response: Response) {
   const data = await response.json() as T & { error?: string };
   if (!response.ok) throw new Error(data.error ?? "The local profile operation failed.");
@@ -99,6 +104,7 @@ export function ProfileManager({ onSwitchingChange, onActiveProfileChange, onRec
 }) {
   const [view, setView] = useState<ProfilesView | null>(null);
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"choose" | "create" | "manage">("choose");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -172,6 +178,8 @@ export function ProfileManager({ onSwitchingChange, onActiveProfileChange, onRec
 
   function closeProfiles() {
     setOpen(false);
+    setMode("choose");
+    setCreateName("");
     requestAnimationFrame(() => triggerRef.current?.focus());
   }
 
@@ -218,7 +226,7 @@ export function ProfileManager({ onSwitchingChange, onActiveProfileChange, onRec
       });
       const data = await jsonResponse<{ profiles: ProfilesView; profile: ProfileView }>(response);
       adoptLocalProfileSession(response);
-      setView(data.profiles); setSelectedId(data.profile.id); setCreateName(""); setRenameName("");
+      setView(data.profiles); setSelectedId(data.profile.id); setCreateName(""); setRenameName(""); setMode("choose");
       setMessage(`${data.profile.displayName} was created empty and isolated.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "The profile was not created."); }
     finally { setBusy(false); }
@@ -325,12 +333,12 @@ export function ProfileManager({ onSwitchingChange, onActiveProfileChange, onRec
 
   const marker = active ? `${active.displayName} · ${active.marker}` : view?.setupRequired ? "Previous setup · Profiles not ready" : "Profiles unavailable";
   return <>
-    <button ref={triggerRef} type="button" className={`profile-trigger ${view?.recoveryRequired || view?.registryRecoveryRequired ? "recovery-required" : ""}`} onClick={() => setOpen(true)} aria-label={`Open Profiles. Active: ${marker}${view?.recoveryRequired || view?.registryRecoveryRequired ? ". Recovery required" : ""}`} disabled={loading}>
+    <button ref={triggerRef} type="button" className={`profile-trigger ${view?.recoveryRequired || view?.registryRecoveryRequired ? "recovery-required" : ""}`} onClick={() => { setMode("choose"); setOpen(true); }} aria-label={`Open Profiles. Active: ${marker}${view?.recoveryRequired || view?.registryRecoveryRequired ? ". Recovery required" : ""}`} disabled={loading}>
       <CraftIcon name="shield" size={15} /><span>{marker}</span>{(view?.recoveryRequired || view?.registryRecoveryRequired) && <b>Recovery</b>}
     </button>
     {open && <div className="profile-backdrop" onMouseDown={() => { if (!busy) closeProfiles(); }}>
       <section ref={dialogRef} className="profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-title" aria-busy={busy} onMouseDown={(event) => event.stopPropagation()}>
-        <header><div><span>Local workspaces · not accounts</span><h2 id="profile-title">RangaBot Profiles</h2><p>Active: <strong>{marker}</strong></p></div><button ref={closeRef} type="button" onClick={closeProfiles} disabled={busy} aria-label="Close Profiles"><CraftIcon name="close" /></button></header>
+        <header className="profile-dialog-header"><div><span>Local workspaces · not accounts</span><h2 id="profile-title">{mode === "choose" ? "Who’s using RangaBot?" : mode === "create" ? "Add a profile" : "Manage profiles"}</h2><p>{mode === "choose" ? "Choose a private workspace" : `Active: ${marker}`}</p></div><button ref={closeRef} type="button" onClick={closeProfiles} disabled={busy} aria-label="Close Profiles"><CraftIcon name="close" /></button></header>
         {(view?.recoveryRequired || view?.registryRecoveryRequired) && <div className="profile-recovery-warning" role="status" aria-live="polite"><strong>Profile Recovery required.</strong> {view.registryRecoveryRequired ? "RangaBot opened the last validated registry copy without changing it. " : "A local profile operation did not finish. "}{view.operationRecovery ? `${view.operationRecovery.operation.replaceAll("-", " ")} stopped at ${view.operationRecovery.phase.replaceAll("-", " ")}. ` : ""}Normal workspace access stays blocked until you explicitly recover the validated state. <button type="button" onClick={() => void recoverProfiles()} disabled={busy}>Recover validated profile state</button></div>}
         {!(view?.recoveryRequired || view?.registryRecoveryRequired) && (view?.setupRequired ? <section className="profile-setup">
           <h3>Set up your protected Default profile</h3>
@@ -338,7 +346,25 @@ export function ProfileManager({ onSwitchingChange, onActiveProfileChange, onRec
           <ul><li>RangaBot first inventories, backs up, copies, and verifies the workspace.</li><li>Your previous setup is not replaced until the verified cutover.</li><li>Installed Ollama model weights stay shared in place and are never copied.</li></ul>
           <button type="button" onClick={() => void setUpDefault()} disabled={busy}>Set up Default profile</button>
           <button type="button" className="secondary" onClick={closeProfiles} disabled={busy}>Continue with previous setup</button>
-        </section> : view && <div className="profile-content">
+        </section> : view && mode === "choose" ? <section className="profile-chooser" aria-label="Choose a profile">
+          <div className="profile-cards">
+            {view.profiles.map((profile) => <button key={profile.id} type="button" className={`profile-card ${profile.active ? "active" : ""}`} onClick={() => profile.active ? closeProfiles() : void switchTo(profile)} disabled={busy} aria-label={`${profile.displayName}, ${profile.marker}${profile.active ? ", active" : ""}`}>
+              <span className="profile-avatar" aria-hidden="true">{profileInitials(profile.displayName)}</span>
+              <strong>{profile.displayName}</strong>
+              <small>{profile.active ? "Active" : profile.marker}</small>
+            </button>)}
+            <button type="button" className="profile-card profile-add-card" onClick={() => { setCreateName(""); setCreateKind("personal"); setMode("create"); }} disabled={busy}>
+              <span className="profile-avatar" aria-hidden="true">+</span><strong>Add profile</strong><small>Empty workspace</small>
+            </button>
+          </div>
+          <button type="button" className="profile-manage-link" onClick={() => setMode("manage")}>Manage profiles</button>
+        </section> : view && mode === "create" ? <form className="profile-create-screen" onSubmit={create}>
+          <button type="button" className="profile-back" onClick={() => setMode("choose")} disabled={busy}>← Back</button>
+          <span className="profile-avatar profile-avatar-preview" aria-hidden="true">{profileInitials(createName)}</span>
+          <label><span>Profile name</span><input autoFocus value={createName} onChange={(event) => setCreateName(event.target.value)} maxLength={64} placeholder="Name" required /></label>
+          {createName.trim() && <label className="profile-kind-choice"><span>Workspace type</span><select value={createKind} onChange={(event) => setCreateKind(event.target.value as "personal" | "testing")}><option value="personal">Personal</option><option value="testing">Testing · Temporary</option></select><small>Testing profiles accept synthetic data only.</small></label>}
+          <button type="submit" className="profile-primary-action" disabled={busy || !createName.trim()}>Create profile</button>
+        </form> : view && <div className="profile-content">
           <nav aria-label="Local profiles">
             {view.profiles.map((profile) => <button key={profile.id} type="button" aria-current={profile.active ? "true" : undefined} className={profile.id === selected?.id ? "selected" : ""} onClick={() => { setSelectedId(profile.id); setRenameName(""); setScope(null); setDestructiveAction(null); }}>
               <span><strong>{profile.displayName}</strong><small>{profile.marker}</small></span>{profile.active && <b>Active</b>}
@@ -351,7 +377,7 @@ export function ProfileManager({ onSwitchingChange, onActiveProfileChange, onRec
               <label><span>Display name</span><div><input value={renameName} onChange={(event) => setRenameName(event.target.value)} placeholder={selected.displayName} maxLength={64} /><button type="button" onClick={() => void rename()} disabled={busy || !renameName.trim()}>Rename</button></div><small>Renaming never changes the opaque profile identity.</small></label>
               <div className="profile-actions">{view.profileTransferAllowed && <button type="button" onClick={() => void backup(selected)} disabled={busy}>Back up profile</button>}{selected.kind === "testing" && !selected.active && <button type="button" onClick={() => void reviewDestructive("reset", selected)} disabled={busy}>Reset Testing profile</button>}{!selected.protected && !selected.active && <button type="button" className="danger" onClick={() => void reviewDestructive("delete", selected)} disabled={busy}>Delete profile</button>}</div>
             </>}
-            <form className="profile-create" onSubmit={create}><h3>Create an empty profile</h3><label><span>Name</span><input value={createName} onChange={(event) => setCreateName(event.target.value)} maxLength={64} required /></label><label><span>Type</span><select value={createKind} onChange={(event) => setCreateKind(event.target.value as "personal" | "testing")}><option value="personal">Personal</option><option value="testing">Testing · Temporary</option></select></label><button type="submit" disabled={busy || !createName.trim()}>Create isolated profile</button></form>
+            <button type="button" className="profile-back" onClick={() => setMode("choose")}>← Back to profiles</button>
             {view.profileTransferAllowed ? <div className="profile-transfer"><button type="button" onClick={() => restoreRef.current?.click()} disabled={busy}>Restore backup as new profile</button><input ref={restoreRef} type="file" accept="application/vnd.rangabot.profile-backup+json,application/json,.json" onChange={(event) => void restore(event)} /><small>Restore validates before mutation. Credentials and model weights are not restored.</small></div> : <p className="profile-testing-warning" role="note">Backup and restore file access is disabled in this sealed verification build.</p>}
           </div>
         </div>)}
