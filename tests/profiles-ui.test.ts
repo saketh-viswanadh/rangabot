@@ -135,7 +135,8 @@ test("rotates the browser profile receipt after every registry generation mutati
   assert.equal((manager.match(/adoptLocalProfileSession\(response\)/g) ?? []).length, 7);
   assert.match(manager, /Set up your protected Default profile/);
   assert.match(manager, /Testing · Temporary/);
-  assert.match(manager, /Who’s using RangaBot\?/);
+  assert.match(manager, /Choose a profile/);
+  assert.match(manager, /Each profile keeps its chats, memory, and settings separate/);
   assert.match(manager, /profileInitials/);
   assert.match(manager, /createPortal/);
   assert.match(manager, /data-appearance=\{applicationShell\?\.dataset\.appearance\}/);

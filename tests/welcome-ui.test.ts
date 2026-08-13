@@ -90,8 +90,8 @@ test("keeps the fresh-chat composition compact, passive and intentional", () => 
   assert.match(welcome, /<blockquote>/, "The welcome card should keep one calm content surface");
   assert.match(welcome, /<cite>/, "The welcome card should keep its provenance visible");
 
-  assert.equal(countMatches(starters, /<button\b/g), 4, "Fresh chat keeps exactly four conversation starters");
-  assert.equal(countMatches(starters, /<strong>/g), 4, "Every starter exposes one concise title");
+  assert.equal(countMatches(starters, /<button\b/g), 3, "Fresh chat keeps three quiet conversation starters");
+  assert.equal(countMatches(starters, /<strong>/g), 3, "Every starter exposes one concise title");
   assert.doesNotMatch(starters, /<small>/, "Starter cards must not restore explanatory subtitles");
   assert.doesNotMatch(starters, /name="chevron"/, "Starter cards must not restore decorative chevrons");
 });
@@ -108,11 +108,11 @@ test("keeps fresh-chat content mode exclusively in the local Preferences dialog"
 });
 
 test("keeps appearance in persistent Preferences rather than the local workbench", () => {
-  const tools = sliceBetween(page, 'className="tools-menu"', "</div>\n            <button className={`status");
+  const tools = sliceBetween(page, 'className="tools-menu"', "</div>\n            </div>");
 
-  assert.match(page, /aria-label="Open Preferences"/);
-  assert.match(page, /aria-label="Open Tools"/,
-    "The compact mobile Tools icon must retain a programmatic name when visible text is hidden");
+  assert.match(page, /> Settings<\/button>/);
+  assert.match(page, /aria-label="Conversation and workspace options"/,
+    "The compact workspace menu must retain a programmatic name");
   assert.match(page, /<WelcomePreferencesDialog[\s\S]*?appearance=\{appearance\}[\s\S]*?palette=\{palette\}/);
   assert.doesNotMatch(tools, /tool-appearance|Appearance mode|Colour theme/,
     "Tools should contain capabilities and permissions, not personal appearance settings");

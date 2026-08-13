@@ -23,12 +23,13 @@ test("keeps the sidebar focused on chats", () => {
 
 test("places secondary tools in one compact, disclosed workbench", () => {
   assert.match(header, /className="tools-menu"/);
-  assert.match(header, />Brief</);
+  assert.match(header, /aria-label="Conversation and workspace options"/);
+  assert.match(header, /<strong>Knowledge<\/strong>/);
   assert.match(header, /<strong>Memory<\/strong>/);
-  assert.match(header, /<strong>Mastery<\/strong>/);
-  assert.match(header, /Local folders/);
+  assert.match(header, /<strong>Models<\/strong>/);
+  assert.match(header, /> Folders</);
   assert.match(header, /tools-popover/);
-  assert.match(header, /privacy-indicator/);
+  assert.match(header, /> Settings</);
 });
 
 test("keeps chats and projects reachable through a real mobile drawer", () => {

@@ -240,6 +240,8 @@ export default function Home() {
   const [bookWelcomeLoading, setBookWelcomeLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [projectCreateOpen, setProjectCreateOpen] = useState(false);
+  const [projectMenuId, setProjectMenuId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("smart");
   const [appearance, setAppearance] = useState<Appearance>("dark");
@@ -1400,6 +1402,7 @@ export default function Home() {
   const ready = status?.available && status.modelInstalled;
   const profileWorkspaceBlocked = profileSwitching || profileRecoveryRequired;
   const visibleConversations = conversations;
+  const activeConversationTitle = conversations.find(({ id }) => id === activeConversationId)?.title ?? "New conversation";
   const weeklyBrief = useMemo(() => parseKnowledgeBrief(knowledgeUpdates?.week ?? ""), [knowledgeUpdates?.week]);
   const unreadKnowledge = knowledgeUpdates?.weekUpdatedAt && knowledgeUpdates.weekUpdatedAt !== readKnowledgeVersion
     ? weeklyBrief.length
@@ -1445,28 +1448,26 @@ export default function Home() {
       <aside id="chat-navigation" className={`sidebar ${sidebarOpen ? "open" : ""}`} inert={profileWorkspaceBlocked}>
         <div className="brand"><span className="brand-mark" aria-hidden="true" /><span>Rangabot</span><button ref={sidebarCloseRef} className="sidebar-close" type="button" onClick={() => { setSidebarOpen(false); requestAnimationFrame(() => mobileNavigationRef.current?.focus()); }} aria-label="Close chat navigation"><CraftIcon name="close" /></button></div>
         <button className="new-chat" onClick={() => startNewChat()}><CraftIcon name="add" /> New chat</button>
+        <button type="button" className="sidebar-search-trigger" onClick={() => document.querySelector<HTMLInputElement>(".conversation-search input")?.focus()}><span><CraftIcon name="search" size={16} /> Search</span><kbd>Cmd K</kbd></button>
+        <nav className="sidebar-destinations" aria-label="Workspace">
+          <button type="button" className="active" onClick={() => startNewChat(activeProjectId)}><CraftIcon name="chat" size={17} /> Chats</button>
+          <button type="button" onClick={() => openKnowledgeBrief("vault")}><CraftIcon name="knowledge" size={17} /> Library</button>
+        </nav>
         <section className="projects" aria-label="Projects">
-          <div className="project-heading"><span>Projects</span><span>{projects.length}</span></div>
-          <button type="button" className={`project-row ${activeProjectId === null ? "active" : ""}`} onClick={() => { setActiveProjectId(null); startNewChat(null); }}><CraftIcon name="chat" /> All chats</button>
+          <div className="project-heading"><span>Projects</span><button type="button" onClick={() => setProjectCreateOpen((open) => !open)} aria-label="Create a project"><CraftIcon name="add" size={14} /></button></div>
           {projects.map((project) => <div className={`project-item ${activeProjectId === project.id ? "active" : ""}`} key={project.id}>
             <button type="button" className="project-row" onClick={() => { setActiveProjectId(project.id); startNewChat(project.id); }}><CraftIcon name="folder" />{project.name}</button>
-            <button type="button" className="project-more" onClick={() => void renameProject(project)} aria-label={`Rename ${project.name}`}><CraftIcon name="edit" size={14} /></button>
-            <button type="button" className="project-more" onClick={() => void removeProject(project)} aria-label={`Delete ${project.name}`}><CraftIcon name="trash" size={14} /></button>
+            <button type="button" className="project-more" onClick={() => setProjectMenuId((id) => id === project.id ? null : project.id)} aria-label={`More options for ${project.name}`} aria-expanded={projectMenuId === project.id}><CraftIcon name="more" size={14} /></button>
+            {projectMenuId === project.id && <div className="project-menu"><button type="button" onClick={() => { setProjectMenuId(null); void renameProject(project); }}>Rename</button><button type="button" className="danger" onClick={() => { setProjectMenuId(null); void removeProject(project); }}>Delete</button></div>}
           </div>)}
-          <form className="project-create" onSubmit={createNewProject}><input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="New project" maxLength={60} aria-label="New project name" /><button type="submit" disabled={!newProjectName.trim()} aria-label="Create project"><CraftIcon name="add" /></button></form>
+          {projectCreateOpen && <form className="project-create" onSubmit={(event) => { void createNewProject(event); setProjectCreateOpen(false); }}><input autoFocus value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="Project name" maxLength={60} aria-label="New project name" /><button type="submit" disabled={!newProjectName.trim()} aria-label="Create project"><CraftIcon name="arrow" /></button></form>}
         </section>
         <label className="conversation-search">
           <CraftIcon name="search" size={15} />
           <input value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Search chats" aria-label="Search conversations" maxLength={120} />
           {conversationSearch && <button type="button" onClick={() => setConversationSearch("")} aria-label="Clear conversation search"><CraftIcon name="close" size={13} /></button>}
         </label>
-        <div className="conversation-tools">
-          <button type="button" onClick={() => conversationImportRef.current?.click()}>Import .md</button>
-          {activeConversationId
-            ? <button type="button" onClick={() => void exportOpenConversation()} disabled={profileSwitching}>Export open chat</button>
-            : <span aria-disabled="true">Export open chat</span>}
-          <input ref={conversationImportRef} type="file" accept=".md,text/markdown,text/plain" onChange={(event) => void importConversation(event)} />
-        </div>
+        <input ref={conversationImportRef} className="visually-hidden-file" type="file" accept=".md,text/markdown,text/plain" onChange={(event) => void importConversation(event)} />
         {conversationTransferMessage && <p className="conversation-transfer-status" role="status">{conversationTransferMessage}</p>}
         {preferencesMessage && <p className="conversation-transfer-status" role="status" aria-live="polite">{preferencesMessage}</p>}
         {legacyPreferencesPreview && (
@@ -1485,6 +1486,7 @@ export default function Home() {
             </div>
           ))}
         </nav>
+        {!publicDemo && <div className="sidebar-profile"><ProfileManager onSwitchingChange={setProfileSwitching} onActiveProfileChange={setActiveProfileContext} onRecoveryRequiredChange={setProfileRecoveryRequired} /></div>}
       </aside>
       {sidebarOpen && <button className="sidebar-backdrop" type="button" onClick={() => setSidebarOpen(false)} aria-label="Dismiss chat navigation" />}
 
@@ -1492,47 +1494,38 @@ export default function Home() {
         <header className="chat-header">
           <div className="chat-identity">
             <button ref={mobileNavigationRef} className="mobile-navigation" type="button" onClick={() => setSidebarOpen(true)} aria-label="Open chats and projects" aria-controls="chat-navigation" aria-expanded={sidebarOpen} disabled={profileWorkspaceBlocked}><CraftIcon name="menu" /></button>
-            <div><h1>RangaBot</h1><p>Your private AI workspace</p></div>
+            <div><h1>{activeConversationTitle}</h1><p>{activeProjectId ? projects.find(({ id }) => id === activeProjectId)?.name ?? "Project" : "Chats"}</p></div>
           </div>
           <div className="header-actions">
-            {!publicDemo && <ProfileManager onSwitchingChange={setProfileSwitching} onActiveProfileChange={setActiveProfileContext} onRecoveryRequiredChange={setProfileRecoveryRequired} />}
             <div className="profile-gated-header-actions" inert={profileWorkspaceBlocked}>
-            <button type="button" className="utility-button brief-button" onClick={() => openKnowledgeBrief()} aria-label={`Open Knowledge Brief${unreadKnowledge ? `, ${unreadKnowledge} new items` : ""}`}>
-              <CraftIcon name="knowledge" size={15} /><span>Brief</span>{unreadKnowledge > 0 && <b>{unreadKnowledge}</b>}
-            </button>
-            <button ref={preferencesTriggerRef} type="button" className="utility-button preferences-button" onClick={() => { setToolsOpen(false); setWelcomePreferencesOpen(true); }} aria-label="Open Preferences">
-              <CraftIcon name="settings" size={15} /><span>Preferences</span>
-            </button>
             <div className="tools-menu">
-              <button ref={toolsTriggerRef} type="button" className="utility-button" onClick={() => setToolsOpen((open) => !open)} aria-label="Open Tools" aria-expanded={toolsOpen} aria-controls="rangabot-tools"><CraftIcon name="tune" size={15} /><span>Tools</span></button>
+              <button ref={toolsTriggerRef} type="button" className="toolbar-more" onClick={() => setToolsOpen((open) => !open)} aria-label="Conversation and workspace options" aria-expanded={toolsOpen} aria-controls="rangabot-tools"><CraftIcon name="more" size={18} /></button>
               {toolsOpen && <div ref={toolsPopoverRef} id="rangabot-tools" className="tools-popover" role="region" aria-label="Rangabot tools">
-                <div className="tools-popover-heading"><div><strong>Local workbench</strong><small>Choose what Rangabot may use</small></div><span className="privacy-indicator"><CraftIcon name="shield" size={14} /> Local</span></div>
+                <div className="tools-popover-heading"><div><strong>Workspace</strong><small>Actions for this private profile</small></div></div>
                 <nav className="tools-grid" aria-label="Workbench tools">
+                  <button type="button" onClick={() => { openKnowledgeBrief(); setToolsOpen(false); }}><CraftIcon name="knowledge" /><span><strong>Knowledge</strong><small>{unreadKnowledge ? `${unreadKnowledge} new updates` : "Your local library"}</small></span></button>
                   <button type="button" onClick={() => { setMemoryPanelOpen(true); setToolsOpen(false); }}><CraftIcon name="memory" /><span><strong>Memory</strong><small>Review saved facts</small></span></button>
-                  <button type="button" onClick={() => { setSqlPanelOpen(true); setToolsOpen(false); }}><CraftIcon name="analysis" /><span><strong>Analyze</strong><small>Use approved local data</small></span></button>
-                  <a href="/mastery"><CraftIcon name="mastery" /><span><strong>Mastery</strong><small>Evidence-backed roadmap</small></span></a>
+                  <button type="button" onClick={() => { setSqlPanelOpen(true); setToolsOpen(false); }}><CraftIcon name="analysis" /><span><strong>Data</strong><small>Analyze approved files</small></span></button>
+                  <button type="button" onClick={() => { setModelManagerOpen(true); setToolsOpen(false); }}><CraftIcon name="model" /><span><strong>Models</strong><small>Choose local intelligence</small></span></button>
                 </nav>
                 <section className="tools-folders" aria-label="Allowed local folders">
-                  <div className="tools-section-heading"><span><CraftIcon name="folder" size={15} /> Local folders</span><small>{allowedRepositories.length} allowed</small></div>
+                  <div className="tools-section-heading"><span><CraftIcon name="folder" size={15} /> Folders</span><small>{allowedRepositories.length} allowed</small></div>
                   <div className="repository-popover-list">
-                    {allowedRepositories.map((repository) => <div className="repository-item" key={repository.id} title={repository.path}>
-                      <button type="button" className="repository-open" onClick={() => { openRepositorySearch(repository); setToolsOpen(false); }} aria-label={`Search ${repository.name}`}><CraftIcon name="search" /><span><strong>{repository.name}</strong><small>{repository.path}</small></span></button>
+                    {allowedRepositories.map((repository) => <div className="repository-item" key={repository.id}>
+                      <button type="button" className="repository-open" onClick={() => { openRepositorySearch(repository); setToolsOpen(false); }}><span><strong>{repository.name}</strong><small>Search approved files</small></span></button>
                       <button type="button" onClick={() => void revokeLocalRepository(repository)} aria-label={`Revoke ${repository.name}`}><CraftIcon name="close" size={14} /></button>
                     </div>)}
-                    {!allowedRepositories.length && <p>No folders allowed yet.</p>}
+                    {!allowedRepositories.length && <p>No folders approved.</p>}
                   </div>
-                  <form className="repository-create" onSubmit={allowLocalRepository}>
-                    <input value={repositoryPath} onChange={(event) => setRepositoryPath(event.target.value)} placeholder="/absolute/path/to/project" aria-label="Repository folder path" maxLength={1024} />
-                    <button type="submit" disabled={!repositoryPath.trim()}>Allow</button>
-                  </form>
-                  <p className="repository-disclosure">Approval is stored locally. Files are read only after you choose a folder and search it.</p>
+                  <form className="repository-create" onSubmit={allowLocalRepository}><input value={repositoryPath} onChange={(event) => setRepositoryPath(event.target.value)} placeholder="Folder path" aria-label="Repository folder path" maxLength={1024} /><button type="submit" disabled={!repositoryPath.trim()}>Allow</button></form>
                   {repositoryMessage && <p className="repository-status" role="status">{repositoryMessage}</p>}
                 </section>
+                <div className="workspace-menu-divider" />
+                <button type="button" className="workspace-menu-row" onClick={() => { setWelcomePreferencesOpen(true); setToolsOpen(false); }}><CraftIcon name="settings" size={16} /> Settings</button>
+                <button type="button" className="workspace-menu-row" onClick={() => { conversationImportRef.current?.click(); setToolsOpen(false); }}><CraftIcon name="arrow" size={16} /> Import conversation</button>
+                {activeConversationId && <button type="button" className="workspace-menu-row" onClick={() => { void exportOpenConversation(); setToolsOpen(false); }}><CraftIcon name="document" size={16} /> Export conversation</button>}
               </div>}
             </div>
-            <button className={`status ${ready ? "ready" : "offline"}`} onClick={() => setModelManagerOpen(true)} title="Open Model Manager">
-              <span /> {ready ? `${status.configuredModel} ready` : status?.available ? "Model not installed" : "Ollama offline"}
-            </button>
             </div>
           </div>
         </header>
@@ -1561,7 +1554,7 @@ export default function Home() {
                 </div>
               </div>
               {welcomePreferencesReady && (
-                <div className={`welcome-note ${welcomePreferences.mode === "books" ? "book-fact" : ""}`} aria-live="polite">
+                <div className={`welcome-note welcome-inspiration ${welcomePreferences.mode === "books" ? "book-fact" : ""}`} aria-live="polite">
                   {welcomePreferences.mode === "books" ? (
                     bookWelcomeLoading ? <p className="welcome-note-loading">Choosing a cited sentence from your local books…</p>
                       : bookWelcomeFact ? <><blockquote>{bookWelcomeFact.text}</blockquote><cite>{bookWelcomeCitation}</cite></>
@@ -1581,10 +1574,6 @@ export default function Home() {
                 <button type="button" onClick={() => chooseStarter("Help me write this email. Ask me for the audience, purpose, tone, and key details before drafting: ")} aria-label="Write an email locally" title="Draft an email in the right tone">
                   <span className="starter-icon mail"><CraftIcon name="mail" /></span>
                   <strong>Write an email</strong>
-                </button>
-                <button type="button" onClick={() => chooseStarter("I want to create a professional Word document. Please ask me what you need before creating it: ")} aria-label="Create a Word document locally" title="Create and preview a Word document">
-                  <span className="starter-icon document"><CraftIcon name="document" /></span>
-                  <strong>Create a document</strong>
                 </button>
               </div>
             </section>
@@ -1644,6 +1633,7 @@ export default function Home() {
             {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
             {attachedDataset && <div className="composer-code-context"><span><strong>Local data available to this chat</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>This attachment is remembered for this chat. Analytical requests may run bounded read-only SQL locally; expand the calculation trace to inspect it.</small></span><button type="button" onClick={() => void attachDatasetToChat(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
             <div className="composer-main-row">
+              <button type="button" className="composer-add" onClick={() => { setSqlPanelOpen(true); }} aria-label="Add local context"><CraftIcon name="add" size={18} /></button>
               <textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
@@ -1672,8 +1662,12 @@ export default function Home() {
                 )}
               </div>
             </div>
+            <div className="composer-footer">
+              <button type="button" className={`composer-model-status ${ready ? "ready" : "attention"}`} onClick={() => setModelManagerOpen(true)}><span />{ready ? status.configuredModel : status?.available ? "Choose a model" : "Model engine starting"}</button>
+              <span><CraftIcon name="shield" size={13} /> On this Mac</span>
+            </div>
           </form>
-          <small>Local models can make mistakes. Review important code and decisions.</small>
+          <small>RangaBot can make mistakes. Review important work.</small>
         </div>
       </section>
 
