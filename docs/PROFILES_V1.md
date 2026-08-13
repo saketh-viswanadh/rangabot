@@ -259,7 +259,7 @@ runtime-compatibility policy, not a release or signing claim.
 For this candidate line, `sourceBaseCommit` is the original merged source
 `8b161635f79ac6a572524ba22e3af7364fe08a5b` and
 `sourceBaselineCommit` is the Profiles behavior commit
-`01ffb299719605e46d1ecbba66d06cc2665a9fff`. The generated v2 manifest records
+`53b8d906bef9bbb71911975b8bfbdeefdeb4812f`. The generated v2 manifest records
 the exact clean packaging HEAD as `sourceCommit`; the installed verifier uses
 that value as its commit identity and does not require `.git`.
 
