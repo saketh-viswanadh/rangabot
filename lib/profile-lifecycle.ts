@@ -217,6 +217,7 @@ function validatePrivateTree(root: string, container: string, options: { empty?:
   const safeRoot = requirePrivateDirectory(root, container);
   const seenPortable = new Set<string>();
   let entries = 0;
+  let sizeBytes = 0;
   const visit = (directory: string) => {
     const children = readdirSync(directory, { withFileTypes: true });
     const localNames = new Set<string>();
@@ -248,18 +249,19 @@ function validatePrivateTree(root: string, container: string, options: { empty?:
         throw new ProfileLifecycleError("invalid", "Profile Recovery refuses non-regular or hard-linked entries.");
       } else if (process.platform !== "win32" && (status.mode & 0o077) !== 0) {
         throw new ProfileLifecycleError("invalid", "Profile Recovery found a non-private file.");
-      }
+      } else sizeBytes += status.size;
     }
   };
   visit(safeRoot);
   if (options.empty && entries !== 0) throw new ProfileLifecycleError("invalid", "Profile Recovery will only discard an empty app-created profile.");
-  return Object.freeze({ root: safeRoot, entries });
+  return Object.freeze({ root: safeRoot, entries, sizeBytes });
 }
 
 function safeRemovePrivateTree(root: string, container: string, options: { empty?: boolean } = {}) {
   const validated = validatePrivateTree(root, container, options);
   rmSync(validated.root, { recursive: true });
   syncProfileDirectory(container);
+  if (!missing(validated.root)) throw new ProfileLifecycleError("conflict", "Private profile storage could not be fully removed.");
 }
 
 function readMigrationRecoveryManifest(path: string, managedRoot: string, profileId: string) {
@@ -714,10 +716,12 @@ export function profileScopePreview(profileId: string) {
   const { registry, snapshot } = currentSnapshot();
   const profile = profileById(snapshot, profileId);
   const root = requirePrivateDirectory(registry.profileRoot(profile.id), registry.layout.profilesRoot);
+  const inventory = validatePrivateTree(root, registry.layout.profilesRoot);
   return Object.freeze({
     profile: Object.freeze({ id: profile.id, displayName: profile.displayName, kind: profile.kind, protected: profile.protected }),
     active: profile.id === snapshot.activeProfileId,
     rootToken: basename(root),
+    sizeBytes: inventory.sizeBytes,
     categories: [
       "conversations and response feedback",
       "memory",

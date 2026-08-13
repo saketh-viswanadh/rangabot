@@ -126,6 +126,8 @@ test("renderer preferences are explicit, sandboxed, isolated and unprivileged", 
   assert.match(preload, /contextBridge\.exposeInMainWorld\("rangabotDesktop"/);
   assert.match(preload, /saveProfileBackup/);
   assert.match(preload, /rangabot:save-profile-backup/);
+  assert.match(preload, /pickLocalFiles/);
+  assert.match(preload, /rangabot:pick-local-files/);
   assert.doesNotMatch(preload, /require\(["']node:(?:fs|path|child_process|process)["']\)|process\.|readFile|writeFile|exec|spawn/);
 });
 

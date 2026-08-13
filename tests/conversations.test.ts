@@ -32,6 +32,11 @@ test("creates, lists, updates, opens, and deletes a local conversation", () => {
   assert.equal(conversations.setConversationDataset(created.id, "approved-dataset")?.datasetId, "approved-dataset");
   assert.equal(conversations.getConversation(created.id)?.datasetId, "approved-dataset");
   assert.equal(conversations.setConversationDataset(created.id, null)?.datasetId, null);
+  const researchProject = conversations.createProject("Research");
+  assert.equal(conversations.setConversationProject(created.id, researchProject.id)?.projectId, researchProject.id);
+  assert.equal(conversations.setConversationProject(created.id, null)?.projectId, null);
+  assert.equal(conversations.setConversationProject(created.id, "missing-project"), null);
+  assert.equal(conversations.setConversationProject(created.id, project.id)?.projectId, project.id);
 
   const other = conversations.createConversation([
     { role: "user", content: "Discuss a garden" },

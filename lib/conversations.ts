@@ -362,6 +362,20 @@ export function setConversationDataset(id: string, datasetId: string | null): Co
   return result.changes ? getConversation(id) : null;
 }
 
+export function setConversationProject(id: string, projectId: string | null): ConversationSummary | null {
+  const database = getConversationDatabase();
+  if (projectId && !database.prepare("SELECT 1 FROM projects WHERE id = ?").get(projectId)) return null;
+  const updatedAt = new Date().toISOString();
+  const result = database.prepare("UPDATE conversations SET project_id = ?, updated_at = ? WHERE id = ?")
+    .run(projectId, updatedAt, id);
+  if (!result.changes) return null;
+  const row = database.prepare(`
+    SELECT id, title, project_id AS projectId, dataset_id AS datasetId, pinned, created_at AS createdAt, updated_at AS updatedAt
+    FROM conversations WHERE id = ?
+  `).get(id) as unknown as ConversationSummaryRow;
+  return toConversationSummary(row);
+}
+
 export function listProjects(): ProjectSummary[] {
   return getConversationDatabase().prepare(`
     SELECT id, name, created_at AS createdAt, updated_at AS updatedAt

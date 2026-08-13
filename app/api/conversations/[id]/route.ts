@@ -3,6 +3,7 @@ import {
   getConversationDatabase,
   setConversationDataset,
   setConversationPinned,
+  setConversationProject,
 } from "@/lib/conversations";
 import { getConversationTimeline, recoverExpiredConversationTurns } from "@/lib/conversation-turns";
 import { deleteConversationWhenIdle } from "@/lib/conversation-mutation-guards";
@@ -97,8 +98,17 @@ export async function DELETE(request: Request, context: RouteContext) {
 export async function PATCH(request: Request, context: RouteContext) {
   try {
     return await withProfileRequest(request, { kind: "database-mutation", label: "conversation update" }, async () => {
-      const body = (await request.json()) as { pinned?: unknown; datasetId?: unknown };
+      const body = (await request.json()) as { pinned?: unknown; datasetId?: unknown; projectId?: unknown };
       const id = (await context.params).id;
+      if (Object.prototype.hasOwnProperty.call(body, "projectId")) {
+        if (body.projectId !== null && typeof body.projectId !== "string") {
+          return NextResponse.json({ error: "Project must be an existing project id or All chats." }, { status: 400 });
+        }
+        const conversation = setConversationProject(id, body.projectId as string | null);
+        return conversation
+          ? NextResponse.json({ conversation })
+          : NextResponse.json({ error: "Conversation or project not found." }, { status: 404 });
+      }
       if (Object.prototype.hasOwnProperty.call(body, "datasetId")) {
         if (body.datasetId !== null && typeof body.datasetId !== "string") {
           return NextResponse.json({ error: "Dataset attachment must be an approved dataset id or null." }, { status: 400 });
@@ -118,7 +128,7 @@ export async function PATCH(request: Request, context: RouteContext) {
           : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
       }
       if (typeof body.pinned !== "boolean") {
-        return NextResponse.json({ error: "A boolean pinned value or dataset attachment is required." }, { status: 400 });
+        return NextResponse.json({ error: "A pin, project, or dataset update is required." }, { status: 400 });
       }
       const conversation = setConversationPinned(id, body.pinned);
       return conversation

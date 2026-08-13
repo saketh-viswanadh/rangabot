@@ -81,6 +81,7 @@ async function embedChunks(chunks: string[], filename: string) {
   }
 }
 
+export async function ingestKnowledge() {
 const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Knowledge ingestion" });
 profileMaintenance.assertDataPath(knowledgeRoot);
 profileMaintenance.assertDataPath(knowledgeInbox);
@@ -157,3 +158,9 @@ if (failures.length) {
 }
 closeKnowledgeDatabase();
 profileMaintenance.release();
+return finalStatus;
+}
+
+if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  await ingestKnowledge();
+}

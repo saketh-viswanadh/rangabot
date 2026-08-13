@@ -80,6 +80,7 @@ type CodePreview = { path: string; startLine: number; focusLine: number; lines: 
 type AttachedCodeContext = { repositoryId: string; repositoryName: string; path: string; line: number; startLine: number; endLine: number; characterCount: number };
 type KnowledgeSourceState = { name: string; status: "indexed" | "pending" | "incompatible"; detail: string; chunks: number };
 type KnowledgeStatus = { usedBytes: number; budgetBytes: number; documents: number; chunks: number; incompatible: number; pending: number; sources: KnowledgeSourceState[] };
+type DesktopFilePickerBridge = { pickLocalFiles(kind: "knowledge" | "dataset"): Promise<{ status: "selected" | "cancelled"; paths: string[] }> };
 type KnowledgeUpdates = { week: string; month: string; changelog: string; weekUpdatedAt: string | null };
 type KnowledgeTab = "discover" | "vault" | "updates";
 type ActiveConversationTurn = { conversationId: string; turnId: string };
@@ -242,6 +243,7 @@ export default function Home() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const [projectCreateOpen, setProjectCreateOpen] = useState(false);
   const [projectMenuId, setProjectMenuId] = useState<string | null>(null);
+  const [conversationMenuId, setConversationMenuId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("smart");
   const [appearance, setAppearance] = useState<Appearance>("dark");
@@ -281,6 +283,9 @@ export default function Home() {
   const [knowledgePanelOpen, setKnowledgePanelOpen] = useState(false);
   const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab>("discover");
   const [knowledgePeriod, setKnowledgePeriod] = useState<"week" | "month">("week");
+  const [knowledgeImportPaths, setKnowledgeImportPaths] = useState<string[]>([]);
+  const [knowledgeImportMessage, setKnowledgeImportMessage] = useState("");
+  const [knowledgeImporting, setKnowledgeImporting] = useState(false);
   const [readKnowledgeVersion, setReadKnowledgeVersion] = useState<string | null>(null);
   const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
   const [sqlPanelOpen, setSqlPanelOpen] = useState(false);
@@ -581,6 +586,28 @@ export default function Home() {
     if (updatesResponse.ok) setKnowledgeUpdates(await updatesResponse.json());
   }
 
+  async function chooseKnowledgeDocuments() {
+    const desktop = (window as typeof window & { rangabotDesktop?: DesktopFilePickerBridge }).rangabotDesktop;
+    if (!desktop) return setKnowledgeImportMessage("Use the RangaBot desktop app to choose local documents without typing paths.");
+    const selection = await desktop.pickLocalFiles("knowledge");
+    if (selection.status === "selected") {
+      setKnowledgeImportPaths(selection.paths);
+      setKnowledgeImportMessage(`${selection.paths.length} document${selection.paths.length === 1 ? "" : "s"} selected. Nothing has been copied yet.`);
+    }
+  }
+
+  async function importKnowledgeDocuments() {
+    if (!knowledgeImportPaths.length) return;
+    setKnowledgeImporting(true); setKnowledgeImportMessage("Copying into this profile and building the local index…");
+    try {
+      const response = await localApiFetch("/api/knowledge/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ paths: knowledgeImportPaths }) });
+      const data = await response.json() as { copied?: number; error?: string };
+      if (!response.ok) return setKnowledgeImportMessage(data.error ?? "The documents could not be imported.");
+      setKnowledgeImportPaths([]); setKnowledgeImportMessage(`${data.copied ?? 0} document${data.copied === 1 ? "" : "s"} added to this profile and indexed locally.`);
+      await refreshKnowledge();
+    } finally { setKnowledgeImporting(false); }
+  }
+
   async function createNewProject(event: FormEvent) {
     event.preventDefault();
     const name = newProjectName.trim();
@@ -721,6 +748,21 @@ export default function Home() {
       body: JSON.stringify({ pinned: !conversation.pinned }),
     });
     if (response.ok) await refreshConversations();
+  }
+
+  async function moveConversation(conversation: ConversationSummary, projectId: string | null) {
+    const response = await localApiFetch(`/api/conversations/${conversation.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId }),
+    });
+    const data = await response.json().catch(() => null) as { error?: string } | null;
+    if (!response.ok) return setConversationTransferMessage(data?.error ?? "The chat could not be moved.");
+    setConversationMenuId(null);
+    setConversationTransferMessage(projectId
+      ? `Moved “${conversation.title}” into ${projects.find(({ id }) => id === projectId)?.name ?? "the project"}.`
+      : `Moved “${conversation.title}” to All chats.`);
+    await refreshConversations();
   }
 
   async function importConversation(event: React.ChangeEvent<HTMLInputElement>) {
@@ -1450,7 +1492,7 @@ export default function Home() {
         <button className="new-chat" onClick={() => startNewChat()}><CraftIcon name="add" /> New chat</button>
         <button type="button" className="sidebar-search-trigger" onClick={() => document.querySelector<HTMLInputElement>(".conversation-search input")?.focus()}><span><CraftIcon name="search" size={16} /> Search</span><kbd>Cmd K</kbd></button>
         <nav className="sidebar-destinations" aria-label="Workspace">
-          <button type="button" className="active" onClick={() => startNewChat(activeProjectId)}><CraftIcon name="chat" size={17} /> Chats</button>
+          <button type="button" className={!activeProjectId ? "active" : ""} onClick={() => { setActiveProjectId(null); startNewChat(null); }}><CraftIcon name="chat" size={17} /> All chats</button>
           <button type="button" onClick={() => openKnowledgeBrief("vault")}><CraftIcon name="knowledge" size={17} /> Library</button>
         </nav>
         <section className="projects" aria-label="Projects">
@@ -1481,11 +1523,16 @@ export default function Home() {
           {visibleConversations.map((conversation) => (
             <div className={`history-row ${conversation.id === activeConversationId ? "active" : ""} ${conversation.pinned ? "pinned" : ""}`} key={conversation.id}>
               <button type="button" onClick={() => void openConversation(conversation.id)}>{conversation.title}</button>
-              <button type="button" className="pin-chat" onClick={() => void toggleConversationPin(conversation)} aria-label={`${conversation.pinned ? "Unpin" : "Pin"} ${conversation.title}`} aria-pressed={conversation.pinned}><CraftIcon name="pin" size={13} /></button>
-              <button type="button" className="delete-chat" onClick={() => void removeConversation(conversation.id)} aria-label={`Delete ${conversation.title}`}><CraftIcon name="trash" size={13} /></button>
+              <button type="button" className="conversation-more" onClick={() => setConversationMenuId((id) => id === conversation.id ? null : conversation.id)} aria-label={`More options for ${conversation.title}`} aria-expanded={conversationMenuId === conversation.id}><CraftIcon name="more" size={14} /></button>
+              {conversationMenuId === conversation.id && <div className="conversation-menu">
+                <button type="button" onClick={() => void toggleConversationPin(conversation)}>{conversation.pinned ? "Unpin chat" : "Pin chat"}</button>
+                <label><span>Move to</span><select value={conversation.projectId ?? ""} onChange={(event) => void moveConversation(conversation, event.target.value || null)}><option value="">All chats</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+                <button type="button" className="danger" onClick={() => { setConversationMenuId(null); void removeConversation(conversation.id); }}>Delete chat</button>
+              </div>}
             </div>
           ))}
         </nav>
+        <button type="button" className="sidebar-settings" onClick={() => setWelcomePreferencesOpen(true)}><CraftIcon name="settings" size={17} /><span>Settings</span></button>
         {!publicDemo && <div className="sidebar-profile"><ProfileManager onSwitchingChange={setProfileSwitching} onActiveProfileChange={setActiveProfileContext} onRecoveryRequiredChange={setProfileRecoveryRequired} /></div>}
       </aside>
       {sidebarOpen && <button className="sidebar-backdrop" type="button" onClick={() => setSidebarOpen(false)} aria-label="Dismiss chat navigation" />}
@@ -1562,20 +1609,6 @@ export default function Home() {
                   ) : <><blockquote>{welcomeLine.kind === "QUOTE" ? `“${welcomeLine.text}”` : welcomeLine.text}</blockquote><cite>{welcomeLine.kind === "QUOTE" ? `— ${welcomeLine.credit}` : welcomeLine.credit}</cite></>}
                 </div>
               )}
-              <div className="starter-grid" aria-label="Conversation starters">
-                <button type="button" onClick={() => chooseStarter("Help me think through an idea: ")} aria-label="Explore an idea locally" title="Brainstorm an idea locally">
-                  <span className="starter-icon idea"><CraftIcon name="spark" /></span>
-                  <strong>Explore an idea</strong>
-                </button>
-                <button type="button" onClick={() => chooseStarter("Help me with this coding task: ")} aria-label="Build something with local coding help" title="Plan or improve code locally">
-                  <span className="starter-icon code"><CraftIcon name="code" /></span>
-                  <strong>Build something</strong>
-                </button>
-                <button type="button" onClick={() => chooseStarter("Help me write this email. Ask me for the audience, purpose, tone, and key details before drafting: ")} aria-label="Write an email locally" title="Draft an email in the right tone">
-                  <span className="starter-icon mail"><CraftIcon name="mail" /></span>
-                  <strong>Write an email</strong>
-                </button>
-              </div>
             </section>
           )}
           {messages.map((message) => (
@@ -1623,6 +1656,11 @@ export default function Home() {
         </div>
 
         <div className={`composer-wrap ${messages.length === 0 ? "empty-chat" : ""}`} inert={profileWorkspaceBlocked}>
+          {messages.length === 0 && <div className="starter-grid" aria-label="Conversation starters">
+            <button type="button" onClick={() => chooseStarter("Help me think through an idea: ")}><span className="starter-icon idea"><CraftIcon name="spark" /></span><strong>Explore an idea</strong></button>
+            <button type="button" onClick={() => chooseStarter("Help me with this coding task: ")}><span className="starter-icon code"><CraftIcon name="code" /></span><strong>Build something</strong></button>
+            <button type="button" onClick={() => chooseStarter("Help me write this email. Ask me for the audience, purpose, tone, and key details before drafting: ")}><span className="starter-icon mail"><CraftIcon name="mail" /></span><strong>Write an email</strong></button>
+          </div>}
           {!ready && <div className="setup-hint">
             <strong>{status?.available ? "Choose a local model" : "Starting RangaBot’s model engine"}</strong>
             <span>{status?.available ? "Open Model Manager to install or select a model—no terminal required." : "The private model engine is not ready yet."}</span>
@@ -1632,6 +1670,10 @@ export default function Home() {
             {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
             {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
             {attachedDataset && <div className="composer-code-context"><span><strong>Local data available to this chat</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>This attachment is remembered for this chat. Analytical requests may run bounded read-only SQL locally; expand the calculation trace to inspect it.</small></span><button type="button" onClick={() => void attachDatasetToChat(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
+            <div className="composer-status-row">
+              <button type="button" className={`composer-model-status ${ready ? "ready" : "attention"}`} onClick={() => setModelManagerOpen(true)}><span />{ready ? status.configuredModel : status?.available ? "Choose a model" : "Model engine starting"}</button>
+              <span><CraftIcon name="shield" size={13} /> On this Mac</span>
+            </div>
             <div className="composer-main-row">
               <button type="button" className="composer-add" onClick={() => { setSqlPanelOpen(true); }} aria-label="Add local context"><CraftIcon name="add" size={18} /></button>
               <textarea
@@ -1661,10 +1703,6 @@ export default function Home() {
                   <button type="submit" disabled={!input.trim() || conversationLoading || profileWorkspaceBlocked} aria-label="Send"><CraftIcon name="send" /></button>
                 )}
               </div>
-            </div>
-            <div className="composer-footer">
-              <button type="button" className={`composer-model-status ${ready ? "ready" : "attention"}`} onClick={() => setModelManagerOpen(true)}><span />{ready ? status.configuredModel : status?.available ? "Choose a model" : "Model engine starting"}</button>
-              <span><CraftIcon name="shield" size={13} /> On this Mac</span>
             </div>
           </form>
           <small>RangaBot can make mistakes. Review important work.</small>
@@ -1716,6 +1754,12 @@ export default function Home() {
                 ) : <div className="knowledge-markdown"><MarkdownMessage content={knowledgeUpdates?.month ?? "No monthly brief is available yet."} /></div>}
               </>}
               {knowledgeTab === "vault" && <section className="vault-overview">
+                <div className="vault-import-card">
+                  <div><span>Books and documents</span><strong>Add knowledge without paths or Terminal</strong><p>Choose PDF, Word, Markdown, HTML, or text files. RangaBot copies them into this profile only when you press Import.</p></div>
+                  <div className="vault-import-actions"><button type="button" onClick={() => void chooseKnowledgeDocuments()} disabled={knowledgeImporting}><CraftIcon name="document" size={16} /> Choose files</button><button type="button" className="primary" onClick={() => void importKnowledgeDocuments()} disabled={knowledgeImporting || !knowledgeImportPaths.length}>{knowledgeImporting ? "Indexing…" : `Import${knowledgeImportPaths.length ? ` ${knowledgeImportPaths.length}` : ""}`}</button></div>
+                  {knowledgeImportPaths.length > 0 && <ul>{knowledgeImportPaths.map((path) => <li key={path}>{path.split(/[\\/]/).at(-1)}</li>)}</ul>}
+                  {knowledgeImportMessage && <p role="status">{knowledgeImportMessage}</p>}
+                </div>
                 <div className="vault-stat-grid">
                   <div><strong>{knowledgeStatus?.documents ?? "—"}</strong><span>Documents</span></div>
                   <div><strong>{knowledgeStatus?.chunks ?? "—"}</strong><span>Passages</span></div>

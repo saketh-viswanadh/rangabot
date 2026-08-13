@@ -74,7 +74,8 @@ test("offers optional local personalization and every approved fresh-chat conten
 
 test("keeps the fresh-chat composition compact, passive and intentional", () => {
   const welcome = sliceBetween(page, '<section className="welcome-state"', "{messages.map");
-  const starters = sliceBetween(welcome, '<div className="starter-grid"', "</div>");
+  const composer = sliceBetween(page, '<div className={`composer-wrap', "</form>");
+  const starters = sliceBetween(composer, '<div className="starter-grid"', "</div>");
 
   assert.equal(countMatches(welcome, /className="welcome-intro"/g), 1, "Fresh chat needs one compact intro");
   assert.equal(countMatches(welcome, /className=\{`welcome-note/g), 1, "Fresh chat needs one welcome note");
@@ -87,6 +88,8 @@ test("keeps the fresh-chat composition compact, passive and intentional", () => 
     "The welcome card should read as content, not a control panel");
   assert.doesNotMatch(styles, /\.welcome-note-meta\b|\.welcome-mode-select\b/,
     "Retired inline welcome controls should not leave stale CSS behind");
+  assert.match(styles, /\.welcome-inspiration\s*\{\s*display:\s*grid/,
+    "The rotating joke, quote, or thought must remain visible");
   assert.match(welcome, /<blockquote>/, "The welcome card should keep one calm content surface");
   assert.match(welcome, /<cite>/, "The welcome card should keep its provenance visible");
 
@@ -94,6 +97,8 @@ test("keeps the fresh-chat composition compact, passive and intentional", () => 
   assert.equal(countMatches(starters, /<strong>/g), 3, "Every starter exposes one concise title");
   assert.doesNotMatch(starters, /<small>/, "Starter cards must not restore explanatory subtitles");
   assert.doesNotMatch(starters, /name="chevron"/, "Starter cards must not restore decorative chevrons");
+  assert.ok(page.indexOf('<div className="starter-grid"') > page.indexOf('<div className={`composer-wrap'),
+    "Starters should sit immediately with the composer instead of floating in the empty canvas");
 });
 
 test("keeps fresh-chat content mode exclusively in the local Preferences dialog", () => {

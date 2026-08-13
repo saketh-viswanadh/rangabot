@@ -9,6 +9,7 @@ import { diagnoseLocalOllama } from "./ollama-diagnostic.ts";
 import { startManagedModelRuntime, type ManagedModelRuntime } from "./model-runtime.ts";
 import { startLeasedDesktopServer, type LeasedSupervisedDesktopServer } from "./process-supervisor.ts";
 import { PROFILE_BACKUP_SAVE_CHANNEL, saveProfileBackupWithDialog } from "./profile-backup-save.ts";
+import { LOCAL_FILE_PICKER_CHANNEL, pickLocalFilesWithDialog, type LocalFilePickerKind } from "./local-file-picker.ts";
 import { createDesktopRuntimeBoundaryFromVerifiedResources } from "./resource-boundary.ts";
 import {
   DESKTOP_RENDERER_WEB_PREFERENCES,
@@ -194,12 +195,18 @@ export async function startDesktopRuntime(input: {
     emitStartupStage("R80_WINDOW_CREATE");
     state.window = createMainWindow(origin, desktopSession, input.windowTitle ?? "Rangabot");
     ipcMain.removeHandler(PROFILE_BACKUP_SAVE_CHANNEL);
+    ipcMain.removeHandler(LOCAL_FILE_PICKER_CHANNEL);
     if (!input.verificationPolicy) {
       ipcMain.handle(PROFILE_BACKUP_SAVE_CHANNEL, async (event, request) => {
         if (!state.window || state.window.isDestroyed() || event.sender !== state.window.webContents) {
           throw new Error("The profile backup request did not come from the active local RangaBot window.");
         }
         return saveProfileBackupWithDialog({ request, window: state.window });
+      });
+      ipcMain.handle(LOCAL_FILE_PICKER_CHANNEL, async (event, request: { kind?: LocalFilePickerKind }) => {
+        if (!state.window || state.window.isDestroyed() || event.sender !== state.window.webContents) throw new Error("The file picker request did not come from the active local RangaBot window.");
+        if (request?.kind !== "knowledge" && request?.kind !== "dataset") throw new Error("The local file picker request is invalid.");
+        return pickLocalFilesWithDialog({ kind: request.kind, window: state.window, dialog });
       });
     }
     emitStartupStage("R90_WINDOW_LOAD");
@@ -217,6 +224,7 @@ export async function startDesktopRuntime(input: {
     }
   } catch (error) {
     ipcMain.removeHandler(PROFILE_BACKUP_SAVE_CHANNEL);
+    ipcMain.removeHandler(LOCAL_FILE_PICKER_CHANNEL);
     await stopRuntime(state);
     throw error;
   }
