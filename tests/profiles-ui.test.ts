@@ -123,6 +123,9 @@ test("keeps the active profile visible and blocks chat admission during switchin
   assert.ok((manager.match(/setRenameName\(""\)/g) ?? []).length >= 4);
   assert.match(styles, /\.profile-trigger/);
   assert.match(styles, /\.profile-dialog/);
+  assert.match(styles, /height: min\(820px, calc\(100dvh - 36px\)\)/);
+  assert.match(styles, /@media \(max-height: 620px\)/);
+  assert.match(styles, /place-items: start center/);
   assert.doesNotMatch(styles, /\.profile-trigger span \{ position: absolute/);
 });
 
