@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   adoptLocalProfileSession,
   localApiFetch,
@@ -336,7 +337,7 @@ export function ProfileManager({ onSwitchingChange, onActiveProfileChange, onRec
     <button ref={triggerRef} type="button" className={`profile-trigger ${view?.recoveryRequired || view?.registryRecoveryRequired ? "recovery-required" : ""}`} onClick={() => { setMode("choose"); setOpen(true); }} aria-label={`Open Profiles. Active: ${marker}${view?.recoveryRequired || view?.registryRecoveryRequired ? ". Recovery required" : ""}`} disabled={loading}>
       <CraftIcon name="shield" size={15} /><span>{marker}</span>{(view?.recoveryRequired || view?.registryRecoveryRequired) && <b>Recovery</b>}
     </button>
-    {open && <div className="profile-backdrop" onMouseDown={() => { if (!busy) closeProfiles(); }}>
+    {open && createPortal(<div className="profile-backdrop" onMouseDown={() => { if (!busy) closeProfiles(); }}>
       <section ref={dialogRef} className="profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-title" aria-busy={busy} onMouseDown={(event) => event.stopPropagation()}>
         <header className="profile-dialog-header"><div><span>Local workspaces · not accounts</span><h2 id="profile-title">{mode === "choose" ? "Who’s using RangaBot?" : mode === "create" ? "Add a profile" : "Manage profiles"}</h2><p>{mode === "choose" ? "Choose a private workspace" : `Active: ${marker}`}</p></div><button ref={closeRef} type="button" onClick={closeProfiles} disabled={busy} aria-label="Close Profiles"><CraftIcon name="close" /></button></header>
         {(view?.recoveryRequired || view?.registryRecoveryRequired) && <div className="profile-recovery-warning" role="status" aria-live="polite"><strong>Profile Recovery required.</strong> {view.registryRecoveryRequired ? "RangaBot opened the last validated registry copy without changing it. " : "A local profile operation did not finish. "}{view.operationRecovery ? `${view.operationRecovery.operation.replaceAll("-", " ")} stopped at ${view.operationRecovery.phase.replaceAll("-", " ")}. ` : ""}Normal workspace access stays blocked until you explicitly recover the validated state. <button type="button" onClick={() => void recoverProfiles()} disabled={busy}>Recover validated profile state</button></div>}
@@ -384,6 +385,6 @@ export function ProfileManager({ onSwitchingChange, onActiveProfileChange, onRec
         {scope && destructiveAction && <section className="profile-confirmation" role="region" aria-live="assertive" aria-atomic="true" aria-labelledby="profile-confirmation-title"><h3 id="profile-confirmation-title">{destructiveAction === "reset" ? "Reset" : "Delete"} {scope.profile.displayName}?</h3><p>This affects only:</p><ul>{scope.categories.map((category) => <li key={category}>{category}</li>)}</ul><p>It does not touch: {scope.sharedExcluded.join(", ")}.</p><label><span>Enter the exact profile name to confirm</span><input ref={confirmationRef} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" /></label><div><button type="button" className="danger" onClick={() => void applyDestructive()} disabled={busy || confirmation !== scope.profile.displayName}>{destructiveAction === "reset" ? "Reset this Testing profile" : "Delete this profile"}</button><button type="button" onClick={() => { setScope(null); setDestructiveAction(null); setConfirmation(""); }} disabled={busy}>Stay</button></div>{destructiveAction === "delete" && <small>Back up first if you may need this profile later. Deletion is not secure erasure.</small>}</section>}
         {message && <p className="profile-status" role="status" aria-live="polite" aria-atomic="true">{message}</p>}
       </section>
-    </div>}
+    </div>, document.body)}
   </>;
 }

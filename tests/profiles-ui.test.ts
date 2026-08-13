@@ -123,7 +123,7 @@ test("keeps the active profile visible and blocks chat admission during switchin
   assert.ok((manager.match(/setRenameName\(""\)/g) ?? []).length >= 4);
   assert.match(styles, /\.profile-trigger/);
   assert.match(styles, /\.profile-dialog/);
-  assert.match(styles, /max-height: calc\(100dvh - 36px\)/);
+  assert.match(styles, /max-height: calc\(100dvh - 48px\)/);
   assert.match(styles, /overflow-y: auto/);
   assert.match(styles, /position: sticky/);
   assert.match(styles, /@media \(max-height: 620px\)/);
@@ -137,6 +137,8 @@ test("rotates the browser profile receipt after every registry generation mutati
   assert.match(manager, /Testing · Temporary/);
   assert.match(manager, /Who’s using RangaBot\?/);
   assert.match(manager, /profileInitials/);
+  assert.match(manager, /createPortal/);
+  assert.match(manager, /document\.body/);
   assert.match(manager, /Add profile/);
   assert.match(manager, /Profile name/);
   assert.match(manager, /createName\.trim\(\) &&/);
