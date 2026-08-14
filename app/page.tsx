@@ -18,6 +18,7 @@ import type { BookWelcomeFact, BookWelcomeResponse } from "@/lib/knowledge-welco
 import { isNearMessageBottom } from "@/lib/message-scroll";
 import { parseKnowledgeBrief } from "@/lib/knowledge-brief";
 import { CraftIcon } from "@/app/components/craft-icon";
+import { ChatBrandMark, ConversationSpark, PrimaryBrandMark } from "@/app/components/brand-mark";
 import { formatAnswerReceipt } from "@/lib/answer-receipt";
 import { SqlAnalysisPanel } from "@/app/components/sql-analysis-panel";
 import { WelcomePreferencesDialog } from "@/app/components/welcome-preferences";
@@ -1372,17 +1373,10 @@ export default function Home() {
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus());
   }
 
-  function followCursor(event: React.PointerEvent<HTMLElement>) {
-    const x = Math.max(-1, Math.min(1, (event.clientX / window.innerWidth - .5) * 2));
-    const y = Math.max(-1, Math.min(1, (event.clientY / window.innerHeight - .5) * 2));
-    event.currentTarget.style.setProperty("--look-x", x.toFixed(2));
-    event.currentTarget.style.setProperty("--look-y", y.toFixed(2));
-  }
-
   return (
-    <main className="app-shell" data-appearance={appearance} data-palette={palette} onPointerMove={followCursor}>
+    <main className="app-shell" data-appearance={appearance} data-palette={palette}>
       <aside id="chat-navigation" className={`sidebar ${sidebarOpen ? "open" : ""}`}>
-        <div className="brand"><span className="brand-mark" aria-hidden="true" /><span>Rangabot</span><button ref={sidebarCloseRef} className="sidebar-close" type="button" onClick={() => { setSidebarOpen(false); requestAnimationFrame(() => mobileNavigationRef.current?.focus()); }} aria-label="Close chat navigation"><CraftIcon name="close" /></button></div>
+        <div className="brand"><PrimaryBrandMark className="brand-mark" /><span>Rangabot</span><button ref={sidebarCloseRef} className="sidebar-close" type="button" onClick={() => { setSidebarOpen(false); requestAnimationFrame(() => mobileNavigationRef.current?.focus()); }} aria-label="Close chat navigation"><CraftIcon name="close" /></button></div>
         <button className="new-chat" onClick={() => startNewChat()}><CraftIcon name="add" /> New chat</button>
         <section className="projects" aria-label="Projects">
           <div className="project-heading"><span>Projects</span><span>{projects.length}</span></div>
@@ -1486,7 +1480,6 @@ export default function Home() {
           {messages.length === 0 && (
             <section className="welcome-state" aria-labelledby="welcome-title" aria-busy={!welcomePreferencesReady}>
               <div className="welcome-intro">
-                <div className="ranga-scene" aria-hidden="true"><div className="welcome-orbit" /></div>
                 <div className="welcome-heading">
                   {welcomePreferencesReady ? <div className="welcome-greeting-line">
                     <h2 id="welcome-title">{formatWelcomeGreeting(greetingIndex, welcomePreferences.preferredName ?? "")}</h2>
@@ -1495,6 +1488,7 @@ export default function Home() {
               </div>
               {welcomePreferencesReady && (
                 <div className={`welcome-note ${welcomePreferences.mode === "books" ? "book-fact" : ""}`} aria-live="polite">
+                  {welcomePreferences.mode !== "books" && <ConversationSpark className="welcome-spark" />}
                   {welcomePreferences.mode === "books" ? (
                     bookWelcomeLoading ? <p className="welcome-note-loading">Choosing a cited sentence from your local books…</p>
                       : bookWelcomeFact ? <><blockquote>{bookWelcomeFact.text}</blockquote><cite>{bookWelcomeCitation}</cite></>
@@ -1524,7 +1518,7 @@ export default function Home() {
           )}
           {messages.map((message) => (
             <article key={message.id} className={`message ${message.role} ${message.error ? "error" : ""} ${message.active ? "thinking" : ""}`}>
-              {message.role === "assistant" && <div className={`avatar ${message.active ? "active" : ""}`} aria-hidden="true" />}
+              {message.role === "assistant" && <ChatBrandMark className={`avatar ${message.active ? "active" : ""}`} />}
               <div className="message-body">
                 {message.replyTo && <div className="reply-reference"><strong>{message.replyTo.role === "assistant" ? "Rangabot" : "You"}</strong><span>{message.replyTo.excerpt}</span></div>}
                 {message.codeContext && <div className="message-code-reference"><strong>Attached code</strong><span>{message.codeContext.repository} · {message.codeContext.path} · lines {message.codeContext.startLine}–{message.codeContext.endLine}</span></div>}
@@ -1551,7 +1545,7 @@ export default function Home() {
                   />}
                 {message.active && (
                   <div className="message-activity" role="status" aria-label="Rangabot is thinking">
-                    <span className="thinking-runner" aria-hidden="true"><i /></span>
+                    <ConversationSpark className="thinking-spark" />
                     <span>Thinking</span>
                   </div>
                 )}
