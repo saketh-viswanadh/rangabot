@@ -17,6 +17,23 @@ deliberate, useful and calm enough to disappear once understood.
 The canonical implementation is `app/components/craft-icon.tsx`. Extend that
 component instead of adding a one-off symbol to a page.
 
+## Responsive product identity
+
+Rangabot uses one identity at three levels rather than repeating a detailed
+mascot throughout the interface:
+
+- the expressive primary mark identifies the application, browser metadata,
+  sidebar wordmark and major brand surfaces;
+- the compact negative-space Goldie mark identifies assistant turns at 18–24
+  pixels, with explicit light and dark variants and no enclosing badge; and
+- the gold spark appears only with rotating welcome content, active generation
+  or another rare conversational moment.
+
+The canonical runtime wrappers are in `app/components/brand-mark.tsx`, and the
+approved files and checksums are in `public/brand/README.md`. Product palettes
+must not recolour the primary logo or substitute the detailed primary mark for
+the compact chat mark.
+
 ## Craft principles
 
 1. **Purpose before ornament.** A mark exists only when it clarifies an action,

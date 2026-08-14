@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import treeData from "@/content/path-to-mastery.json";
 import contributorsData from "@/content/mastery-contributors.json";
 import evidenceData from "@/content/mastery-evidence.json";
+import { PrimaryBrandMark } from "@/app/components/brand-mark";
 import { CraftIcon, type CraftIconName } from "@/app/components/craft-icon";
 import { materializeMasteryTree, masteryProgress, type MasteryEvidenceRegistry, type MasteryNode, type MasteryStatus, type MasteryTreeSource } from "@/lib/mastery-tree";
 import { productConfig } from "@/lib/product-config";
@@ -100,7 +101,7 @@ export default function MasteryPage() {
         {(Object.keys(statusLabels) as MasteryStatus[]).map((status) => <span key={status} data-status={status}><i />{statusLabels[status]}</span>)}
       </section>
       <section className="mastery-core" aria-labelledby="mastery-core-title">
-        <div className="core-rings" aria-hidden="true"><i /><i /><i /></div><span className="core-mark" aria-hidden="true" />
+        <div className="core-rings" aria-hidden="true"><i /><i /><i /></div><PrimaryBrandMark className="core-mark" large />
         <div><small>Main mastery</small><h2 id="mastery-core-title">{tree.core.name}</h2><p>{tree.core.subtitle}</p></div>
         <strong>{tree.core.score.toFixed(1)}<small>/5 weighted</small></strong>
       </section>

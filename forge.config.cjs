@@ -72,6 +72,7 @@ module.exports = {
     executableName: appName,
     appBundleId,
     appCategoryType: "public.app-category.productivity",
+    icon: path.resolve(__dirname, "desktop", "assets", "rangabot.icns"),
     electronZipDir: path.resolve(__dirname, "desktop", "out", "electron-zips"),
     asar: true,
     extraResource: [path.join(stagedResourceParent, "rangabot-resources")],

@@ -9,7 +9,9 @@ memory, deterministic tools, and evidence-backed expert capabilities to support
 meaningful conversation, learning, coding, analysis, and creation without a
 mandatory cloud account, paid API, or specialized machine.
 
-![Rangabot — private local AI with a golden-retriever guide](docs/media/rangabot-social-preview-charter.png)
+<p align="center">
+  <img src="public/brand/rangabot-primary-512.png" width="320" alt="Rangabot primary mark: a golden-retriever guide shaped around an R monogram">
+</p>
 
 > **Reliability status:** Rangabot is active pre-release software. Core chat,
 > local memory, retrieval, and document creation work today, but capability
@@ -21,6 +23,8 @@ mandatory cloud account, paid API, or specialized machine.
 Project site: [rangabot.com](https://rangabot.com). The site is public, but its
 maintainer-controlled publishing source is intentionally not included here because it is not
 needed to build, run, audit, or contribute to the open-source application.
+The Founder-approved responsive identity source and usage guidance are tracked
+in [the public brand manifest](docs/media/brand/BRAND-ASSET-MANIFEST.md).
 
 ## Vision, mission, and north star
 

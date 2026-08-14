@@ -57,8 +57,13 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 .sidebar { background: color-mix(in srgb, var(--sidebar-surface) 94%, transparent); border-right: .5px solid var(--line); padding: 20px 14px; display: flex; flex-direction: column; backdrop-filter: blur(28px) saturate(150%); }
 .brand { display: flex; align-items: center; gap: 11px; font-size: 18px; font-weight: 650; letter-spacing: -.02em; padding: 0 8px 22px; }
 .sidebar-close, .sidebar-backdrop, .mobile-navigation { display: none; }
-.brand-mark, .avatar { background: url("/ranga/ranga-idle.png") center / contain no-repeat; }
-.brand-mark { width: 34px; height: 34px; filter: var(--mascot-filter) drop-shadow(0 5px 8px #0003); }
+.primary-brand-mark, .chat-brand-mark, .conversation-spark { display: inline-grid; flex: 0 0 auto; place-items: center; background-position: center; background-repeat: no-repeat; background-size: contain; }
+.primary-brand-mark { background-image: url("/brand/rangabot-primary-64.png"); }
+.primary-brand-mark-large { background-image: url("/brand/rangabot-primary-192.png"); }
+.brand-mark { width: 34px; height: 34px; border-radius: 10px; }
+.chat-brand-mark { background-image: url("/brand/rangabot-chat-mark-light.svg"); }
+.app-shell[data-appearance="dark"] .chat-brand-mark { background-image: url("/brand/rangabot-chat-mark-dark.svg"); }
+.conversation-spark { width: 14px; height: 14px; background-image: url("/brand/rangabot-spark.svg"); }
 .new-chat { display: flex; align-items: center; gap: 9px; background: var(--surface-raised); border: .5px solid var(--line); border-radius: 12px; padding: 11px 13px; text-align: left; cursor: pointer; transition: background .18s ease, transform .18s ease; }
 .new-chat:hover { background: var(--hover); }.new-chat:active { transform: scale(.98); }
 .projects { display: grid; gap: 4px; margin-top: 22px; }
@@ -136,16 +141,14 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 .app-shell[data-appearance="light"] .palette-choice.ember { --swatch-canvas: #f8e4db; --swatch-surface: #edd1c4; --swatch-accent: #a9482c; }.app-shell[data-appearance="dark"] .palette-choice.ember { --swatch-canvas: #251009; --swatch-surface: #3a2118; --swatch-accent: #e39372; }
 .messages { width: min(780px, calc(100% - 36px)); min-height: 0; margin: 0 auto; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 30px 0 24px; }
 .welcome-state { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 22px 0 28px; }
-.welcome-intro { width: min(620px, 100%); display: flex; align-items: center; justify-content: center; gap: 11px; margin-bottom: 18px; }
-.ranga-scene { position: relative; width: 52px; height: 48px; display: grid; place-items: center; }
-.welcome-orbit { position: relative; width: 46px; height: 46px; background: url("/ranga/ranga-idle.png") center / contain no-repeat; filter: var(--mascot-filter) drop-shadow(0 7px 12px #0003); transform: translate(calc(var(--look-x, 0) * 1.5px), calc(var(--look-y, 0) * 1px)); animation: ranga-curious 16s ease-in-out infinite; transition: filter .3s ease; }
-.welcome-orbit::before { content: ""; position: absolute; z-index: -1; inset: 10px; border-radius: 50%; background: radial-gradient(circle, var(--accent-soft), transparent 70%); filter: blur(8px); }
+.welcome-intro { width: min(620px, 100%); display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 18px; }
 .welcome-heading { position: relative; min-width: 0; }
 .welcome-greeting-line { display: flex; align-items: center; justify-content: center; gap: 7px; }
 .welcome-state h2 { font-size: clamp(27px, 3vw, 34px); font-weight: 680; letter-spacing: -.045em; margin: 0; }
 .welcome-note { width: min(520px, 100%); min-height: 48px; display: grid; align-content: center; justify-items: center; padding: 0 12px; border: 0; background: transparent; box-shadow: none; }
 .welcome-note blockquote { max-width: 100%; color: var(--text); font-size: clamp(14px, 1.6vw, 16px); line-height: 1.5; letter-spacing: -.01em; margin: 0; text-wrap: balance; }
 .welcome-note cite { color: var(--muted); font-size: 11px; font-style: normal; margin-top: 6px; }
+.welcome-spark { width: 13px; height: 13px; margin-bottom: 7px; }
 .welcome-note-loading, .welcome-loading { color: var(--muted); font-size: 11px; }
 .welcome-book-empty { display: grid; justify-items: center; gap: 5px; }.welcome-book-empty strong { font-size: 12px; }.welcome-book-empty span { color: var(--muted); font-size: 10px; line-height: 1.45; }
 .starter-grid { width: min(620px, 100%); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 22px; }
@@ -164,9 +167,8 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 .message.assistant.thinking .message-body::before { content: ""; position: absolute; z-index: -1; inset: -1px; border: 1px solid color-mix(in srgb, var(--accent) 72%, transparent); border-radius: inherit; opacity: .55; animation: thinking-pulse 1.8s ease-in-out infinite; }
 .message.assistant.thinking .message-body::after { content: ""; position: absolute; z-index: -2; inset: -4px; border-radius: 22px; background: color-mix(in srgb, var(--accent) 18%, transparent); filter: blur(10px); opacity: .45; animation: thinking-pulse 1.8s ease-in-out infinite; }
 .message.error .message-body { background: color-mix(in srgb, var(--danger) 18%, var(--surface-raised)); color: color-mix(in srgb, var(--danger) 78%, var(--text)); }
-.avatar { flex: 0 0 auto; width: 31px; height: 31px; filter: var(--mascot-filter) drop-shadow(0 3px 5px #0003); }
-.brand-mark, .avatar { transform: translate(calc(var(--look-x, 0) * 1px), calc(var(--look-y, 0) * .8px)); transition: transform .18s ease-out, filter .3s ease; }
-.avatar.active { animation: mascot-breathe 3.2s ease-in-out infinite; filter: var(--mascot-filter) drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 60%, transparent)); }
+.avatar { align-self: flex-end; flex: 0 0 auto; width: 24px; height: 24px; margin-bottom: 4px; }
+.avatar.active { opacity: .86; }
 .reply-button { position: absolute; top: -9px; right: -7px; border: .5px solid var(--line); color: var(--muted); background: var(--surface-raised); border-radius: 999px; padding: 5px 8px; font-size: 10px; cursor: pointer; opacity: 0; transform: translateY(2px); box-shadow: 0 4px 12px #0002; transition: opacity .15s ease, transform .15s ease; }
 .message:hover .reply-button, .message:focus-within .reply-button { opacity: 1; pointer-events: auto; }
 .reply-reference { display: grid; gap: 2px; max-width: 360px; border-left: 2px solid currentColor; opacity: .72; padding: 3px 0 3px 8px; margin: 1px 0 7px; font-size: 10px; }
@@ -205,12 +207,8 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 .hljs-title, .hljs-function, .hljs-section { color: #82d2ce; }.hljs-number, .hljs-symbol { color: #d9c97c; }
 .hljs-comment, .hljs-quote { color: #7f8c8d; font-style: italic; }.hljs-variable, .hljs-template-variable { color: #c8a1ff; }
 .message-activity { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; margin-top: 8px; }
-.thinking-runner { position: relative; width: 38px; height: 3px; overflow: hidden; border-radius: 999px; background: var(--accent-soft); }
-.thinking-runner i { position: absolute; width: 14px; height: 100%; border-radius: inherit; background: linear-gradient(90deg, transparent, var(--accent-strong), transparent); box-shadow: 0 0 7px color-mix(in srgb, var(--accent) 55%, transparent); animation: thinking-run 1.05s ease-in-out infinite alternate; }
+.thinking-spark { width: 12px; height: 12px; animation: thinking-pulse 1.8s ease-in-out infinite; }
 @keyframes thinking-pulse { 0%, 100% { opacity: .35; } 50% { opacity: .82; } }
-@keyframes thinking-run { from { transform: translateX(-3px); } to { transform: translateX(27px); } }
-@keyframes mascot-breathe { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-1px) scale(1.015); } }
-@keyframes ranga-curious { 0%, 48%, 62%, 100% { rotate: 0deg; scale: 1; } 53% { rotate: -2deg; scale: 1.012; } 57% { rotate: 1.5deg; scale: 1.008; } }
 .stopped-state { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; margin-top: 7px; }
 .stopped-state i { width: 7px; height: 7px; border-radius: 2px; background: var(--muted); }
 .composer-wrap { width: min(780px, calc(100% - 36px)); margin: 0 auto; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); transition: width .24s ease; }
@@ -282,8 +280,6 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 @media (max-height: 780px) and (min-width: 721px) {
   .welcome-state { padding-top: 12px; padding-bottom: 16px; }
   .welcome-intro { margin-bottom: 10px; }
-  .ranga-scene { flex: 0 0 44px; width: 48px; height: 44px; }
-  .welcome-orbit { width: 42px; height: 42px; }
   .welcome-state h2 { font-size: 30px; }
   .welcome-note { min-height: 42px; }
   .welcome-note cite { margin-top: 4px; }
@@ -311,6 +307,8 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
 }
 
 @media (max-width: 520px) {
+  .brand-mark { width: 30px; height: 30px; }
+  .chat-brand-mark { width: 22px; height: 22px; }
   .chat-header { height: 64px; padding: 0 9px; }
   .chat-header h1 { font-size: 14px; margin: 0; }
   .chat-header p { display: none; }
@@ -318,7 +316,7 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
   .mobile-navigation { width: 44px; height: 44px; }.utility-button { min-height: 44px; padding: 7px 8px; font-size: 10px; }.utility-button > span { display: none; }
   .tools-grid { grid-template-columns: 1fr; }.tools-grid > button, .tools-grid > a { min-height: 54px; }.tools-popover { top: 60px; }
   .appearance-controls { grid-template-columns: 1fr; }.appearance-mode { width: 96px; }
-  .welcome-state { padding: 16px 0 18px; }.welcome-intro { gap: 8px; margin-bottom: 14px; }.ranga-scene { width: 46px; height: 44px; }.welcome-orbit { width: 42px; height: 42px; }.welcome-state h2 { font-size: 26px; }.welcome-note { min-height: 42px; padding: 0 8px; }.welcome-note blockquote { font-size: 14px; }.starter-grid { max-width: 100%; margin-top: 18px; }.starter-grid button { min-height: 46px; padding: 7px 8px; }.starter-grid strong { font-size: 10px; }.starter-icon { width: 25px; height: 25px; }
+  .welcome-state { padding: 16px 0 18px; }.welcome-intro { margin-bottom: 14px; }.welcome-state h2 { font-size: 26px; }.welcome-note { min-height: 42px; padding: 0 8px; }.welcome-note blockquote { font-size: 14px; }.starter-grid { max-width: 100%; margin-top: 18px; }.starter-grid button { min-height: 46px; padding: 7px 8px; }.starter-grid strong { font-size: 10px; }.starter-icon { width: 25px; height: 25px; }
   .composer { border-radius: 16px; padding: 6px 7px; }.composer-main-row { gap: 5px; }.composer textarea { min-height: 44px; padding-inline: 7px; }.composer select { max-width: 82px; min-height: 44px; padding-inline: 6px; }.composer button { width: 44px; height: 44px; }.composer-wrap > small { display: none; }
   .welcome-preferences-backdrop { align-items: end; padding: 0; }.welcome-preferences-dialog { max-height: 92dvh; border-radius: 22px 22px 0 0; }
 }
