@@ -32,9 +32,12 @@ startup. The reversible future import design is in
 
 ## Normal development artifact
 
-The normal artifact keeps RangaBot's existing local capabilities. Ollama remains
-an independently installed loopback prerequisite and is never bundled or
-downloaded by the app.
+The normal artifact keeps RangaBot's existing local capabilities. It includes a
+checksum-pinned Ollama runtime so Finder can start the private model service
+without a separate launcher. Model weights are never bundled, copied or
+downloaded during setup. The runtime reuses a safe owner-controlled
+`~/.ollama/models` store in place when available, otherwise it uses the app's
+private profile storage.
 
 ```sh
 npm run desktop:package:arm64
