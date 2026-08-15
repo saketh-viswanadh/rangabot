@@ -30,6 +30,7 @@ const knownJsonStores = Object.freeze(new Map<string, Readonly<{
   ["datasets.json", { maximumBytes: MAX_REGISTRY_BYTES, validate: validDatasets }],
   ["desktop-preferences.json", { maximumBytes: 4_096, validate: validDesktopPreferences }],
   ["model-preferences.json", { maximumBytes: 2_048, validate: validModelPreferences }],
+  ["onboarding-state.json", { maximumBytes: 4_096, validate: validOnboardingState }],
   ["repositories.json", { maximumBytes: MAX_REGISTRY_BYTES, validate: validRepositories }],
   ["restored-external-references.json", { maximumBytes: MAX_REGISTRY_BYTES, validate: validRestoredReferences }],
   ["sql-confirmations.json", { maximumBytes: MAX_REGISTRY_BYTES, validate: validSqlConfirmations }],
@@ -119,6 +120,35 @@ function validModelPreferences(value: unknown) {
   return exactKeys(value, ["contextTokens", "revision", "schemaVersion", "selectedModel", "updatedAt"])
     && Number.isSafeInteger(value.contextTokens) && Number(value.contextTokens) >= 512
     && Number(value.contextTokens) <= 131_072;
+}
+
+function validOnboardingState(value: unknown) {
+  if (!record(value) || !exactKeys(value, [
+    "completedAt", "dismissedAt", "flowVersion", "receipt", "revision", "schemaVersion",
+    "startedAt", "status", "step", "updatedAt",
+  ]) || value.schemaVersion !== 1 || value.flowVersion !== 1
+    || !["pending", "available", "in-progress", "dismissed", "completed"].includes(String(value.status))
+    || !["you", "model", "welcome", "context", "ready"].includes(String(value.step))
+    || !Number.isSafeInteger(value.revision) || Number(value.revision) < 0
+    || !canonicalTimestamp(value.startedAt, true) || !canonicalTimestamp(value.dismissedAt, true)
+    || !canonicalTimestamp(value.completedAt, true) || !canonicalTimestamp(value.updatedAt, true)) return false;
+  const completed = value.status === "completed";
+  const dismissed = value.status === "dismissed";
+  const started = value.status === "in-progress" || dismissed || completed;
+  if (started !== Boolean(value.startedAt)
+    || completed !== Boolean(value.completedAt && value.receipt)
+    || (!completed && (value.completedAt !== null || value.receipt !== null))
+    || dismissed !== Boolean(value.dismissedAt)) return false;
+  if (value.receipt === null) return !completed;
+  return record(value.receipt) && exactKeys(value.receipt, [
+    "approvedWorkFolders", "completedAt", "knowledgeDocuments", "localOnly", "selectedModel", "selectedModelState",
+  ]) && canonicalTimestamp(value.receipt.completedAt) && value.receipt.completedAt === value.completedAt
+    && value.receipt.localOnly === true && boundedString(value.receipt.selectedModel, 192)
+    && ["installed-reviewed", "configured-unverified", "not-checked-testing"].includes(String(value.receipt.selectedModelState))
+    && Number.isSafeInteger(value.receipt.approvedWorkFolders) && Number(value.receipt.approvedWorkFolders) >= 0
+    && Number(value.receipt.approvedWorkFolders) <= 10_000
+    && Number.isSafeInteger(value.receipt.knowledgeDocuments) && Number(value.receipt.knowledgeDocuments) >= 0
+    && Number(value.receipt.knowledgeDocuments) <= 10_000;
 }
 
 function validRestoredReferences(value: unknown) {

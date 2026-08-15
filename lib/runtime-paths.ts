@@ -108,6 +108,7 @@ function validateActiveProfileStorageShape(managedDataRoot: string) {
     ["rangabot.db"], ["rangabot-memory.db"], ["datasets.json"], ["repositories.json"],
     ["sql-confirmations.json"], ["dataset-snapshots"], ["artifacts"],
     ["desktop-preferences.json"], ["model-preferences.json"],
+    ["onboarding-state.json"],
     ["knowledge", "inbox"], ["knowledge", "processed"], ["knowledge", "indexes", "knowledge.db"],
     ["knowledge", "backups"], ["knowledge", "evaluations", "results"], ["evaluations", "results"],
   ] as const;
@@ -187,6 +188,7 @@ export function resolveRuntimePathContract(options: RuntimeRootOptions = {}) {
     desktopTemp: managed("tmp"),
     get desktopPreferences() { return data("desktop-preferences.json"); },
     get modelPreferences() { return data("model-preferences.json"); },
+    get onboardingState() { return data("onboarding-state.json"); },
     managedModels: managed("models"),
     get knowledgeRoot() { return data("knowledge"); },
     get knowledgeInbox() { return data("knowledge", "inbox"); },

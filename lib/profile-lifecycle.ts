@@ -6,6 +6,7 @@ import type { DatabaseSync as Database } from "node:sqlite";
 import { closeConversationDatabase } from "./conversations.ts";
 import { closeKnowledgeDatabase } from "./knowledge.ts";
 import { closeMemoryDatabase } from "./memories.ts";
+import { writeInitialOnboardingState } from "./onboarding-state.ts";
 import {
   createProfileBackup,
   inspectProfileBackup,
@@ -485,7 +486,14 @@ export function recoverProfileLifecycle(input: { confirmed: true; expectedGenera
   return Object.freeze({ resolution, operation: journal.operation });
 }
 
-export function initializeDefaultProfile(input: { confirmed: true; displayName?: string }) {
+type OnboardingLifecycleOperations = Readonly<{
+  writeInitialState?: typeof writeInitialOnboardingState;
+}>;
+
+export function initializeDefaultProfile(
+  input: { confirmed: true; displayName?: string },
+  operations: OnboardingLifecycleOperations = {},
+) {
   if (input.confirmed !== true) throw new ProfileLifecycleError("invalid", "Default profile setup requires explicit confirmation.");
   const registry = getProfileRegistry();
   if (registry.read()) throw new ProfileLifecycleError("conflict", "Profiles are already set up.");
@@ -513,10 +521,26 @@ export function initializeDefaultProfile(input: { confirmed: true; displayName?:
     const snapshot = registry.read();
     if (!snapshot) throw new Error("The Default profile registry did not persist.");
     clearProfileRecovery(runtimePaths.managedDataRoot);
+    let onboardingInitialized = true;
+    try {
+      (operations.writeInitialState ?? writeInitialOnboardingState)({
+        path: join(receipt.profileRoot, "onboarding-state.json"),
+        trustedDataRoot: receipt.profileRoot,
+        status: receipt.inventory.files.length === 0 && receipt.inventory.directories.length === 0 ? "pending" : "available",
+      });
+    } catch {
+      // Profile setup is already durably committed and its recovery journal is
+      // cleared. A missing onboarding file safely falls back to a nonblocking
+      // invitation; never misreport this as profile Recovery failure.
+      onboardingInitialized = false;
+    }
     return Object.freeze({
       snapshot,
       receipt,
-      message: "Your existing workspace is ready in Default.",
+      onboardingInitialized,
+      message: onboardingInitialized
+        ? "Your existing workspace is ready in Default."
+        : "Your existing workspace is ready in Default. Setup & tour can be opened later from Settings.",
     });
   } catch (error) {
     throw new ProfileLifecycleError(
@@ -541,6 +565,11 @@ export function createProfile(input: { displayName: string; kind: CreatableProfi
   updateProfileRecovery(runtimePaths.managedDataRoot, "profile-root-created");
   const next = registry.create({ ...input, profileId });
   updateProfileRecovery(runtimePaths.managedDataRoot, "registry-committed");
+  writeInitialOnboardingState({
+    path: join(registry.profileRoot(profileId), "onboarding-state.json"),
+    trustedDataRoot: registry.profileRoot(profileId),
+    status: "pending",
+  });
   clearProfileRecovery(runtimePaths.managedDataRoot);
   return Object.freeze({ snapshot: next, profile: profileById(next, profileId) });
 }
@@ -574,7 +603,10 @@ function tombstonePath(profile: ProfileMetadata, operation: "reset" | "delete", 
   return Object.freeze({ root, name, path: resolve(root, name) });
 }
 
-export function resetTestingProfile(input: { profileId: string; expectedGeneration: number; confirmedName: string }) {
+export function resetTestingProfile(
+  input: { profileId: string; expectedGeneration: number; confirmedName: string },
+  operations: OnboardingLifecycleOperations = {},
+) {
   const { registry, snapshot } = currentSnapshot();
   const profile = profileById(snapshot, input.profileId);
   if (profile.kind !== "testing") throw new ProfileLifecycleError("protected", "Only a Testing · Temporary profile can be reset.");
@@ -606,7 +638,21 @@ export function resetTestingProfile(input: { profileId: string; expectedGenerati
     safeRemovePrivateTree(tombstone.path, tombstone.root);
     clearProfileRecovery(runtimePaths.managedDataRoot);
   } catch { cleanupPending = true; }
-  return Object.freeze({ snapshot: next, cleanupPending });
+  let onboardingInitialized = false;
+  if (!cleanupPending) {
+    try {
+      (operations.writeInitialState ?? writeInitialOnboardingState)({
+        path: join(root, "onboarding-state.json"),
+        trustedDataRoot: root,
+        status: "pending",
+      });
+      onboardingInitialized = true;
+    } catch {
+      // Reset is already committed. Missing setup state is nonfatal and falls
+      // back to a manual tour invitation instead of reopening Recovery.
+    }
+  }
+  return Object.freeze({ snapshot: next, cleanupPending, onboardingInitialized });
 }
 
 export function deleteProfile(input: { profileId: string; expectedGeneration: number; confirmedName: string }) {

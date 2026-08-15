@@ -73,12 +73,16 @@ test("validates closed SQLite domains and bounded known JSON without changing by
     schemaVersion: 2, selectedModel: "qwen3:8b", contextTokens: 4096, revision: 1,
     updatedAt: "2026-08-13T00:00:00.000Z",
   });
+  writeJson(join(root, "onboarding-state.json"), {
+    schemaVersion: 1, flowVersion: 1, status: "pending", step: "you", revision: 0,
+    startedAt: null, dismissedAt: null, completedAt: null, receipt: null, updatedAt: null,
+  });
   const databasePath = join(root, "rangabot.db");
   const before = { sha256: sha256(databasePath), size: statSync(databasePath).size, mtimeMs: statSync(databasePath).mtimeMs };
   const receipt = validateProfileDomainRoot(root);
   assert.deepEqual({ sqliteDatabases: receipt.sqliteDatabases, jsonStores: receipt.jsonStores }, {
     sqliteDatabases: 4,
-    jsonStores: 5,
+    jsonStores: 6,
   });
   assert.deepEqual({ sha256: sha256(databasePath), size: statSync(databasePath).size, mtimeMs: statSync(databasePath).mtimeMs }, before);
   assert.equal(existsSync("/synthetic/not-opened"), false);
@@ -102,6 +106,14 @@ test("fails closed on corrupt SQLite and malformed known JSON", () => {
   mkdirSync(join(corruptBackup, "knowledge", "backups"), { recursive: true, mode: 0o700 });
   writeFileSync(join(corruptBackup, "knowledge", "backups", "knowledge-2026-08-13T00-00-00Z-a1b2c3d4.db"), "bad", { mode: 0o600 });
   assert.throws(() => validateProfileDomainRoot(corruptBackup), /SQLite database failed its integrity check/);
+
+  const corruptOnboarding = privateRoot("rangabot-profile-domain-corrupt-onboarding-");
+  writeJson(join(corruptOnboarding, "onboarding-state.json"), {
+    schemaVersion: 1, flowVersion: 1, status: "completed", step: "ready", revision: 3,
+    startedAt: "2026-08-13T00:00:00.000Z", dismissedAt: null,
+    completedAt: null, receipt: null, updatedAt: "2026-08-13T00:03:00.000Z",
+  });
+  assert.throws(() => validateProfileDomainRoot(corruptOnboarding), /known profile JSON store has an incompatible schema/i);
 });
 
 test("rejects symbolic links, hard links, and non-private profile entries", () => {
@@ -173,7 +185,7 @@ test("restore refuses a corrupt backup domain before registry cutover", () => {
     cwd: root,
     env: {
       ...process.env,
-      RANGABOT_RESOURCE_ROOT: realpathSync(resolve(".")),
+      RANGABOT_RESOURCE_ROOT: realpathSync(process.env.RANGABOT_RESOURCE_ROOT ?? resolve(".")),
       RANGABOT_DATA_ROOT: managedRoot,
       KNOWLEDGE_DISABLE_EMBEDDINGS: "1",
     },
@@ -213,7 +225,7 @@ test("switch refuses a semantically corrupt target before changing the active pr
     cwd: root,
     env: {
       ...process.env,
-      RANGABOT_RESOURCE_ROOT: realpathSync(resolve(".")),
+      RANGABOT_RESOURCE_ROOT: realpathSync(process.env.RANGABOT_RESOURCE_ROOT ?? resolve(".")),
       RANGABOT_DATA_ROOT: managedRoot,
       KNOWLEDGE_DISABLE_EMBEDDINGS: "1",
     },

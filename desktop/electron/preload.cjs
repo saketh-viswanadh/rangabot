@@ -8,7 +8,7 @@ contextBridge.exposeInMainWorld("rangabotDesktop", Object.freeze({
     return ipcRenderer.invoke("rangabot:save-profile-backup", { bytes: new Uint8Array(bytes), filename });
   },
   pickLocalFiles(kind) {
-    if (kind !== "knowledge" && kind !== "dataset") return Promise.reject(new Error("The local file picker request is invalid."));
+    if (kind !== "knowledge" && kind !== "dataset" && kind !== "repository") return Promise.reject(new Error("The local file picker request is invalid."));
     return ipcRenderer.invoke("rangabot:pick-local-files", { kind });
   },
 }));

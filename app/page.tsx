@@ -31,11 +31,17 @@ import { WelcomePreferencesDialog } from "@/app/components/welcome-preferences";
 import { ResponseFeedback } from "@/app/components/response-feedback";
 import { ModelManager } from "@/app/components/model-manager";
 import { ProfileManager } from "@/app/components/profile-manager";
+import { FirstRunSetup } from "@/app/components/first-run-setup";
 import type { ResponseFeedbackRating, ResponseFeedbackView } from "@/lib/response-feedback-contract";
 import type { DesktopPreferences } from "@/lib/desktop-preferences";
+import type { OnboardingState } from "@/lib/onboarding-contract";
 import { mergeResponseFeedbackRead, responseFeedbackBindingMatches } from "@/lib/response-feedback-client-state";
 import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
 import { parseAnalysisTraceHeader, parsePackWarningCodesHeader } from "@/lib/chat-validation";
+import {
+  knowledgeImportFailureMessage as formatKnowledgeImportFailureMessage,
+  knowledgeImportMessage as formatKnowledgeImportMessage,
+} from "@/lib/knowledge-import-message";
 import {
   APPEARANCE_STORAGE_KEY,
   DEFAULT_PALETTE,
@@ -250,7 +256,11 @@ export default function Home() {
   const [appearance, setAppearance] = useState<Appearance>("dark");
   const [palette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
   const [desktopPreferencesRevision, setDesktopPreferencesRevision] = useState(0);
+  const [desktopPreferences, setDesktopPreferences] = useState<DesktopPreferences | null>(null);
+  const [onboarding, setOnboarding] = useState<OnboardingState | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
   const [preferencesMessage, setPreferencesMessage] = useState("");
+  const [onboardingMessage, setOnboardingMessage] = useState("");
   const [legacyPreferencesPreview, setLegacyPreferencesPreview] = useState<LegacyPreferencesPreview | null>(null);
   const [replyTo, setReplyTo] = useState<DisplayMessage | null>(null);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
@@ -316,6 +326,7 @@ export default function Home() {
   const toolsTriggerRef = useRef<HTMLButtonElement>(null);
   const toolsPopoverRef = useRef<HTMLDivElement>(null);
   const preferencesTriggerRef = useRef<HTMLButtonElement>(null);
+  const setupReturnFocusRef = useRef<HTMLElement | null>(null);
   const bookWelcomeRequestRef = useRef<AbortController | null>(null);
   const wordPreviewCloseRef = useRef<HTMLButtonElement>(null);
   const wordPreviewReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -600,12 +611,31 @@ export default function Home() {
 
   async function importKnowledgeDocuments() {
     if (!knowledgeImportPaths.length) return;
-    setKnowledgeImporting(true); setKnowledgeImportMessage("Copying into this profile and building the local index…");
+    setKnowledgeImporting(true); setKnowledgeImportMessage("Copying into this profile and updating local Knowledge…");
     try {
       const response = await localApiFetch("/api/knowledge/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ paths: knowledgeImportPaths }) });
-      const data = await response.json() as { copied?: number; error?: string };
-      if (!response.ok) return setKnowledgeImportMessage(data.error ?? "The documents could not be imported.");
-      setKnowledgeImportPaths([]); setKnowledgeImportMessage(`${data.copied ?? 0} document${data.copied === 1 ? "" : "s"} added to this profile and indexed locally.`);
+      const data = await response.json() as {
+        selected?: number;
+        copied?: number;
+        retained?: string[];
+        partial?: boolean;
+        status?: { incompatible?: number; pending?: number };
+        error?: string;
+      };
+      if (!response.ok) {
+        if (data.partial) {
+          setKnowledgeImportPaths([]);
+          await refreshKnowledge();
+        }
+        return setKnowledgeImportMessage(formatKnowledgeImportFailureMessage(data));
+      }
+      setKnowledgeImportPaths([]);
+      setKnowledgeImportMessage(formatKnowledgeImportMessage({
+        selected: data.selected ?? knowledgeImportPaths.length,
+        copied: data.copied,
+        incompatible: data.status?.incompatible,
+        pending: data.status?.pending,
+      }));
       await refreshKnowledge();
     } finally { setKnowledgeImporting(false); }
   }
@@ -833,6 +863,7 @@ export default function Home() {
           if (!response.ok) throw new Error("preferences unavailable");
           const data = await response.json() as { preferences?: DesktopPreferences };
           if (!data.preferences) throw new Error("preferences missing");
+          setDesktopPreferences(data.preferences);
           setDesktopPreferencesRevision(data.preferences.revision);
           applyPreferences(
             { version: 1, preferredName: data.preferences.preferredName || null, mode: data.preferences.welcomeMode },
@@ -848,10 +879,25 @@ export default function Home() {
               "Legacy preferences from a different local origin: MISSING. Rangabot does not scan old browser origins; use Preferences to re-enter them manually.",
             );
           }
+          try {
+            const onboardingResponse = await localApiFetch("/api/onboarding", { cache: "no-store" });
+            const onboardingData = await onboardingResponse.json() as { onboarding?: OnboardingState; error?: string };
+            if (!onboardingResponse.ok || !onboardingData.onboarding) {
+              throw new Error(onboardingData.error ?? "Setup progress is unavailable.");
+            }
+            setOnboarding(onboardingData.onboarding);
+            setOnboardingMessage("");
+          } catch (error) {
+            setOnboarding(null);
+            setOnboardingMessage(error instanceof Error ? error.message : "Setup & tour is unavailable. Your saved preferences were kept.");
+          }
         })
         .catch(() => {
           applyPreferences({ ...defaultWelcomePreferences }, null, DEFAULT_PALETTE);
           setLegacyPreferencesPreview(null);
+          setDesktopPreferences(null);
+          setOnboarding(null);
+          setOnboardingMessage("");
           setPreferencesMessage("Desktop preferences could not be loaded safely. No browser preferences were applied.");
         });
     }
@@ -864,6 +910,10 @@ export default function Home() {
       void refreshKnowledge();
     }
   }, [nextWelcomeIndex, refreshBookWelcome]);
+  useEffect(() => {
+    if (!activeProfileContext || !desktopPreferences || !onboarding || profileRecoveryRequired) return;
+    if (onboarding.status === "pending" || onboarding.status === "in-progress") setSetupOpen(true);
+  }, [activeProfileContext, desktopPreferences, onboarding, profileRecoveryRequired]);
   useEffect(() => {
     if (!sidebarOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -1336,11 +1386,32 @@ export default function Home() {
     requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
   }
 
-  async function saveWelcomePreferences(preferences: WelcomePreferences, nextAppearance: Appearance, nextPalette: Palette) {
-    const previous = { preferences: welcomePreferences, appearance, palette };
+  function closeSetupAndRestoreFocus() {
+    setSetupOpen(false);
+    void Promise.all([refreshStatus(), refreshRepositories(), refreshKnowledge()]);
+    requestAnimationFrame(() => {
+      const mobile = window.matchMedia("(max-width: 720px)").matches;
+      if (mobile && !sidebarOpen) {
+        setupReturnFocusRef.current = null;
+        const visibleFallback = mobileNavigationRef.current
+          ?? document.querySelector<HTMLTextAreaElement>(".composer textarea");
+        visibleFallback?.focus();
+        return;
+      }
+      const opener = setupReturnFocusRef.current;
+      setupReturnFocusRef.current = null;
+      if (opener?.isConnected) { opener.focus(); return; }
+      const fallback = preferencesTriggerRef.current;
+      if (fallback) fallback.focus();
+      else document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
+    });
+  }
+
+  async function saveWelcomePreferences(preferences: WelcomePreferences, nextAppearance: Appearance | null, nextPalette: Palette) {
+    const previous = { preferences: welcomePreferences, appearance: desktopPreferences?.appearance ?? null, palette };
     let rollback = previous;
     setWelcomePreferences(preferences);
-    setAppearance(nextAppearance);
+    setAppearance(nextAppearance ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
     setPalette(nextPalette);
     setPreferencesMessage("");
     try {
@@ -1364,7 +1435,7 @@ export default function Home() {
               preferredName: data.preferences.preferredName || null,
               mode: data.preferences.welcomeMode,
             },
-            appearance: data.preferences.appearance ?? previous.appearance,
+            appearance: data.preferences.appearance,
             palette: data.preferences.palette,
           };
           setDesktopPreferencesRevision(data.preferences.revision);
@@ -1372,13 +1443,14 @@ export default function Home() {
         throw new Error(data.error ?? "save failed");
       }
       setDesktopPreferencesRevision(data.preferences.revision);
+      setDesktopPreferences(data.preferences);
       setLegacyPreferencesPreview(null);
       setPreferencesMessage("Preferences saved locally.");
       setWelcomePreferencesOpen(false);
       rotateWelcome(preferences.mode);
     } catch {
       setWelcomePreferences(rollback.preferences);
-      setAppearance(rollback.appearance);
+      setAppearance(rollback.appearance ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
       setPalette(rollback.palette);
       setPreferencesMessage("Couldn’t save preferences on this device. Try again.");
     }
@@ -1413,6 +1485,7 @@ export default function Home() {
       if (!response.ok || !data.preferences || !data.kind) throw new Error(data.error ?? "import failed");
       const saved = data.preferences;
       setDesktopPreferencesRevision(saved.revision);
+      setDesktopPreferences(saved);
       setWelcomePreferences({ version: 1, preferredName: saved.preferredName || null, mode: saved.welcomeMode });
       setAppearance(saved.appearance ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
       setPalette(saved.palette);
@@ -1428,6 +1501,33 @@ export default function Home() {
     if (profileSwitching) return;
     setInput(prompt);
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus());
+  }
+
+  function applyDesktopPreferences(saved: DesktopPreferences) {
+    setDesktopPreferences(saved);
+    setDesktopPreferencesRevision(saved.revision);
+    const nextWelcome = { version: 1 as const, preferredName: saved.preferredName || null, mode: saved.welcomeMode };
+    setWelcomePreferences(nextWelcome);
+    setAppearance(saved.appearance ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+    setPalette(saved.palette);
+    setLegacyPreferencesPreview(null);
+    rotateWelcome(saved.welcomeMode);
+  }
+
+  async function dismissOnboardingInvitation() {
+    if (!onboarding) return;
+    try {
+      const response = await localApiFetch("/api/onboarding", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "dismiss", expectedRevision: onboarding.revision, step: onboarding.step }),
+      });
+      const data = await response.json() as { onboarding?: OnboardingState; error?: string };
+      if (!response.ok || !data.onboarding) throw new Error(data.error ?? "Setup invitation could not be dismissed.");
+      setOnboarding(data.onboarding);
+    } catch (error) {
+      setPreferencesMessage(error instanceof Error ? error.message : "Setup invitation could not be dismissed.");
+    }
   }
 
   async function exportOpenConversation() {
@@ -1548,10 +1648,19 @@ export default function Home() {
         <input ref={conversationImportRef} className="visually-hidden-file" type="file" accept=".md,text/markdown,text/plain" onChange={(event) => void importConversation(event)} />
         {conversationTransferMessage && <p className="conversation-transfer-status" role="status">{conversationTransferMessage}</p>}
         {preferencesMessage && <p className="conversation-transfer-status" role="status" aria-live="polite">{preferencesMessage}</p>}
+        {onboardingMessage && <p className="conversation-transfer-status" role="status" aria-live="polite">{onboardingMessage}</p>}
         {legacyPreferencesPreview && (
           <button type="button" className="utility-button" onClick={() => void importLegacyPreferences()}>
             Review legacy preferences
           </button>
+        )}
+        {onboarding?.status === "available" && (
+          <section className="setup-invitation" aria-label="Optional setup and tour">
+            <PrimaryBrandMark className="setup-invitation-mark" />
+            <div><strong>Meet the new setup</strong><small>Review local models, preferences and private context when it suits you.</small></div>
+            <button type="button" onClick={(event) => { setupReturnFocusRef.current = event.currentTarget; setSetupOpen(true); }}>Open</button>
+            <button type="button" className="setup-invitation-dismiss" onClick={() => void dismissOnboardingInvitation()} aria-label="Dismiss setup invitation"><CraftIcon name="close" size={13} /></button>
+          </section>
         )}
         <nav className={`history ${conversationDropTarget === "all" ? "conversation-drop-target" : ""}`} onDragOver={(event) => allowConversationDrop(event, "all")} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setConversationDropTarget(null); }} onDrop={(event) => dropConversation(event, null)}>
           <span className="nav-label">{conversationSearch ? "Search results" : conversationDropTarget === "all" ? "Drop here to remove from project" : "Recent chats"}</span>
@@ -1568,7 +1677,7 @@ export default function Home() {
             </div>
           ))}
         </nav>
-        <button type="button" className="sidebar-settings" onClick={() => setWelcomePreferencesOpen(true)}><CraftIcon name="settings" size={17} /><span>Settings</span></button>
+        <button ref={preferencesTriggerRef} type="button" className="sidebar-settings" onClick={() => setWelcomePreferencesOpen(true)}><CraftIcon name="settings" size={17} /><span>Settings</span></button>
         {!publicDemo && <div className="sidebar-profile"><ProfileManager onSwitchingChange={setProfileSwitching} onActiveProfileChange={setActiveProfileContext} onRecoveryRequiredChange={setProfileRecoveryRequired} /></div>}
       </aside>
       {sidebarOpen && <button className="sidebar-backdrop" type="button" onClick={() => setSidebarOpen(false)} aria-label="Dismiss chat navigation" />}
@@ -1798,7 +1907,7 @@ export default function Home() {
               {knowledgeTab === "vault" && <section className="vault-overview">
                 <div className="vault-import-card">
                   <div><span>Books and documents</span><strong>Add knowledge without paths or Terminal</strong><p>Choose PDF, Word, Markdown, HTML, or text files. RangaBot copies them into this profile only when you press Import.</p></div>
-                  <div className="vault-import-actions"><button type="button" onClick={() => void chooseKnowledgeDocuments()} disabled={knowledgeImporting}><CraftIcon name="document" size={16} /> Choose files</button><button type="button" className="primary" onClick={() => void importKnowledgeDocuments()} disabled={knowledgeImporting || !knowledgeImportPaths.length}>{knowledgeImporting ? "Indexing…" : `Import${knowledgeImportPaths.length ? ` ${knowledgeImportPaths.length}` : ""}`}</button></div>
+                  <div className="vault-import-actions"><button type="button" onClick={() => void chooseKnowledgeDocuments()} disabled={knowledgeImporting}><CraftIcon name="document" size={16} /> Choose files</button><button type="button" className="primary" onClick={() => void importKnowledgeDocuments()} disabled={knowledgeImporting || !knowledgeImportPaths.length}>{knowledgeImporting ? "Importing…" : `Import${knowledgeImportPaths.length ? ` ${knowledgeImportPaths.length}` : ""}`}</button></div>
                   {knowledgeImportPaths.length > 0 && <ul>{knowledgeImportPaths.map((path) => <li key={path}>{path.split(/[\\/]/).at(-1)}</li>)}</ul>}
                   {knowledgeImportMessage && <p role="status">{knowledgeImportMessage}</p>}
                 </div>
@@ -1854,8 +1963,17 @@ export default function Home() {
       )}
       <MemoryPanel open={!profileRecoveryRequired && memoryPanelOpen} onClose={closeMemoryPanel} activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} />
       <SqlAnalysisPanel key={sqlDraft ? `${sqlDraft.datasetId}:${sqlDraft.query}` : "manual"} open={!profileRecoveryRequired && sqlPanelOpen} onClose={closeSqlPanel} onAttach={(dataset) => { void attachDatasetToChat(dataset); setSqlDraft(null); }} initialDraft={sqlDraft} activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} />
-      {!profileRecoveryRequired && welcomePreferencesOpen && <WelcomePreferencesDialog preferences={welcomePreferences} appearance={appearance} palette={palette} activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} onClose={closeWelcomePreferences} onSave={saveWelcomePreferences} />}
+      {!profileRecoveryRequired && welcomePreferencesOpen && <WelcomePreferencesDialog preferences={welcomePreferences} appearance={desktopPreferences?.appearance ?? null} palette={palette} activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} onClose={closeWelcomePreferences} onSave={saveWelcomePreferences} onOpenSetup={() => { setupReturnFocusRef.current = preferencesTriggerRef.current; setWelcomePreferencesOpen(false); setSetupOpen(true); }} />}
       {!profileRecoveryRequired && modelManagerOpen && <ModelManager activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} onClose={() => setModelManagerOpen(false)} onChanged={() => void refreshStatus()} />}
+      {!profileRecoveryRequired && setupOpen && activeProfileContext && desktopPreferences && onboarding && <FirstRunSetup
+        profile={activeProfileContext}
+        preferences={desktopPreferences}
+        onboarding={onboarding}
+        onClose={closeSetupAndRestoreFocus}
+        onPreferencesChanged={applyDesktopPreferences}
+        onOnboardingChanged={setOnboarding}
+        onAppearancePreview={(nextAppearance, nextPalette) => { setAppearance(nextAppearance ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")); setPalette(nextPalette); }}
+      />}
     </main>
   );
 }

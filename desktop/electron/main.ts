@@ -9,7 +9,7 @@ import { diagnoseLocalOllama } from "./ollama-diagnostic.ts";
 import { startManagedModelRuntime, type ManagedModelRuntime } from "./model-runtime.ts";
 import { startLeasedDesktopServer, type LeasedSupervisedDesktopServer } from "./process-supervisor.ts";
 import { PROFILE_BACKUP_SAVE_CHANNEL, saveProfileBackupWithDialog } from "./profile-backup-save.ts";
-import { LOCAL_FILE_PICKER_CHANNEL, pickLocalFilesWithDialog, type LocalFilePickerKind } from "./local-file-picker.ts";
+import { isLocalFilePickerKind, LOCAL_FILE_PICKER_CHANNEL, pickLocalFilesWithDialog } from "./local-file-picker.ts";
 import { createDesktopRuntimeBoundaryFromVerifiedResources } from "./resource-boundary.ts";
 import {
   DESKTOP_RENDERER_WEB_PREFERENCES,
@@ -203,9 +203,9 @@ export async function startDesktopRuntime(input: {
         }
         return saveProfileBackupWithDialog({ request, window: state.window });
       });
-      ipcMain.handle(LOCAL_FILE_PICKER_CHANNEL, async (event, request: { kind?: LocalFilePickerKind }) => {
+      ipcMain.handle(LOCAL_FILE_PICKER_CHANNEL, async (event, request: { kind?: unknown }) => {
         if (!state.window || state.window.isDestroyed() || event.sender !== state.window.webContents) throw new Error("The file picker request did not come from the active local RangaBot window.");
-        if (request?.kind !== "knowledge" && request?.kind !== "dataset") throw new Error("The local file picker request is invalid.");
+        if (!isLocalFilePickerKind(request?.kind)) throw new Error("The local file picker request is invalid.");
         return pickLocalFilesWithDialog({ kind: request.kind, window: state.window, dialog });
       });
     }

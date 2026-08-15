@@ -65,6 +65,8 @@ test("two active profiles isolate every implemented mutable domain while shared 
     const requests = await import(${JSON.stringify(moduleUrl("lib/profile-request.ts"))});
     const security = await import(${JSON.stringify(moduleUrl("lib/local-http-security.ts"))});
     const backupModule = await import(${JSON.stringify(moduleUrl("lib/profile-backup.ts"))});
+    const onboarding = await import(${JSON.stringify(moduleUrl("lib/onboarding-state.ts"))});
+    const recovery = await import(${JSON.stringify(moduleUrl("lib/profile-recovery.ts"))});
 
     const paths = runtimeModule.runtimePaths;
     const sharedModelPath = join(paths.managedModels, "shared-weight.marker");
@@ -75,6 +77,8 @@ test("two active profiles isolate every implemented mutable domain while shared 
     assert.equal(initialized.message, "Your existing workspace is ready in Default.");
     const defaultId = initialized.snapshot.activeProfileId;
     const defaultRoot = paths.dataRoot;
+    const defaultOnboardingPath = paths.onboardingState;
+    assert.equal(onboarding.readOnboardingState().status, "available");
     assert.equal(readFileSync(join(defaultRoot, "legacy-marker.txt"), "utf8"), originalLegacy);
     assert.equal(readFileSync(join(paths.managedDataRoot, "legacy-marker.txt"), "utf8"), originalLegacy);
     assert.equal(existsSync(join(defaultRoot, "models")), false);
@@ -155,6 +159,7 @@ test("two active profiles isolate every implemented mutable domain while shared 
         artifactsRoot: paths.artifactsRoot,
         desktopPreferences: paths.desktopPreferences,
         modelPreferences: paths.modelPreferences,
+        onboardingState: paths.onboardingState,
         knowledgeRoot: paths.knowledgeRoot,
         knowledgeInbox: paths.knowledgeInbox,
         knowledgeProcessed: paths.knowledgeProcessed,
@@ -199,6 +204,13 @@ test("two active profiles isolate every implemented mutable domain while shared 
       expectedGeneration: personalCreated.snapshot.generation,
     });
     const testingId = testingCreated.profile.id;
+    const personalOnboardingPath = join(context.getProfileRegistry().profileRoot(personalId), "onboarding-state.json");
+    const testingOnboardingPath = join(context.getProfileRegistry().profileRoot(testingId), "onboarding-state.json");
+    assert.equal(onboarding.readOnboardingState({ path: personalOnboardingPath, initialStatus: "available" }).status, "pending");
+    assert.equal(onboarding.readOnboardingState({ path: testingOnboardingPath, initialStatus: "available" }).status, "pending");
+    assert.notEqual(personalOnboardingPath, defaultOnboardingPath);
+    assert.notEqual(testingOnboardingPath, defaultOnboardingPath);
+    assert.notEqual(testingOnboardingPath, personalOnboardingPath);
     writeFileSync(join(context.getProfileRegistry().profileRoot(testingId), "reset-me.marker"), "temporary", { mode: 0o600 });
 
     const beforeSwitch = context.getProfileContext().binding;
@@ -209,6 +221,8 @@ test("two active profiles isolate every implemented mutable domain while shared 
       expectedGeneration: testingCreated.snapshot.generation,
     });
     const personalRoot = paths.dataRoot;
+    assert.equal(paths.onboardingState, personalOnboardingPath);
+    assert.equal(onboarding.readOnboardingState().status, "pending");
     assert.notEqual(personalRoot, defaultRoot);
     const personalMutablePaths = routedMutablePaths();
     assertRoutedInside(personalRoot, personalMutablePaths);
@@ -264,6 +278,8 @@ test("two active profiles isolate every implemented mutable domain while shared 
       profileId: defaultId,
       expectedGeneration: context.getProfileRegistry().read().generation,
     });
+    assert.equal(paths.onboardingState, defaultOnboardingPath);
+    assert.equal(onboarding.readOnboardingState().status, "available");
     assert.deepEqual(snapshot("Default"), afterDefault);
     assert.equal(existsSync(join(defaultRoot, "Personal.marker")), false);
     assert.equal(existsSync(join(personalRoot, "Default.marker")), false);
@@ -291,25 +307,38 @@ test("two active profiles isolate every implemented mutable domain while shared 
       expectedGeneration: restored.snapshot.generation,
       confirmedName: "Canary",
     });
+    assert.equal(reset.onboardingInitialized, true);
+    assert.equal(onboarding.readOnboardingState({ path: testingOnboardingPath, initialStatus: "available" }).status, "pending");
+    assert.equal(onboarding.readOnboardingState({ path: testingOnboardingPath, initialStatus: "available" }).step, "you");
     assert.equal(existsSync(join(context.getProfileRegistry().profileRoot(testingId), "reset-me.marker")), false);
-    assert.throws(() => lifecycle.resetTestingProfile({
+    const resetWithoutOnboarding = lifecycle.resetTestingProfile({
       profileId: testingId,
       expectedGeneration: reset.snapshot.generation,
+      confirmedName: "Canary",
+    }, {
+      writeInitialState() { throw new Error("synthetic onboarding write failure"); },
+    });
+    assert.equal(resetWithoutOnboarding.onboardingInitialized, false);
+    assert.equal(recovery.readProfileRecoveryJournal(paths.managedDataRoot), null);
+    assert.equal(onboarding.readOnboardingState({ path: testingOnboardingPath, initialStatus: "available" }).status, "available");
+    assert.throws(() => lifecycle.resetTestingProfile({
+      profileId: testingId,
+      expectedGeneration: resetWithoutOnboarding.snapshot.generation,
       confirmedName: "wrong",
     }), /exact profile name/i);
     assert.throws(() => lifecycle.deleteProfile({
       profileId: defaultId,
-      expectedGeneration: reset.snapshot.generation,
+      expectedGeneration: resetWithoutOnboarding.snapshot.generation,
       confirmedName: "Default",
     }), /cannot be deleted/i);
     assert.throws(() => lifecycle.deleteProfile({
       profileId: personalId,
-      expectedGeneration: reset.snapshot.generation,
+      expectedGeneration: resetWithoutOnboarding.snapshot.generation,
       confirmedName: "wrong",
     }), /exact profile name/i);
     const removed = lifecycle.deleteProfile({
       profileId: personalId,
-      expectedGeneration: reset.snapshot.generation,
+      expectedGeneration: resetWithoutOnboarding.snapshot.generation,
       confirmedName: "Private Work",
     });
     assert.equal(removed.snapshot.profiles.some((profile) => profile.id === personalId), false);
@@ -339,7 +368,7 @@ test("two active profiles isolate every implemented mutable domain while shared 
       cwd: root,
       env: {
         ...process.env,
-        RANGABOT_RESOURCE_ROOT: realpathSync(resolve(".")),
+        RANGABOT_RESOURCE_ROOT: realpathSync(process.env.RANGABOT_RESOURCE_ROOT ?? resolve(".")),
         RANGABOT_DATA_ROOT: managedRoot,
         KNOWLEDGE_DISABLE_EMBEDDINGS: "1",
       },
@@ -365,6 +394,63 @@ test("two active profiles isolate every implemented mutable domain while shared 
     assert.equal(result.operationKindsBlocked, 13);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a genuinely new Default starts pending while onboarding write failure falls back without false Recovery", () => {
+  for (const failOnboardingWrite of [false, true]) {
+    const root = fixture(`rangabot-new-default-${failOnboardingWrite ? "fault" : "pending"}-`);
+    const managedRoot = join(root, "managed-data");
+    mkdirSync(managedRoot, { mode: 0o700 });
+    const source = String.raw`
+      import { existsSync } from "node:fs";
+      const lifecycle = await import(${JSON.stringify(moduleUrl("lib/profile-lifecycle.ts"))});
+      const onboarding = await import(${JSON.stringify(moduleUrl("lib/onboarding-state.ts"))});
+      const recovery = await import(${JSON.stringify(moduleUrl("lib/profile-recovery.ts"))});
+      const context = await import(${JSON.stringify(moduleUrl("lib/profile-context.ts"))});
+      const initialized = lifecycle.initializeDefaultProfile(
+        { confirmed: true },
+        ${failOnboardingWrite
+          ? `{ writeInitialState() { throw new Error("synthetic onboarding write failure"); } }`
+          : `{}`},
+      );
+      const path = context.getProfileRegistry().profileRoot(initialized.snapshot.activeProfileId) + "/onboarding-state.json";
+      console.log(JSON.stringify({
+        status: onboarding.readOnboardingState({ path, initialStatus: "available" }).status,
+        onboardingInitialized: initialized.onboardingInitialized,
+        onboardingFileExists: existsSync(path),
+        recovery: recovery.readProfileRecoveryJournal(${JSON.stringify(managedRoot)}),
+        message: initialized.message,
+      }));
+    `;
+    try {
+      const child = spawnSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "--eval", source], {
+        cwd: root,
+        env: {
+          ...process.env,
+          RANGABOT_RESOURCE_ROOT: realpathSync(process.env.RANGABOT_RESOURCE_ROOT ?? resolve(".")),
+          RANGABOT_DATA_ROOT: managedRoot,
+          KNOWLEDGE_DISABLE_EMBEDDINGS: "1",
+        },
+        encoding: "utf8",
+        timeout: 30_000,
+      });
+      assert.equal(child.status, 0, child.stderr || child.stdout);
+      const result = JSON.parse(child.stdout.trim().split("\n").at(-1) ?? "null") as Record<string, unknown>;
+      assert.equal(result.recovery, null);
+      if (failOnboardingWrite) {
+        assert.deepEqual({ status: result.status, initialized: result.onboardingInitialized, exists: result.onboardingFileExists }, {
+          status: "available", initialized: false, exists: false,
+        });
+        assert.match(String(result.message), /opened later from Settings/);
+      } else {
+        assert.deepEqual({ status: result.status, initialized: result.onboardingInitialized, exists: result.onboardingFileExists }, {
+          status: "pending", initialized: true, exists: true,
+        });
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 });
 

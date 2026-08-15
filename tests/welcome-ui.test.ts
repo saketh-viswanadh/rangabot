@@ -124,7 +124,8 @@ test("keeps appearance in persistent Preferences rather than the local workbench
   assert.match(page, /> Settings<\/button>/);
   assert.match(page, /aria-label="Conversation and workspace options"/,
     "The compact workspace menu must retain a programmatic name");
-  assert.match(page, /<WelcomePreferencesDialog[\s\S]*?appearance=\{appearance\}[\s\S]*?palette=\{palette\}/);
+  assert.match(page, /<WelcomePreferencesDialog[\s\S]*?appearance=\{desktopPreferences\?\.appearance \?\? null\}[\s\S]*?palette=\{palette\}/,
+    "Preferences must preserve raw null as System while the page uses its separately resolved live appearance");
   assert.doesNotMatch(tools, /tool-appearance|Appearance mode|Colour theme/,
     "Tools should contain capabilities and permissions, not personal appearance settings");
 });
@@ -133,8 +134,8 @@ test("separates appearance mode from native, visually unlabeled colour radios", 
   const appearance = sliceBetween(preferences, 'className="preferences-appearance"', "</section>");
 
   assert.match(appearance, /role="group"\s+aria-label="Appearance mode"/);
-  assert.match(appearance, /\[(?:"system",\s*)?"light",\s*"dark"\]/,
-    "Mode control must expose explicit Light and Dark choices; System is optional");
+  assert.match(appearance, /\[null,\s*"light",\s*"dark"\]/,
+    "Mode control must preserve System alongside explicit Light and Dark choices");
   assert.match(appearance, /aria-pressed=\{draftAppearance === choice\}/);
   assert.doesNotMatch(appearance, /changeAppearance\(appearance ===/,
     "Light and dark must be explicit choices rather than one ambiguous toggle");
