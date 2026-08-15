@@ -125,6 +125,8 @@ test("dialog has keyboard containment, SSR guards, announced tour state, safe ex
   assert.match(component, /Rangabot may invite you again/);
   assert.match(component, /Retry saving progress/);
   assert.match(css, /@media \(max-width: 380px\), \(max-height: 600px\)/);
+  assert.match(css, /\.app-shell \{ grid-template-columns: minmax\(0, 1fr\); \}/,
+    "The late experience-blueprint grid must collapse to one column on mobile");
   assert.match(css, /first-run-footer[^}]*flex-direction: column-reverse/);
   assert.match(css, /first-run-footer > div[^}]*grid-template-columns: 1fr/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*first-run-backdrop[\s\S]*animation: none !important/);
@@ -138,6 +140,12 @@ test("dialog has keyboard containment, SSR guards, announced tour state, safe ex
   assert.match(css, /privacy-receipt li strong \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere;[^}]*text-align: right/);
   assert.match(css, /privacy-receipt header small, \.privacy-receipt > small \{[^}]*overflow-wrap: anywhere/);
   assert.match(page, /ref=\{preferencesTriggerRef\}/);
+  assert.match(page, /className="sidebar-settings" onClick=\{\(\) => \{ setWelcomePreferencesOpen\(true\); setSidebarOpen\(false\); \}\}/,
+    "Opening Settings from the mobile drawer must reveal it immediately");
+  assert.match(page, /function restoreWelcomePreferencesOpenerFocus\(\)[\s\S]*max-width: 720px[\s\S]*mobile && !sidebarOpen \? mobileNavigationRef\.current : preferencesTriggerRef\.current/,
+    "Closing mobile Settings must restore focus to a visible control");
+  assert.match(page, /setWelcomePreferencesOpen\(false\);\s*rotateWelcome\(preferences\.mode\);\s*restoreWelcomePreferencesOpenerFocus\(\);\s*\} catch \{[\s\S]*setPreferencesMessage\("Couldn’t save preferences on this device\. Try again\."\);\s*\}\s*\}/,
+    "Saving must restore focus only after success and keep failed saves inside Preferences");
   assert.match(page, /function closeSetupAndRestoreFocus\(\)[\s\S]*max-width: 720px[\s\S]*if \(mobile && !sidebarOpen\) \{[\s\S]*setupReturnFocusRef\.current = null;[\s\S]*mobileNavigationRef\.current[\s\S]*\.composer textarea[\s\S]*return;[\s\S]*const opener = setupReturnFocusRef\.current/);
   assert.match(page, /onClose=\{closeSetupAndRestoreFocus\}/);
   assert.match(component, /role="progressbar"[\s\S]*aria-valuemin=\{1\}[\s\S]*aria-valuemax=\{onboardingSteps\.length\}[\s\S]*aria-valuenow/);

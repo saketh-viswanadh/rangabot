@@ -625,6 +625,7 @@ button:hover > .craft-icon, a:hover > .craft-icon { transform: translateY(-.5px)
   .profile-cards { grid-template-columns: repeat(3, minmax(112px, 1fr)); }
 }
 @media (max-width: 720px) {
+  .app-shell { grid-template-columns: minmax(0, 1fr); }
   .profile-backdrop { align-items: stretch; padding: 0; }
   .profile-dialog { max-height: 100dvh; border-radius: 0; }
   .profile-dialog > header { width: calc(100% - 32px); min-height: 86px; padding: 16px 0; }

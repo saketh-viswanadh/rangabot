@@ -1381,9 +1381,17 @@ export default function Home() {
     setWelcomeIndex((current) => nextWelcomeIndex(current, mode));
   }
 
+  function restoreWelcomePreferencesOpenerFocus() {
+    requestAnimationFrame(() => {
+      const mobile = window.matchMedia("(max-width: 720px)").matches;
+      const visibleOpener = mobile && !sidebarOpen ? mobileNavigationRef.current : preferencesTriggerRef.current;
+      visibleOpener?.focus();
+    });
+  }
+
   function closeWelcomePreferences() {
     setWelcomePreferencesOpen(false);
-    requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
+    restoreWelcomePreferencesOpenerFocus();
   }
 
   function closeSetupAndRestoreFocus() {
@@ -1448,13 +1456,13 @@ export default function Home() {
       setPreferencesMessage("Preferences saved locally.");
       setWelcomePreferencesOpen(false);
       rotateWelcome(preferences.mode);
+      restoreWelcomePreferencesOpenerFocus();
     } catch {
       setWelcomePreferences(rollback.preferences);
       setAppearance(rollback.appearance ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
       setPalette(rollback.palette);
       setPreferencesMessage("Couldn’t save preferences on this device. Try again.");
     }
-    requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
   }
 
   async function importLegacyPreferences() {
@@ -1677,7 +1685,7 @@ export default function Home() {
             </div>
           ))}
         </nav>
-        <button ref={preferencesTriggerRef} type="button" className="sidebar-settings" onClick={() => setWelcomePreferencesOpen(true)}><CraftIcon name="settings" size={17} /><span>Settings</span></button>
+        <button ref={preferencesTriggerRef} type="button" className="sidebar-settings" onClick={() => { setWelcomePreferencesOpen(true); setSidebarOpen(false); }}><CraftIcon name="settings" size={17} /><span>Settings</span></button>
         {!publicDemo && <div className="sidebar-profile"><ProfileManager onSwitchingChange={setProfileSwitching} onActiveProfileChange={setActiveProfileContext} onRecoveryRequiredChange={setProfileRecoveryRequired} /></div>}
       </aside>
       {sidebarOpen && <button className="sidebar-backdrop" type="button" onClick={() => setSidebarOpen(false)} aria-label="Dismiss chat navigation" />}
