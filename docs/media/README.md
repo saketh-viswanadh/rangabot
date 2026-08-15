@@ -1,5 +1,20 @@
 # Reproducible launch media
 
+## Responsive identity source
+
+The Founder-approved public repository mark is stored at
+[`public/brand/rangabot-primary-512.png`](../../public/brand/rangabot-primary-512.png).
+The public README uses that canonical product asset; the wider responsive
+hierarchy is documented without duplicating other icon and chat assets. See the
+[brand asset manifest](brand/BRAND-ASSET-MANIFEST.md) and the repository
+[branding policy](../../BRANDING.md) before use.
+
+The existing 1200×630 Charter sharing card remains the current repository
+social-preview source. No square identity asset has been substituted for that
+wide card, and this repository-media update does not by itself alter GitHub
+social metadata or prove that any favicon, website or application build has
+been released.
+
 All launch media uses Rangabot's synthetic Knowledge Vault demo. It contains no
 personal chats, documents, usernames, filesystem paths or private indexes.
 

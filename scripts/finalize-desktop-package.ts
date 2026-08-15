@@ -60,7 +60,12 @@ function assertRequiredResources(files: readonly DesktopArtifactFile[]) {
     "rangabot-resources/.next/BUILD_ID",
     "rangabot-resources/lib/sql-runtime-worker.cjs",
     "rangabot-resources/package.json",
-    "rangabot-resources/public/ranga/ranga-idle.png",
+    "rangabot-resources/public/brand/rangabot-primary-64.png",
+    "rangabot-resources/public/brand/rangabot-primary-192.png",
+    "rangabot-resources/public/brand/rangabot-primary-512.png",
+    "rangabot-resources/public/brand/rangabot-chat-mark-light.svg",
+    "rangabot-resources/public/brand/rangabot-chat-mark-dark.svg",
+    "rangabot-resources/public/brand/rangabot-spark.svg",
     "rangabot-resources/node_modules/next/package.json",
   ]) {
     if (!paths.has(path)) throw new Error(`Final desktop package is missing ${path}.`);

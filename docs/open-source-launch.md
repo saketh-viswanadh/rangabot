@@ -19,7 +19,8 @@ content gate passed and the owner explicitly approved publication.
 
 - [x] Decide the final license for Ranga artwork and whether contributors may use the Rangabot name on forks
 - [x] Review historical Git objects for local user paths, common tokens, private keys and AWS access-key patterns
-- [x] Verify all bundled/public assets and starter sources have redistribution-compatible licenses or remain metadata-only local downloads
+- [x] Verify bundled/public assets and starter sources have redistribution-compatible licenses, remain metadata-only local downloads, or carry an explicit proprietary official-use boundary
+- [x] Classify the new `public/brand/` identity asset as proprietary Rangabot branding with trademark rights reserved and no Apache-2.0 or CC BY 4.0 spillover
 - [x] Rehearse dependency installation, tests, lint, type checking, build, privacy scan and production audit from a clean clone with no private runtime data
 - [x] Validate Linux and Windows in CI, and pass the macOS clean-clone rehearsal
 - [x] Replace repository-local personal project history with release-oriented documentation where appropriate
