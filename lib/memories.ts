@@ -34,14 +34,19 @@ export type RelevantMemoryContext = {
 export const maxMemoryImportBytes = 300_000;
 export const maxMemoryImportItems = 200;
 
-const defaultDatabasePath = runtimePaths.memoryDatabase;
-let databasePath = defaultDatabasePath;
+let databasePathOverride: string | undefined;
+let openedDatabasePath: string | undefined;
 let database: Database | undefined;
 
+function currentDatabasePath() { return databasePathOverride ?? runtimePaths.memoryDatabase; }
+
 function getDatabase() {
-  if (database) return database;
+  const databasePath = currentDatabasePath();
+  if (database && openedDatabasePath === databasePath) return database;
+  if (database) closeMemoryDatabase();
   preparePrivateSqliteStorage(databasePath);
   database = new DatabaseSync(databasePath);
+  openedDatabasePath = databasePath;
   try {
     database.exec(`
       PRAGMA secure_delete = ON;
@@ -61,6 +66,7 @@ function getDatabase() {
   } catch (error) {
     try { database.close(); } catch { /* Preserve the initialization error. */ }
     database = undefined;
+    openedDatabasePath = undefined;
     hardenPrivateSqliteFiles(databasePath);
     throw error;
   }
@@ -360,6 +366,8 @@ export function applyMemoryImport(payload: unknown, replaceSourceIds: unknown) {
   };
 }
 
-export function closeMemoryDatabaseForTests() { database?.close(); database = undefined; }
-export function setMemoryDatabasePathForTests(path: string) { closeMemoryDatabaseForTests(); databasePath = path; }
+export function closeMemoryDatabase() { database?.close(); database = undefined; openedDatabasePath = undefined; }
+export function closeMemoryDatabaseForTests() { closeMemoryDatabase(); }
+export function setMemoryDatabasePathForTests(path: string) { closeMemoryDatabaseForTests(); databasePathOverride = path; }
+export function resetMemoryDatabasePathForTests() { closeMemoryDatabaseForTests(); databasePathOverride = undefined; }
 export function getMemoryDatabaseForTests() { return getDatabase(); }

@@ -6,6 +6,7 @@ import {
   isAllowedLoopbackHost,
   LOCAL_BOOTSTRAP_HEADER,
   LOCAL_BOOTSTRAP_PATH,
+  LOCAL_PROFILE_CONTEXT_HEADER,
   LOCAL_SESSION_COOKIE,
 } from "./lib/local-http-security";
 import {
@@ -13,7 +14,9 @@ import {
   createLocalSessionSecret,
   issueLocalSessionToken,
   verifyLocalSessionToken,
+  localProfileSessionContext,
 } from "./lib/local-session-token";
+import { recoveryProfileSessionBindings, sessionBindingForLocalGate } from "./lib/profile-context";
 import {
   DESKTOP_READINESS_PROCESS_HEADER,
   DESKTOP_READINESS_PROOF_HEADER,
@@ -87,10 +90,13 @@ export function proxy(request: NextRequest) {
     });
     if (!result.ok) return forbidden(true, result.status);
     if (!bootstrapTokenVerifier.consume(suppliedBootstrapToken)) return forbidden(true);
+    let binding;
+    try { binding = sessionBindingForLocalGate(); }
+    catch { return forbidden(true); }
     const response = new NextResponse(null, { status: 204 });
     response.cookies.set({
       name: LOCAL_SESSION_COOKIE,
-      value: issueLocalSessionToken(sessionSecret),
+      value: issueLocalSessionToken(sessionSecret, binding),
       httpOnly: false,
       sameSite: "strict",
       secure: false,
@@ -101,13 +107,29 @@ export function proxy(request: NextRequest) {
   }
 
   if (api) {
+    const recoveryBindings = (() => {
+      try { return recoveryProfileSessionBindings(); }
+      catch { return []; }
+    })();
+    if (recoveryBindings.length > 0) {
+      const recoveryRead = request.nextUrl.pathname === "/api/profiles" && request.method === "GET";
+      const recoveryMutation = request.nextUrl.pathname === "/api/profiles/recover" && request.method === "POST";
+      if (!recoveryRead && !recoveryMutation) return forbidden(true);
+    }
     const sessionCookie = request.cookies.get(LOCAL_SESSION_COOKIE)?.value;
+    let bindings;
+    try { bindings = recoveryBindings.length > 0 ? recoveryBindings : [sessionBindingForLocalGate()]; }
+    catch { return forbidden(true); }
+    const suppliedProfileContext = request.headers.get(LOCAL_PROFILE_CONTEXT_HEADER);
+    const binding = bindings.find((candidate) => suppliedProfileContext === localProfileSessionContext(candidate));
+    if (!binding) return forbidden(true);
     const result = evaluateLocalApiRequest({
       url: requestUrl,
       method: request.method,
       headers: request.headers,
       sessionCookie,
-      issuedSessionValid: verifyLocalSessionToken(sessionCookie, sessionSecret),
+      issuedSessionValid: verifyLocalSessionToken(sessionCookie, sessionSecret, binding),
+      profileContextValid: suppliedProfileContext === localProfileSessionContext(binding),
     });
     if (!result.ok) return forbidden(true, result.status);
     const response = NextResponse.next();
@@ -116,7 +138,10 @@ export function proxy(request: NextRequest) {
   }
 
   const current = request.cookies.get(LOCAL_SESSION_COOKIE)?.value;
-  const sessionValid = verifyLocalSessionToken(current, sessionSecret);
+  let binding;
+  try { binding = sessionBindingForLocalGate(); }
+  catch { return forbidden(false); }
+  const sessionValid = verifyLocalSessionToken(current, sessionSecret, binding);
   if (request.nextUrl.pathname === "/bootstrap") {
     if (sessionValid) return NextResponse.redirect(new URL("/", requestUrl), 303);
     const response = NextResponse.next();

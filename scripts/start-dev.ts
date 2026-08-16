@@ -1,7 +1,9 @@
 import { spawn } from "node:child_process";
 import { devServerEnvironment, localBootstrapUrl, localServerPort } from "../lib/dev-server.ts";
-import { defaultSqlConfirmationStorePath, maintainSqlConfirmationStoreAtPath } from "../lib/sql-confirmation-store.ts";
+import { maintainSqlConfirmationStoreAtPath } from "../lib/sql-confirmation-store.ts";
 import { purgeArtifactDeletionQuarantine } from "../lib/conversation-artifacts.ts";
+import { assertProfileSessionBindingCurrent, currentProfileSessionBinding } from "../lib/profile-context.ts";
+import { requireNoProfileRecovery } from "../lib/profile-recovery.ts";
 import { acquireRuntimeLease } from "../lib/runtime-lease.ts";
 import { responseFeedbackCandidateEnvironment } from "../lib/response-feedback-candidate.ts";
 import { runtimePaths } from "../lib/runtime-paths.ts";
@@ -11,13 +13,38 @@ const serverPort = localServerPort(serverEnvironment);
 const bootstrapToken = serverEnvironment.RANGABOT_BOOTSTRAP_TOKEN;
 if (!bootstrapToken) throw new Error("Could not create Rangabot's private startup capability.");
 
+requireNoProfileRecovery(runtimePaths.managedDataRoot);
+const startupProfileBinding = currentProfileSessionBinding();
 const runtimeLease = acquireRuntimeLease({ role: "app" });
 
 try {
-  maintainSqlConfirmationStoreAtPath(defaultSqlConfirmationStorePath);
-  purgeArtifactDeletionQuarantine();
+  requireNoProfileRecovery(runtimePaths.managedDataRoot);
+  assertProfileSessionBindingCurrent(startupProfileBinding);
+} catch (error) {
+  runtimeLease.release();
+  throw error;
+}
+
+let sqlConfirmationMaintenanceSucceeded = false;
+try {
+  maintainSqlConfirmationStoreAtPath(runtimePaths.sqlConfirmations);
+  sqlConfirmationMaintenanceSucceeded = true;
 } catch (error) {
   console.warn(`Private storage maintenance could not complete: ${error instanceof Error ? error.message : "unknown local storage error"}`);
+}
+if (sqlConfirmationMaintenanceSucceeded) {
+  try {
+    requireNoProfileRecovery(runtimePaths.managedDataRoot);
+    assertProfileSessionBindingCurrent(startupProfileBinding);
+  } catch (error) {
+    runtimeLease.release();
+    throw error;
+  }
+  try {
+    purgeArtifactDeletionQuarantine(runtimePaths.artifactsRoot);
+  } catch (error) {
+    console.warn(`Private storage maintenance could not complete: ${error instanceof Error ? error.message : "unknown local storage error"}`);
+  }
 }
 
 const nextCli = runtimePaths.nextCli;

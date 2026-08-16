@@ -1,5 +1,10 @@
 import { lstatSync } from "node:fs";
 import { isAbsolute, parse, relative, resolve, sep } from "node:path";
+import {
+  inspectProfileRegistry,
+  PROFILE_DATA_DIRECTORY_NAME,
+  PROFILE_REGISTRY_DIRECTORY_NAME,
+} from "./profile-registry.ts";
 
 export const RANGABOT_RESOURCE_ROOT_ENV = "RANGABOT_RESOURCE_ROOT" as const;
 export const RANGABOT_DATA_ROOT_ENV = "RANGABOT_DATA_ROOT" as const;
@@ -17,6 +22,7 @@ export type RuntimeRootOptions = {
   cwd?: string;
   environment?: RuntimeRootEnvironment;
 };
+
 
 function pathIsWithin(root: string, path: string) {
   const child = relative(root, path);
@@ -96,6 +102,29 @@ function rootsOverlap(left: string, right: string) {
   return pathIsWithin(left, right) || pathIsWithin(right, left);
 }
 
+function validateActiveProfileStorageShape(managedDataRoot: string) {
+  const activeRoot = resolveActiveProfileDataRoot(managedDataRoot);
+  const paths = [
+    ["rangabot.db"], ["rangabot-memory.db"], ["datasets.json"], ["repositories.json"],
+    ["sql-confirmations.json"], ["dataset-snapshots"], ["artifacts"],
+    ["desktop-preferences.json"], ["model-preferences.json"],
+    ["onboarding-state.json"],
+    ["knowledge", "inbox"], ["knowledge", "processed"], ["knowledge", "indexes", "knowledge.db"],
+    ["knowledge", "backups"], ["knowledge", "evaluations", "results"], ["evaluations", "results"],
+  ] as const;
+  for (const components of paths) resolveRuntimePathWithinRoot(activeRoot, ...components);
+}
+
+export function resolveActiveProfileDataRoot(managedDataRoot: string) {
+  const inspection = inspectProfileRegistry(managedDataRoot);
+  if (inspection.kind === "setup-required") return managedDataRoot;
+  const registryRoot = resolveRuntimePathWithinRoot(managedDataRoot, PROFILE_REGISTRY_DIRECTORY_NAME);
+  const profilesRoot = resolveRuntimePathWithinRoot(registryRoot, PROFILE_DATA_DIRECTORY_NAME);
+  const activeRoot = resolveRuntimePathWithinRoot(profilesRoot, inspection.snapshot.activeProfileId);
+  requireRoot(activeRoot, "data", true);
+  return activeRoot;
+}
+
 export function resolveRuntimePathContract(options: RuntimeRootOptions = {}) {
   const environment = options.environment ?? process.env;
   // Runtime resources are staged explicitly for desktop packaging. Prevent
@@ -113,23 +142,29 @@ export function resolveRuntimePathContract(options: RuntimeRootOptions = {}) {
   // CLI compatibility is explicit: shipped resources resolve from the launch
   // working directory and mutable state remains in its existing ./data tree.
   const resourceRoot = configuredResource ?? cwd;
-  const dataRoot = configuredData ?? resolveRuntimePathWithinRoot(resourceRoot, "data");
+  const managedDataRoot = configuredData ?? resolveRuntimePathWithinRoot(resourceRoot, "data");
   requireRoot(resourceRoot, "resource", true);
-  requireRoot(dataRoot, "data", Boolean(configuredData));
-  if (configuredResource && configuredData && rootsOverlap(resourceRoot, dataRoot)) {
+  requireRoot(managedDataRoot, "data", Boolean(configuredData));
+  if (configuredResource && configuredData && rootsOverlap(resourceRoot, managedDataRoot)) {
     throw new RuntimePathError("Configured Rangabot resource and data roots must not overlap.");
   }
+  validateActiveProfileStorageShape(managedDataRoot);
 
   const resource = (...components: string[]) => resolveRuntimePathWithinRoot(resourceRoot, ...components);
-  const data = (...components: string[]) => resolveRuntimePathWithinRoot(dataRoot, ...components);
-  const conversationDatabase = data("rangabot.db");
-  const knowledgeRoot = data("knowledge");
+  const managed = (...components: string[]) => resolveRuntimePathWithinRoot(managedDataRoot, ...components);
+  const data = (...components: string[]) => resolveRuntimePathWithinRoot(resolveActiveProfileDataRoot(managedDataRoot), ...components);
   const knowledgeResourceRoot = resource("data", "knowledge");
 
-  return Object.freeze({
+  const paths = {
     mode: configuredResource ? "configured" as const : "cli" as const,
     resourceRoot,
-    dataRoot,
+    managedDataRoot,
+    get dataRoot() { return resolveActiveProfileDataRoot(managedDataRoot); },
+    profileRegistryRoot: managed(PROFILE_REGISTRY_DIRECTORY_NAME),
+    profileRegistry: managed(PROFILE_REGISTRY_DIRECTORY_NAME, "registry.json"),
+    profilesRoot: managed(PROFILE_REGISTRY_DIRECTORY_NAME, PROFILE_DATA_DIRECTORY_NAME),
+    profileRecoveryRoot: managed(PROFILE_REGISTRY_DIRECTORY_NAME, "recovery"),
+    profileTombstonesRoot: managed(PROFILE_REGISTRY_DIRECTORY_NAME, "tombstones"),
     packageJson: resource("package.json"),
     nextCli: resource("node_modules", "next", "dist", "bin", "next"),
     sqlRuntimeWorker: resource("lib", "sql-runtime-worker.cjs"),
@@ -139,31 +174,33 @@ export function resolveRuntimePathContract(options: RuntimeRootOptions = {}) {
     knowledgeMonthlyBrief: resource("data", "knowledge", "NEW_THIS_MONTH.md"),
     knowledgeSourceManifest: resource("data", "knowledge", "SOURCE_MANIFEST.json"),
     knowledgeEvaluationFixtures: resource("data", "knowledge", "evaluations"),
-    conversationDatabase,
+    get conversationDatabase() { return data("rangabot.db"); },
     // Response feedback is deliberately co-located with its canonical turn in
     // the conversation database; it has no second storage or export root.
-    responseFeedbackDatabase: conversationDatabase,
-    memoryDatabase: data("rangabot-memory.db"),
-    datasetsRegistry: data("datasets.json"),
-    repositoriesRegistry: data("repositories.json"),
-    sqlConfirmations: data("sql-confirmations.json"),
-    datasetSnapshots: data("dataset-snapshots"),
-    artifactsRoot: data("artifacts"),
-    runtimeLease: data("rangabot.db-runtime.lock"),
-    desktopTemp: data("tmp"),
-    desktopPreferences: data("desktop-preferences.json"),
-    modelPreferences: data("model-preferences.json"),
-    managedModels: data("models"),
-    knowledgeRoot,
-    knowledgeInbox: data("knowledge", "inbox"),
-    knowledgeProcessed: data("knowledge", "processed"),
-    knowledgeIndexes: data("knowledge", "indexes"),
-    knowledgeDatabase: data("knowledge", "indexes", "knowledge.db"),
-    knowledgeBackups: data("knowledge", "backups"),
-    knowledgeEvaluationResults: data("knowledge", "evaluations", "results"),
-    evaluationsRoot: data("evaluations"),
-    evaluationResults: data("evaluations", "results"),
-  });
+    get responseFeedbackDatabase() { return data("rangabot.db"); },
+    get memoryDatabase() { return data("rangabot-memory.db"); },
+    get datasetsRegistry() { return data("datasets.json"); },
+    get repositoriesRegistry() { return data("repositories.json"); },
+    get sqlConfirmations() { return data("sql-confirmations.json"); },
+    get datasetSnapshots() { return data("dataset-snapshots"); },
+    get artifactsRoot() { return data("artifacts"); },
+    runtimeLease: managed("rangabot.db-runtime.lock"),
+    desktopTemp: managed("tmp"),
+    get desktopPreferences() { return data("desktop-preferences.json"); },
+    get modelPreferences() { return data("model-preferences.json"); },
+    get onboardingState() { return data("onboarding-state.json"); },
+    managedModels: managed("models"),
+    get knowledgeRoot() { return data("knowledge"); },
+    get knowledgeInbox() { return data("knowledge", "inbox"); },
+    get knowledgeProcessed() { return data("knowledge", "processed"); },
+    get knowledgeIndexes() { return data("knowledge", "indexes"); },
+    get knowledgeDatabase() { return data("knowledge", "indexes", "knowledge.db"); },
+    get knowledgeBackups() { return data("knowledge", "backups"); },
+    get knowledgeEvaluationResults() { return data("knowledge", "evaluations", "results"); },
+    get evaluationsRoot() { return data("evaluations"); },
+    get evaluationResults() { return data("evaluations", "results"); },
+  };
+  return Object.freeze(paths);
 }
 
 export const runtimePaths = resolveRuntimePathContract();
@@ -174,4 +211,8 @@ export function runtimeResourcePath(...components: string[]) {
 
 export function runtimeDataPath(...components: string[]) {
   return resolveRuntimePathWithinRoot(runtimePaths.dataRoot, ...components);
+}
+
+export function runtimeManagedDataPath(...components: string[]) {
+  return resolveRuntimePathWithinRoot(runtimePaths.managedDataRoot, ...components);
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
-import { localApiFetch } from "@/lib/local-api-client";
+import { downloadLocalApiFile, localApiFetch } from "@/lib/local-api-client";
 import { CraftIcon } from "./craft-icon";
 
 type MemoryKind = "preference" | "fact" | "instruction";
@@ -13,7 +13,7 @@ type MemoryImportPreview = {
   conflicts: Array<{ incoming: MemoryImportItem; existing: LocalMemory; reason: "same-id" | "different-kind" | "same-subject" }>;
 };
 
-export function MemoryPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function MemoryPanel({ open, onClose, activeProfileMarker }: { open: boolean; onClose: () => void; activeProfileMarker: string }) {
   const [memories, setMemories] = useState<LocalMemory[]>([]);
   const [content, setContent] = useState("");
   const [kind, setKind] = useState<MemoryKind>("preference");
@@ -96,9 +96,18 @@ export function MemoryPanel({ open, onClose }: { open: boolean; onClose: () => v
     await refresh();
   }
 
+  async function exportMemories() {
+    try {
+      await downloadLocalApiFile("/api/memories/export", "rangabot-memories.json");
+      setMessage("Memory export prepared locally.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Memory export failed.");
+    }
+  }
+
   return <div className="knowledge-backdrop" onMouseDown={onClose}>
     <aside className="memory-panel" role="dialog" aria-modal="true" aria-labelledby="memory-panel-title" onMouseDown={(event) => event.stopPropagation()}>
-      <div className="knowledge-panel-header"><div><span>Private · user approved</span><h2 id="memory-panel-title">Local memory</h2></div><button type="button" ref={closeRef} onClick={onClose} aria-label="Close local memory"><CraftIcon name="close" /></button></div>
+      <div className="knowledge-panel-header"><div><span>Private · user approved</span><h2 id="memory-panel-title">Local memory</h2><small>Active profile: {activeProfileMarker}</small></div><button type="button" ref={closeRef} onClick={onClose} aria-label="Close local memory"><CraftIcon name="close" /></button></div>
       <div className="memory-panel-content">
         <section className="memory-intro"><CraftIcon name="memory" size={24} /><div><strong>Rangabot remembers only what you save here.</strong><p>Every item is visible, editable and deletable. Saved items are supplied to the local model as user-provided context—not verified truth.</p></div></section>
         <form className="memory-form" onSubmit={save}>
@@ -115,7 +124,7 @@ export function MemoryPanel({ open, onClose }: { open: boolean; onClose: () => v
           {!!importPreview.conflicts.length && <div className="memory-import-group conflicts"><strong>Conflicts · existing wins by default</strong>{importPreview.conflicts.map((conflict) => <label key={conflict.incoming.sourceId}><input type="checkbox" checked={replaceSourceIds.includes(conflict.incoming.sourceId)} onChange={() => toggleReplacement(conflict.incoming.sourceId)} /><span><small>Keep existing</small>{conflict.existing.content}<small>Use imported instead</small>{conflict.incoming.content}</span></label>)}</div>}
           <button className="memory-import-apply" type="button" onClick={() => void applyImport()} disabled={!importPreview.newItems.length && !replaceSourceIds.length}>Approve reviewed import</button>
         </section>}
-        <section className="memory-list" aria-label="Approved local memories"><header><strong>Approved memories</strong><div><span>{memories.length}</span><button type="button" onClick={() => importRef.current?.click()}>Import JSON</button><a href="/api/memories/export" download>Export JSON</a></div></header>{!memories.length && <p>Nothing saved yet. Rangabot will not invent a profile for you.</p>}{memories.map((memory) => <article key={memory.id}><div><span>{memory.kind}</span><small>User approved · explicit confidence</small></div><p>{memory.content}</p><footer><time>{new Date(memory.updatedAt).toLocaleDateString()}</time><button type="button" onClick={() => edit(memory)}><CraftIcon name="edit" size={13} /> Edit</button><button type="button" onClick={() => void remove(memory.id)}><CraftIcon name="trash" size={13} /> Delete</button></footer></article>)}</section>
+        <section className="memory-list" aria-label="Approved local memories"><header><strong>Approved memories</strong><div><span>{memories.length}</span><button type="button" onClick={() => importRef.current?.click()}>Import JSON</button><button type="button" onClick={() => void exportMemories()}>Export JSON</button></div></header>{!memories.length && <p>Nothing saved yet. Rangabot will not invent a profile for you.</p>}{memories.map((memory) => <article key={memory.id}><div><span>{memory.kind}</span><small>User approved · explicit confidence</small></div><p>{memory.content}</p><footer><time>{new Date(memory.updatedAt).toLocaleDateString()}</time><button type="button" onClick={() => edit(memory)}><CraftIcon name="edit" size={13} /> Edit</button><button type="button" onClick={() => void remove(memory.id)}><CraftIcon name="trash" size={13} /> Delete</button></footer></article>)}</section>
       </div>
     </aside>
   </div>;

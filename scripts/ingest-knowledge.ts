@@ -3,9 +3,10 @@ import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { load } from "cheerio";
 import mammoth from "mammoth";
-import { clearKnowledgeSourceIssue, existingDocumentHash, existingDocumentIngestionVersion, getKnowledgeStatus, hashBuffer, indexedDocumentUsefulCharacters, knowledgeIngestionVersion, listKnowledgeFiles, recordKnowledgeSourceIssue, relinkKnowledgeDocumentByHash, removeKnowledgeDocumentByPath, removeKnowledgeDocumentsNotIn, removeKnowledgeSourceIssuesNotIn, saveKnowledgeDocument } from "../lib/knowledge.ts";
+import { clearKnowledgeSourceIssue, closeKnowledgeDatabase, existingDocumentHash, existingDocumentIngestionVersion, getKnowledgeStatus, hashBuffer, indexedDocumentUsefulCharacters, knowledgeDatabasePath, knowledgeInbox, knowledgeIngestionVersion, knowledgeRoot, listKnowledgeFiles, recordKnowledgeSourceIssue, relinkKnowledgeDocumentByHash, removeKnowledgeDocumentByPath, removeKnowledgeDocumentsNotIn, removeKnowledgeSourceIssuesNotIn, saveKnowledgeDocument } from "../lib/knowledge.ts";
 import { chunkHierarchicalText } from "../lib/knowledge-ingestion.ts";
 import { getConfiguredEmbeddingModel, getLocalOllamaBaseUrl } from "../lib/local-runtime-config.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
 
 function normalizeText(text: string) {
   return text.replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
@@ -80,22 +81,31 @@ async function embedChunks(chunks: string[], filename: string) {
   }
 }
 
+export async function ingestKnowledge() {
+const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Knowledge ingestion" });
+profileMaintenance.assertDataPath(knowledgeRoot);
+profileMaintenance.assertDataPath(knowledgeInbox);
+profileMaintenance.assertDataPath(knowledgeDatabasePath);
 const knowledgeFiles = listKnowledgeFiles();
 const failures: string[] = [];
 for (const [fileIndex, path] of knowledgeFiles.entries()) {
+  profileMaintenance.assertCurrent();
   const filename = basename(path);
   console.log(`source     ${fileIndex + 1}/${knowledgeFiles.length} ${filename}`);
   const buffer = await readFile(path);
+  profileMaintenance.assertCurrent();
   const status = getKnowledgeStatus();
   if (status.usedBytes + buffer.length > status.budgetBytes) throw new Error(`Knowledge budget exceeded before importing ${basename(path)}`);
   const sha256 = hashBuffer(buffer);
   const title = basename(path, extname(path)).replaceAll(/[_-]+/g, " ");
   const format = extname(path).slice(1).toLowerCase();
   if (existingDocumentHash(path) === sha256 && indexedDocumentUsefulCharacters(path) >= 200 && existingDocumentIngestionVersion(path) === knowledgeIngestionVersion) {
+    profileMaintenance.assertCurrent();
     clearKnowledgeSourceIssue(path);
       console.log(`unchanged  ${filename}`);
     continue;
   }
+  profileMaintenance.assertCurrent();
   if (relinkKnowledgeDocumentByHash({ path, title, format, sizeBytes: buffer.length, sha256 })) {
     if (indexedDocumentUsefulCharacters(path) >= 200 && existingDocumentIngestionVersion(path) === knowledgeIngestionVersion) {
       clearKnowledgeSourceIssue(path);
@@ -108,6 +118,7 @@ for (const [fileIndex, path] of knowledgeFiles.entries()) {
   const text = await extractText(path, buffer, filename);
   const minimumUsefulCharacters = format === "pdf" ? 500 : 80;
   if (usefulCharacterCount(text) < minimumUsefulCharacters) {
+    profileMaintenance.assertCurrent();
     removeKnowledgeDocumentByPath(path);
     const message = `${basename(path)} contains too little extractable text${format === "pdf" ? "; it appears scanned and needs local OCR first" : ""}`;
     failures.push(message);
@@ -119,6 +130,7 @@ for (const [fileIndex, path] of knowledgeFiles.entries()) {
   console.log(`chunked    ${filename} into ${rawChunks.length} passages`);
   const embeddings = await embedChunks(rawChunks.map((chunk) => chunk.content), filename);
   const id = randomUUID();
+  profileMaintenance.assertCurrent();
   saveKnowledgeDocument({
     id,
     path,
@@ -132,12 +144,23 @@ for (const [fileIndex, path] of knowledgeFiles.entries()) {
   console.log(`indexed    ${basename(path)} (${rawChunks.length} chunks${embeddings ? ", embedded" : ", keyword-only"})`);
 }
 
+profileMaintenance.assertCurrent();
 const removed = removeKnowledgeDocumentsNotIn(knowledgeFiles);
+profileMaintenance.assertCurrent();
 removeKnowledgeSourceIssuesNotIn(knowledgeFiles);
 for (const path of removed) console.log(`removed    stale index entry ${path}`);
 
+profileMaintenance.assertCurrent();
 const finalStatus = getKnowledgeStatus();
 console.log(`vault      ${finalStatus.documents} documents, ${finalStatus.chunks} chunks, ${(finalStatus.usedBytes / 1024 ** 2).toFixed(1)} MB / ${(finalStatus.budgetBytes / 1024 ** 3).toFixed(1)} GB`);
 if (failures.length) {
   console.warn(`attention  ${failures.length} incompatible source${failures.length === 1 ? "" : "s"} skipped; compatible sources remain searchable`);
+}
+closeKnowledgeDatabase();
+profileMaintenance.release();
+return finalStatus;
+}
+
+if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  await ingestKnowledge();
 }

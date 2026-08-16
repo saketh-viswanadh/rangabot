@@ -11,6 +11,7 @@ import {
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import { FuseState, FuseV1Options, FuseVersion, getCurrentFuseWire } from "@electron/fuses";
 import {
+  DESKTOP_FUSE_POLICY_NAME,
   DESKTOP_FUSE_BINARY_PATH,
   REQUIRED_DESKTOP_FUSE_NAMES,
   REQUIRED_DESKTOP_FUSE_POLICY,
@@ -92,9 +93,10 @@ function assertBrowserSnapshotFuseCompatibility(
     "Resources",
     "browser_v8_context_snapshot.bin",
   ));
-  if (fuseState === FuseState.ENABLE && !hasBrowserSnapshot) {
-    throw new Error("The browser-specific V8 snapshot fuse requires browser_v8_context_snapshot.bin.");
+  if (fuseState !== FuseState.DISABLE) {
+    throw new Error(`${DESKTOP_FUSE_POLICY_NAME} requires the browser-specific V8 snapshot fuse to remain disabled.`);
   }
+  return { required: false, present: hasBrowserSnapshot };
 }
 
 function expectedFuseStates() {
@@ -113,18 +115,20 @@ function expectedFuseStates() {
 
 async function assertFuses(appPath: string) {
   const wire = await getCurrentFuseWire(appPath);
-  if (wire.version !== FuseVersion.V1) throw new Error("The packaged Electron fuse wire has an unsupported version.");
+  if (wire.version !== FuseVersion.V1) throw new Error(`${DESKTOP_FUSE_POLICY_NAME} has an unsupported fuse-wire version.`);
   const numericKeys = Object.keys(wire).filter((key) => /^\d+$/.test(key)).map(Number).sort((a, b) => a - b);
   const expected = [...expectedFuseStates().keys()];
   if (numericKeys.length !== expected.length || numericKeys.some((key, index) => key !== expected[index])) {
-    throw new Error("The packaged Electron fuse wire contains missing or unknown fuses.");
+    throw new Error(`${DESKTOP_FUSE_POLICY_NAME} contains missing or unknown fuses.`);
   }
   for (const [key, state] of expectedFuseStates()) {
-    if (wire[key as keyof typeof wire] !== state) throw new Error(`Electron fuse ${FuseV1Options[key]} is not in its required state.`);
+    if (wire[key as keyof typeof wire] !== state) {
+      throw new Error(`${DESKTOP_FUSE_POLICY_NAME}: Electron fuse ${FuseV1Options[key]} is not in its required state.`);
+    }
   }
   const states = numericKeys.map((key) => Number(wire[key as keyof typeof wire]));
   if (states.some((state, index) => state !== REQUIRED_DESKTOP_FUSE_WIRE_STATES[index])) {
-    throw new Error("The named fuse comparison does not match the required raw wire.");
+    throw new Error(`${DESKTOP_FUSE_POLICY_NAME} named states do not match its required raw wire.`);
   }
   return {
     version: "1" as const,
@@ -217,7 +221,7 @@ async function finalize(output: string, arch: DesktopArtifactArch) {
   assertRequiredResources(unsignedResources);
   const unsignedNatives = unsignedResources.filter((file) => /\.(?:node|dylib)$/.test(file.path));
   const wire = await assertFuses(appPath);
-  assertBrowserSnapshotFuseCompatibility(
+  const browserSnapshotCompatibility = assertBrowserSnapshotFuseCompatibility(
     contentsRoot,
     wire.inspection.entries[FuseV1Options.LoadBrowserProcessSpecificV8Snapshot].actual as FuseState,
   );
@@ -238,7 +242,9 @@ async function finalize(output: string, arch: DesktopArtifactArch) {
   const natives = resources.filter((file) => /\.(?:node|dylib)$/.test(file.path));
   const bundleFiles = collectDesktopBundleFiles(contentsRoot);
   const manifest = createDesktopArtifactManifest({
+    sourceBaseCommit: staged.sourceBaseCommit,
     sourceBaselineCommit: staged.sourceBaselineCommit,
+    sourceCommit: staged.sourceCommit,
     sourceDirty: staged.sourceDirty,
     sourceManifestSha256: staged.sourceManifestSha256,
     sourceFiles: staged.sourceFiles,
@@ -308,7 +314,7 @@ async function finalize(output: string, arch: DesktopArtifactArch) {
       : `desktop-artifact-${arch}.json`;
   const evidencePath = resolve(projectRoot, "desktop", "out", evidenceName);
   writeFileSync(evidencePath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
-  return { appPath, evidencePath, manifest, verifiedState: verified.state };
+  return { appPath, evidencePath, manifest, verifiedState: verified.state, browserSnapshotCompatibility };
 }
 
 const { arch, outputs } = parseArguments(process.argv.slice(2));
@@ -318,6 +324,12 @@ for (const output of outputs) {
     appPath: result.appPath,
     evidencePath: result.evidencePath,
     desktopArtifactId: result.manifest.desktopArtifactId,
+    sourceBaseCommit: result.manifest.sourceBaseCommit,
+    profilesBehaviorCommit: result.manifest.sourceBaselineCommit,
+    packagingCommit: result.manifest.sourceCommit,
+    fusePolicyName: DESKTOP_FUSE_POLICY_NAME,
+    fuseWire: String.fromCharCode(...result.manifest.packagingTooling.fuseWireStates),
+    browserSnapshotCompatibility: result.browserSnapshotCompatibility,
     sourceDirty: result.manifest.sourceDirty,
     target: result.manifest.target,
     launchProfile: result.manifest.launchProfile,

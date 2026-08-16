@@ -17,18 +17,41 @@ const header = page.slice(chatPanelStart, messagesStart);
 test("keeps the sidebar focused on chats", () => {
   assert.match(sidebar, /Projects/);
   assert.match(sidebar, /conversation-search/);
-  assert.match(sidebar, /className="history"/);
+  assert.match(sidebar, /className=\{`history /);
   assert.doesNotMatch(sidebar, /Knowledge Brief|Path to Mastery|Local memory|Local repositories/);
+  assert.doesNotMatch(sidebar, /Cmd K|<kbd>/, "The search control must not advertise an unimplemented shortcut");
+});
+
+test("keeps recent chats visible and supports project drag and drop", () => {
+  assert.doesNotMatch(page, /parameters\.set\("projectId", activeProjectId\)/,
+    "Selecting or creating a project must not filter recent chats out of the sidebar");
+  assert.match(sidebar, /draggable/);
+  assert.match(sidebar, /onDragStart/);
+  assert.match(sidebar, /onDrop=\{\(event\) => dropConversation\(event, project\.id\)\}/);
+  assert.match(sidebar, /onDrop=\{\(event\) => dropConversation\(event, null\)\}/);
+  assert.doesNotMatch(sidebar, /Drag chats into a project/,
+    "Drag guidance should appear only as contextual drop feedback, not permanent clutter");
+  assert.match(sidebar, /Drop here to remove from project/);
+  assert.match(sidebar, /className=\{`history \$\{conversationDropTarget === "all"/);
+  assert.match(sidebar, /onDrop=\{\(event\) => dropConversation\(event, null\)\}/);
+  assert.match(sidebar, /className="project-conversations"/);
+  assert.match(sidebar, /const projectConversations = conversations\.filter/);
+  assert.match(page, /conversations\.filter\(\(\{ projectId \}\) => projectId === null\)/);
+  assert.match(styles, /\.project-item\.conversation-drop-target/);
+  assert.match(styles, /\.history-row\.dragging/);
+  assert.match(styles, /\.project-conversations/);
+  assert.match(styles, /\.history\.conversation-drop-target/);
 });
 
 test("places secondary tools in one compact, disclosed workbench", () => {
   assert.match(header, /className="tools-menu"/);
-  assert.match(header, />Brief</);
+  assert.match(header, /aria-label="Conversation and workspace options"/);
+  assert.match(header, /<strong>Knowledge<\/strong>/);
   assert.match(header, /<strong>Memory<\/strong>/);
-  assert.match(header, /<strong>Mastery<\/strong>/);
-  assert.match(header, /Local folders/);
+  assert.match(header, /<strong>Models<\/strong>/);
+  assert.match(header, /> Folders</);
   assert.match(header, /tools-popover/);
-  assert.match(header, /privacy-indicator/);
+  assert.match(header, /> Settings</);
 });
 
 test("keeps chats and projects reachable through a real mobile drawer", () => {

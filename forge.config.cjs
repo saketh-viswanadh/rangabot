@@ -5,6 +5,8 @@ const { MakerZIP } = require("@electron-forge/maker-zip");
 const { flipFuses, FuseVersion, FuseV1Options } = require("@electron/fuses");
 const { hardenPackagedMacOSInfoPlist } = require("./desktop/electron/macos-plist-policy.cjs");
 
+const FUSE_POLICY_NAME = "electron-43-arm64-launchable-v1";
+
 const targetArch = process.env.RANGABOT_DESKTOP_TARGET_ARCH;
 if (targetArch !== "arm64" && targetArch !== "x64") {
   throw new Error("RANGABOT_DESKTOP_TARGET_ARCH must be exactly arm64 or x64.");
@@ -82,7 +84,9 @@ module.exports = {
   },
   hooks: {
     packageAfterCopy: async (_config, buildPath, _electronVersion, platform, arch) => {
-      if (platform !== "darwin" || arch !== targetArch) throw new Error("Desktop fuse target does not match the prepared macOS architecture.");
+      if (platform !== "darwin" || arch !== targetArch) {
+        throw new Error(`${FUSE_POLICY_NAME}: desktop fuse target does not match the prepared macOS architecture.`);
+      }
       await flipFuses(electronExecutableFromBuildPath(buildPath), {
         ...fuseConfiguration,
         resetAdHocDarwinSignature: arch === "arm64",

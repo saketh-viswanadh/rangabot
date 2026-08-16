@@ -69,12 +69,15 @@ test("offers optional local personalization and every approved fresh-chat conten
   assert.match(preferences, /welcomeModeOptions\.map/);
   assert.match(preferences, /stay in Rangabot’s private local data on this device/);
   assert.match(page, /<WelcomePreferencesDialog/);
-  assert.match(page, /formatWelcomeGreeting\(greetingIndex, welcomePreferences\.preferredName/);
+  assert.match(page, /formatWelcomeGreeting\(greetingIndex, welcomePreferences\.preferredName\?\.trim\(\) \|\| activeProfileContext\?\.displayName/,
+    "The active profile name should personalize greetings when no separate nickname was saved");
 });
 
 test("keeps the fresh-chat composition compact, passive and intentional", () => {
   const welcome = sliceBetween(page, '<section className="welcome-state"', "{messages.map");
-  const starters = sliceBetween(welcome, '<div className="starter-grid"', "</div>");
+  const composer = sliceBetween(page, '<div className={`composer-wrap', "</form>");
+  const header = sliceBetween(page, '<header className="chat-header">', "</header>");
+  const starters = sliceBetween(composer, '<div className="starter-grid"', "</div>");
 
   assert.equal(countMatches(welcome, /className="welcome-intro"/g), 1, "Fresh chat needs one compact intro");
   assert.equal(countMatches(welcome, /className=\{`welcome-note/g), 1, "Fresh chat needs one welcome note");
@@ -87,13 +90,21 @@ test("keeps the fresh-chat composition compact, passive and intentional", () => 
     "The welcome card should read as content, not a control panel");
   assert.doesNotMatch(styles, /\.welcome-note-meta\b|\.welcome-mode-select\b/,
     "Retired inline welcome controls should not leave stale CSS behind");
+  assert.match(styles, /\.welcome-inspiration\s*\{\s*display:\s*grid/,
+    "The rotating joke, quote, or thought must remain visible");
   assert.match(welcome, /<blockquote>/, "The welcome card should keep one calm content surface");
   assert.match(welcome, /<cite>/, "The welcome card should keep its provenance visible");
+  assert.doesNotMatch(composer, /composer-model-status|On this Mac/,
+    "Model metadata must not compete with writing inside the composer");
+  assert.match(header, /header-model-status/);
+  assert.match(header, /On this Mac/);
 
-  assert.equal(countMatches(starters, /<button\b/g), 4, "Fresh chat keeps exactly four conversation starters");
-  assert.equal(countMatches(starters, /<strong>/g), 4, "Every starter exposes one concise title");
+  assert.equal(countMatches(starters, /<button\b/g), 3, "Fresh chat keeps three quiet conversation starters");
+  assert.equal(countMatches(starters, /<strong>/g), 3, "Every starter exposes one concise title");
   assert.doesNotMatch(starters, /<small>/, "Starter cards must not restore explanatory subtitles");
   assert.doesNotMatch(starters, /name="chevron"/, "Starter cards must not restore decorative chevrons");
+  assert.ok(page.indexOf('<div className="starter-grid"') > page.indexOf('<div className={`composer-wrap'),
+    "Starters should sit immediately with the composer instead of floating in the empty canvas");
 });
 
 test("keeps fresh-chat content mode exclusively in the local Preferences dialog", () => {
@@ -108,12 +119,13 @@ test("keeps fresh-chat content mode exclusively in the local Preferences dialog"
 });
 
 test("keeps appearance in persistent Preferences rather than the local workbench", () => {
-  const tools = sliceBetween(page, 'className="tools-menu"', "</div>\n            <button className={`status");
+  const tools = sliceBetween(page, 'className="tools-menu"', "</div>\n            </div>");
 
-  assert.match(page, /aria-label="Open Preferences"/);
-  assert.match(page, /aria-label="Open Tools"/,
-    "The compact mobile Tools icon must retain a programmatic name when visible text is hidden");
-  assert.match(page, /<WelcomePreferencesDialog[\s\S]*?appearance=\{appearance\}[\s\S]*?palette=\{palette\}/);
+  assert.match(page, /> Settings<\/button>/);
+  assert.match(page, /aria-label="Conversation and workspace options"/,
+    "The compact workspace menu must retain a programmatic name");
+  assert.match(page, /<WelcomePreferencesDialog[\s\S]*?appearance=\{desktopPreferences\?\.appearance \?\? null\}[\s\S]*?palette=\{palette\}/,
+    "Preferences must preserve raw null as System while the page uses its separately resolved live appearance");
   assert.doesNotMatch(tools, /tool-appearance|Appearance mode|Colour theme/,
     "Tools should contain capabilities and permissions, not personal appearance settings");
 });
@@ -122,8 +134,8 @@ test("separates appearance mode from native, visually unlabeled colour radios", 
   const appearance = sliceBetween(preferences, 'className="preferences-appearance"', "</section>");
 
   assert.match(appearance, /role="group"\s+aria-label="Appearance mode"/);
-  assert.match(appearance, /\[(?:"system",\s*)?"light",\s*"dark"\]/,
-    "Mode control must expose explicit Light and Dark choices; System is optional");
+  assert.match(appearance, /\[null,\s*"light",\s*"dark"\]/,
+    "Mode control must preserve System alongside explicit Light and Dark choices");
   assert.match(appearance, /aria-pressed=\{draftAppearance === choice\}/);
   assert.doesNotMatch(appearance, /changeAppearance\(appearance ===/,
     "Light and dark must be explicit choices rather than one ambiguous toggle");
@@ -192,6 +204,14 @@ test("keeps the empty-chat composer to one compact row", () => {
   assert.match(composer, /className="composer-main-row"/);
   assert.match(composer, /<textarea[\s\S]*?rows=\{1\}/);
   assert.equal(countMatches(composer, /className="composer-main-row"/g), 1);
+  assert.doesNotMatch(composer, /<select|Routing mode|Response mode/,
+    "Routing policy belongs with model controls, not inside the writing surface");
+  assert.match(page, /className="header-route-control"/);
+  assert.match(page, /aria-label="Response mode"/);
+  assert.match(composer, /className="composer-submit send-button"/);
+  assert.match(composer, /className="composer-submit stop-button"/);
+  assert.match(styles, /\.composer-actions \{[^}]*place-items: center/);
+  assert.match(styles, /\.composer button \{[^}]*place-items: center/);
 });
 
 test("never places welcome preferences or a preferred name in chat request payloads", () => {

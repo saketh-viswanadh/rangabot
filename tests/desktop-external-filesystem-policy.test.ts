@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -12,10 +13,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import test from "node:test";
 import {
   assertExternalImportAccess,
+  assertProfileBackupExportAccess,
   assertExternalFilesystemPathAccess,
   preflightVerificationExternalFilesystemRegistries,
   RANGABOT_VERIFICATION_EXTERNAL_FILESYSTEM_ACCESS_ENV,
@@ -40,6 +42,7 @@ import { inspectDatasetSchema, validateApprovedDataset } from "../lib/sql-runtim
 import { createDesktopLaunch } from "../desktop/electron/launch-environment.ts";
 import { getOllamaStatus } from "../lib/providers/ollama.ts";
 import { embedKnowledgeQuery } from "../lib/knowledge.ts";
+import { openProfileRegistry } from "../lib/profile-registry.ts";
 
 const policyEnvironment = {
   [RANGABOT_VERIFICATION_EXTERNAL_FILESYSTEM_ACCESS_ENV]: VERIFICATION_EXTERNAL_FILESYSTEM_ACCESS,
@@ -156,6 +159,106 @@ test("read-only startup preflight accepts only missing or empty registries", () 
   } finally { rmSync(dataRoot, { recursive: true, force: true }); }
 });
 
+function filesystemSnapshot(root: string) {
+  const records: string[] = [];
+  const visit = (path: string) => {
+    const status = lstatSync(path, { bigint: true });
+    records.push([
+      relative(root, path) || ".",
+      status.mode.toString(),
+      status.size.toString(),
+      status.mtimeNs.toString(),
+      status.ctimeNs.toString(),
+      status.nlink.toString(),
+    ].join(":"));
+    if (status.isDirectory()) {
+      for (const name of readdirSync(path).sort()) visit(join(path, name));
+    }
+  };
+  visit(root);
+  return records;
+}
+
+test("read-only startup preflight validates every registered profile plus the legacy root", () => {
+  const dataRoot = realpathSync(mkdtempSync(join(tmpdir(), "rangabot-verification-profiles-")));
+  const registry = openProfileRegistry({ managedRoot: dataRoot });
+  const defaultId = "11111111-1111-4111-8111-111111111111";
+  const personalId = "22222222-2222-4222-8222-222222222222";
+  try {
+    const initialized = registry.initializeDefault({ profileId: defaultId });
+    mkdirSync(registry.layout.profilesRoot, { mode: 0o700 });
+    chmodSync(registry.layout.profilesRoot, 0o700);
+    const created = registry.create({
+      displayName: "Synthetic Personal",
+      kind: "personal",
+      expectedGeneration: initialized.generation,
+      profileId: personalId,
+    });
+    assert.equal(created.profiles.length, 2);
+    for (const profileId of [defaultId, personalId]) {
+      mkdirSync(registry.profileRoot(profileId), { mode: 0o700 });
+      chmodSync(registry.profileRoot(profileId), 0o700);
+    }
+    writeFileSync(join(dataRoot, "datasets.json"), "[]\n", { mode: 0o600 });
+    writeFileSync(join(registry.profileRoot(defaultId), "repositories.json"), "[]\n", { mode: 0o600 });
+    writeFileSync(join(registry.profileRoot(personalId), "repositories.json"), "[]\n", { mode: 0o600 });
+    writeFileSync(join(registry.profileRoot(personalId), "datasets.json"), "[]\n", { mode: 0o600 });
+
+    const before = filesystemSnapshot(dataRoot);
+    const result = preflightVerificationExternalFilesystemRegistries({
+      dataRoot,
+      environment: policyEnvironment,
+    });
+    assert.deepEqual(result.map(({ scope, profileId, kind, status }) => ({ scope, profileId, kind, status })), [
+      { scope: "legacy", profileId: null, kind: "repositories", status: "missing" },
+      { scope: "legacy", profileId: null, kind: "datasets", status: "empty" },
+      { scope: "profile", profileId: defaultId, kind: "repositories", status: "empty" },
+      { scope: "profile", profileId: defaultId, kind: "datasets", status: "missing" },
+      { scope: "profile", profileId: personalId, kind: "repositories", status: "empty" },
+      { scope: "profile", profileId: personalId, kind: "datasets", status: "empty" },
+    ]);
+    assert.deepEqual(filesystemSnapshot(dataRoot), before);
+  } finally { rmSync(dataRoot, { recursive: true, force: true }); }
+});
+
+test("registered-profile approvals fail verification preflight without opening their targets", () => {
+  const dataRoot = realpathSync(mkdtempSync(join(tmpdir(), "rangabot-verification-profiles-")));
+  const sentinelRoot = realpathSync(mkdtempSync(join(tmpdir(), "rangabot-verification-profile-target-")));
+  const sentinel = join(sentinelRoot, "must-not-open.csv");
+  const registry = openProfileRegistry({ managedRoot: dataRoot });
+  const defaultId = "33333333-3333-4333-8333-333333333333";
+  try {
+    registry.initializeDefault({ profileId: defaultId });
+    mkdirSync(registry.layout.profilesRoot, { mode: 0o700 });
+    chmodSync(registry.layout.profilesRoot, 0o700);
+    mkdirSync(registry.profileRoot(defaultId), { mode: 0o700 });
+    chmodSync(registry.profileRoot(defaultId), 0o700);
+    writeFileSync(join(registry.profileRoot(defaultId), "repositories.json"), `${JSON.stringify([{
+      id: "outside", name: "outside", path: sentinelRoot, addedAt: "2026-08-13T00:00:00.000Z",
+    }])}\n`, { mode: 0o600 });
+    writeFileSync(sentinel, "private-sentinel\n", { mode: 0o600 });
+    const oldTime = new Date("2001-01-01T00:00:00.000Z");
+    utimesSync(sentinel, oldTime, oldTime);
+    const beforeTarget = lstatSync(sentinel, { bigint: true });
+    const beforeData = filesystemSnapshot(dataRoot);
+    chmodSync(sentinel, 0o000);
+
+    assert.throws(
+      () => preflightVerificationExternalFilesystemRegistries({ dataRoot, environment: policyEnvironment }),
+      /External filesystem access is disabled/,
+    );
+    const afterTarget = lstatSync(sentinel, { bigint: true });
+    assert.equal(afterTarget.atimeNs, beforeTarget.atimeNs);
+    assert.equal(afterTarget.mtimeNs, beforeTarget.mtimeNs);
+    assert.equal(afterTarget.size, beforeTarget.size);
+    assert.deepEqual(filesystemSnapshot(dataRoot), beforeData);
+  } finally {
+    try { chmodSync(sentinel, 0o600); } catch { /* fixture may not exist */ }
+    rmSync(dataRoot, { recursive: true, force: true });
+    rmSync(sentinelRoot, { recursive: true, force: true });
+  }
+});
+
 test("verification launch uses a narrow child environment and normal launch remains unchanged", () => {
   const boundary = {
     artifactRoot: "/sealed/Contents/Resources",
@@ -237,6 +340,8 @@ test("verification imports fail before API request bodies can be read", async ()
   await withVerificationPolicy(() => {
     assert.throws(() => assertExternalImportAccess("conversation-import"), /External filesystem access is disabled/);
     assert.throws(() => assertExternalImportAccess("memory-import"), /External filesystem access is disabled/);
+    assert.throws(() => assertExternalImportAccess("profile-backup-import"), /External filesystem access is disabled/);
+    assert.throws(() => assertProfileBackupExportAccess(), /External filesystem access is disabled/);
   });
   const conversationRoute = readFileSync(new URL("../app/api/conversations/import/route.ts", import.meta.url), "utf8");
   const memoryRoute = readFileSync(new URL("../app/api/memories/import/route.ts", import.meta.url), "utf8");

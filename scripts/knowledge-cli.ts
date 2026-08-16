@@ -1,16 +1,28 @@
 import { readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { createKnowledgeBackup, getKnowledgeBackupRetention, listKnowledgeBackups, restoreLatestKnowledgeBackup, validateKnowledgeBackup } from "../lib/knowledge-backups.ts";
-import { getKnowledgeStatus, getKnowledgeVectorIndexStatus, knowledgeDatabasePath, knowledgeInbox, knowledgeIngestionVersion, knowledgeRoot, knowledgeSourceManifest, listIndexedDocumentUsefulCharacters, listIndexedKnowledgeDocuments, listKnowledgeFiles, rebuildKnowledgeVectorIndex } from "../lib/knowledge.ts";
+import { closeKnowledgeDatabase, getKnowledgeStatus, getKnowledgeVectorIndexStatus, knowledgeDatabasePath, knowledgeInbox, knowledgeIngestionVersion, knowledgeRoot, knowledgeSourceManifest, listIndexedDocumentUsefulCharacters, listIndexedKnowledgeDocuments, listKnowledgeFiles, rebuildKnowledgeVectorIndex } from "../lib/knowledge.ts";
 import { getKnowledgeDoctorTimeoutMs, inspectKnowledgeFileHashes } from "../lib/knowledge-doctor.ts";
 import { ensurePrivateDirectory } from "../lib/private-storage.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
 
 const command = process.argv[2] ?? "status";
+const profileMaintenanceCommands = new Set(["init", "status", "doctor", "vector-index", "backup", "rollback"]);
+const profileMaintenance = profileMaintenanceCommands.has(command)
+  ? acquireProfileMaintenanceBinding({ label: `Knowledge ${command}` })
+  : null;
+if (profileMaintenance) {
+  profileMaintenance.assertDataPath(knowledgeRoot);
+  profileMaintenance.assertDataPath(knowledgeInbox);
+  profileMaintenance.assertDataPath(knowledgeDatabasePath);
+}
 if (command === "init") {
+  profileMaintenance!.assertCurrent();
   for (const directory of [knowledgeInbox, `${knowledgeRoot}/indexes`, `${knowledgeRoot}/processed`, `${knowledgeRoot}/backups`]) ensurePrivateDirectory(directory);
   console.log(`Knowledge Vault initialized at ${knowledgeRoot}`);
   console.log(`Add private documents to ${knowledgeInbox}, then run npm run knowledge:ingest.`);
 } else if (command === "status" || command === "doctor") {
+  profileMaintenance!.assertCurrent();
   const status = getKnowledgeStatus();
   console.log(`Documents: ${status.documents}`);
   console.log(`Passages: ${status.chunks}`);
@@ -47,6 +59,7 @@ if (command === "init") {
     if (problems.length) process.exitCode = 1;
   }
 } else if (command === "vector-index") {
+  profileMaintenance!.assertCurrent();
   const before = getKnowledgeVectorIndexStatus();
   console.log(`Vector extension: ${before.available ? "available" : "unavailable; JavaScript fallback remains active"}`);
   const started = Date.now();
@@ -63,6 +76,7 @@ if (command === "init") {
   } else console.log(`PASS: ${manifest.sources?.length ?? 0} source records contain required metadata.`);
 } else if (command === "backup") {
   try {
+    profileMaintenance!.assertCurrent();
     const result = await createKnowledgeBackup({
       databasePath: knowledgeDatabasePath,
       backupRoot: resolve(knowledgeRoot, "backups"),
@@ -92,10 +106,12 @@ if (command === "init") {
   } else {
     try {
       console.log("Stop Rangabot before rollback so no process is using the index.");
+      profileMaintenance!.assertCurrent();
       const result = await restoreLatestKnowledgeBackup({
         databasePath: knowledgeDatabasePath,
         backupRoot,
         retention: getKnowledgeBackupRetention(),
+        maintenanceBinding: profileMaintenance!,
       });
       console.log(`Restored validated local backup: ${result.restored}`);
       if (!result.checksumVerified) console.log("NOTICE: this legacy backup predated checksum sidecars; SQLite integrity was verified before restore.");
@@ -108,4 +124,9 @@ if (command === "init") {
 } else {
   console.error(`Unknown knowledge command: ${command}`);
   process.exitCode = 1;
+}
+if (profileMaintenance) {
+  profileMaintenance.assertCurrent();
+  closeKnowledgeDatabase();
+  profileMaintenance.release();
 }

@@ -144,8 +144,12 @@ test("source and packaging preserve fail-before-write ordering and distinct veri
   assert.doesNotMatch(prepare, /removeGeneratedOutput\(resolve\(projectRoot, "out"\)\)/);
   assert.match(prepare, /rmSync\(resolve\(resourceRoot, "out"\)/);
   assert.match(prepare, /rmSync\(resolve\(resourceRoot, "desktop"\)/);
+  assert.match(prepare, /rmSync\(resolve\(resourceRoot, "tests"\)/);
+  assert.match(prepare, /assertNoPrivatePayload\(resources\)/);
   assert.match(prepare, /\^\(\?:out\|desktop\)/);
   assert.match(prepare, /RangaBot Verification/);
+  const nextConfig = readFileSync(new URL("../next.config.ts", import.meta.url), "utf8");
+  assert.match(nextConfig, /outputFileTracingExcludes:\s*\{\s*"\/\*": \["\.\/tests\/\*\*\/\*"\]/);
   const finalizer = readFileSync(new URL("../scripts/finalize-desktop-package.ts", import.meta.url), "utf8");
   assert.match(finalizer, /desktop-artifact-verification-/);
   assert.match(finalizer, /desktop-artifact-normal-refresh-20260812-/);

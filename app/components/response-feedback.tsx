@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { localApiFetch } from "@/lib/local-api-client";
+import { CraftIcon } from "@/app/components/craft-icon";
 import {
   RESPONSE_FEEDBACK_CONFIRMATIONS,
   expectedResponseFeedbackOutcome,
@@ -61,28 +62,30 @@ export function ResponseFeedback({ conversationId, turnId, rating, onRatingChang
   }
 
   return (
-    <fieldset className="response-feedback" aria-busy={saving}>
-      <legend>Was this response helpful?</legend>
+    <fieldset className="response-feedback" aria-busy={saving} aria-label="Optional response feedback">
+      <legend className="visually-hidden">Was this response helpful?</legend>
       <div className="response-feedback-options">
         <button
           type="button"
           className={rating === "helpful" ? "selected" : ""}
           aria-pressed={rating === "helpful"}
+          aria-label="Helpful"
+          title="Helpful"
           disabled={saving}
           onClick={() => void activate("helpful")}
         >
-          <span className="response-feedback-check" aria-hidden="true">{rating === "helpful" ? "✓" : ""}</span>
-          Helpful
+          <CraftIcon name="thumb-up" size={14} />
         </button>
         <button
           type="button"
           className={rating === "needs-improvement" ? "selected" : ""}
           aria-pressed={rating === "needs-improvement"}
+          aria-label="Needs improvement"
+          title="Needs improvement"
           disabled={saving}
           onClick={() => void activate("needs-improvement")}
         >
-          <span className="response-feedback-check" aria-hidden="true">{rating === "needs-improvement" ? "✓" : ""}</span>
-          Needs improvement
+          <CraftIcon name="thumb-down" size={14} />
         </button>
       </div>
       <span className="response-feedback-status" role="status" aria-live="polite" aria-atomic="true">

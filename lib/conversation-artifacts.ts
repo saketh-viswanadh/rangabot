@@ -6,7 +6,7 @@ import { ensurePrivateDirectory } from "./private-storage.ts";
 import { runtimePaths } from "./runtime-paths.ts";
 
 const wordArtifactId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const wordArtifactsRoot = runtimePaths.artifactsRoot;
+function wordArtifactsRoot() { return runtimePaths.artifactsRoot; }
 
 export type StagedArtifactDeletion = {
   processedArtifactIds: string[];
@@ -60,7 +60,7 @@ function requireRealDirectory(path: string) {
  */
 export function stageOwnedWordArtifactDirectories(
   artifactIds: string[],
-  artifactsRoot = wordArtifactsRoot,
+  artifactsRoot = wordArtifactsRoot(),
 ): StagedArtifactDeletion {
   if (artifactIds.length === 0) {
     return { processedArtifactIds: [], finalize: () => true, rollback: () => undefined };
@@ -117,7 +117,7 @@ export function stageOwnedWordArtifactDirectories(
 
 /** Retry only previously staged deletions; live artifact directories are never
  * scanned or inferred as orphaned. */
-export function purgeArtifactDeletionQuarantine(artifactsRoot = wordArtifactsRoot) {
+export function purgeArtifactDeletionQuarantine(artifactsRoot = wordArtifactsRoot()) {
   const quarantineRoot = resolve(artifactsRoot, ".deletion-quarantine");
   if (!existsSync(/* turbopackIgnore: true */ quarantineRoot)) return 0;
   requireRealDirectory(quarantineRoot);
@@ -139,7 +139,7 @@ export function purgeArtifactDeletionQuarantine(artifactsRoot = wordArtifactsRoo
  */
 export function recoverArtifactDeletionQuarantine(
   database: Database,
-  artifactsRoot = wordArtifactsRoot,
+  artifactsRoot = wordArtifactsRoot(),
 ) {
   const quarantineRoot = resolve(artifactsRoot, ".deletion-quarantine");
   if (!existsSync(/* turbopackIgnore: true */ quarantineRoot)) {

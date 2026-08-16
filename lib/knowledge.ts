@@ -20,7 +20,8 @@ export const knowledgeSourceManifest = runtimePaths.knowledgeSourceManifest;
 export const knowledgeEvaluationFixtures = runtimePaths.knowledgeEvaluationFixtures;
 export const knowledgeEvaluationResults = runtimePaths.knowledgeEvaluationResults;
 export const knowledgeDatabasePath = runtimePaths.knowledgeDatabase;
-let activeKnowledgeDatabasePath = knowledgeDatabasePath;
+let knowledgeDatabasePathOverride: string | undefined;
+let openedKnowledgeDatabasePath: string | undefined;
 export const knowledgeBudgetBytes = getKnowledgeBudgetBytes();
 export const embeddingModel = getConfiguredEmbeddingModel();
 
@@ -34,9 +35,12 @@ function ensureColumn(db: Database, table: string, column: string, definition: s
 }
 
 function getDatabase() {
-  if (database) return database;
+  const activeKnowledgeDatabasePath = knowledgeDatabasePathOverride ?? runtimePaths.knowledgeDatabase;
+  if (database && openedKnowledgeDatabasePath === activeKnowledgeDatabasePath) return database;
+  if (database) closeKnowledgeDatabase();
   preparePrivateSqliteStorage(activeKnowledgeDatabasePath);
   database = new DatabaseSync(activeKnowledgeDatabasePath, { allowExtension: true });
+  openedKnowledgeDatabasePath = activeKnowledgeDatabasePath;
   try {
     try {
       sqliteVec.load(database);
@@ -99,6 +103,7 @@ function getDatabase() {
   } catch (error) {
     try { database.close(); } catch { /* Preserve the initialization error. */ }
     database = undefined;
+    openedKnowledgeDatabasePath = undefined;
     nativeVectorAvailable = false;
     hardenPrivateSqliteFiles(activeKnowledgeDatabasePath);
     throw error;
@@ -315,10 +320,10 @@ export function getKnowledgeSourceStates(): KnowledgeSourceState[] {
   return listKnowledgeFiles().map((path) => {
     const document = indexed.get(path);
     if (document?.ingestionVersion === knowledgeIngestionVersion) return { name: path.split("/").at(-1) ?? path, status: "indexed" as const, detail: `${document.chunkCount} searchable passages with hierarchy`, chunks: document.chunkCount };
-    if (document) return { name: path.split("/").at(-1) ?? path, status: "pending" as const, detail: "Run npm run knowledge:ingest to add chapter and page metadata", chunks: document.chunkCount };
+    if (document) return { name: path.split("/").at(-1) ?? path, status: "pending" as const, detail: "Select Import in Library to refresh chapter and page metadata", chunks: document.chunkCount };
     const issue = issues.get(path);
     if (issue) return { name: path.split("/").at(-1) ?? path, status: "incompatible" as const, detail: issue, chunks: 0 };
-    return { name: path.split("/").at(-1) ?? path, status: "pending" as const, detail: "Run npm run knowledge:ingest", chunks: 0 };
+    return { name: path.split("/").at(-1) ?? path, status: "pending" as const, detail: "Select Import in Library to index this document", chunks: 0 };
   }).sort((left, right) => left.status.localeCompare(right.status) || left.name.localeCompare(right.name));
 }
 
@@ -567,6 +572,8 @@ function directorySize(path: string): number {
 }
 
 export function getKnowledgeStatus() {
+  const knowledgeInbox = runtimePaths.knowledgeInbox;
+  const knowledgeRoot = runtimePaths.knowledgeRoot;
   ensurePrivateDirectory(knowledgeInbox);
   const db = getDatabase();
   const documents = db.prepare("SELECT COUNT(*) AS count FROM documents").get() as { count: number };
@@ -577,6 +584,7 @@ export function getKnowledgeStatus() {
 }
 
 export function listInboxFiles() {
+  const knowledgeInbox = runtimePaths.knowledgeInbox;
   ensurePrivateDirectory(knowledgeInbox);
   const supported = new Set([".pdf", ".docx", ".txt", ".md", ".markdown", ".html", ".htm"]);
   return readdirSync(/* turbopackIgnore: true */ knowledgeInbox, { withFileTypes: true })
@@ -594,15 +602,25 @@ export function readSourceManifest() {
   return JSON.parse(readFileSync(/* turbopackIgnore: true */ knowledgeSourceManifest, "utf8")) as unknown;
 }
 
-export function closeKnowledgeDatabaseForTests() {
+export function closeKnowledgeDatabase() {
   database?.close();
   database = undefined;
   nativeVectorAvailable = false;
+  openedKnowledgeDatabasePath = undefined;
+}
+
+export function closeKnowledgeDatabaseForTests() {
+  closeKnowledgeDatabase();
 }
 
 export function setKnowledgeDatabasePathForTests(path: string) {
   closeKnowledgeDatabaseForTests();
-  activeKnowledgeDatabasePath = path;
+  knowledgeDatabasePathOverride = path;
+}
+
+export function resetKnowledgeDatabasePathForTests() {
+  closeKnowledgeDatabaseForTests();
+  knowledgeDatabasePathOverride = undefined;
 }
 
 export function getKnowledgeDatabaseForTests() {

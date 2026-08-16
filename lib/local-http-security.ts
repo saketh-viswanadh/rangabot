@@ -1,8 +1,10 @@
 export const LOCAL_SESSION_COOKIE = "rangabot_session";
 export const LOCAL_SESSION_HEADER = "X-Rangabot-Session";
+export const LOCAL_PROFILE_CONTEXT_HEADER = "X-Rangabot-Profile-Context";
 export const LOCAL_BOOTSTRAP_HEADER = "X-Rangabot-Bootstrap";
 export const LOCAL_BOOTSTRAP_PATH = "/api/local-session/bootstrap";
 export const MAX_LOCAL_API_BODY_BYTES = 2_200_000;
+export const MAX_LOCAL_PROFILE_RESTORE_BYTES = 512 * 1024 * 1024;
 export const MAX_LOCAL_BOOTSTRAP_BODY_BYTES = 64;
 
 const safeMethods = new Set(["GET", "HEAD"]);
@@ -13,6 +15,7 @@ export type LocalRequestSecurityInput = {
   headers: Headers;
   sessionCookie?: string;
   issuedSessionValid: boolean;
+  profileContextValid?: boolean;
 };
 
 export type LocalRequestSecurityResult =
@@ -132,7 +135,7 @@ export function evaluateLocalApiRequest(input: LocalRequestSecurityInput): Local
     if (parsedOrigin.origin !== hostOrigin) return { ok: false, status: 403, code: "forbidden" };
   }
 
-  if (!input.issuedSessionValid || !input.sessionCookie) {
+  if (!input.issuedSessionValid || !input.sessionCookie || input.profileContextValid === false) {
     return { ok: false, status: 403, code: "forbidden" };
   }
 
@@ -144,17 +147,21 @@ export function evaluateLocalApiRequest(input: LocalRequestSecurityInput): Local
     return { ok: false, status: 403, code: "forbidden" };
   }
   const mediaType = input.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-  if (mediaType !== "application/json") {
+  const profileRestore = requestUrl.pathname === "/api/profiles/restore";
+  const acceptedMediaType = profileRestore ? "application/vnd.rangabot.profile-backup+json" : "application/json";
+  if (mediaType !== acceptedMediaType) {
     return { ok: false, status: 415, code: "unsupported-media-type" };
   }
   if (input.headers.has("transfer-encoding") || (input.headers.get("content-encoding") ?? "identity").toLowerCase() !== "identity") {
     return { ok: false, status: 415, code: "unsupported-media-type" };
   }
   const lengthHeader = input.headers.get("content-length");
-  if (!lengthHeader || !/^[1-9][0-9]{0,7}$/.test(lengthHeader)) {
+  const lengthPattern = profileRestore ? /^[1-9][0-9]{0,8}$/ : /^[1-9][0-9]{0,7}$/;
+  if (!lengthHeader || !lengthPattern.test(lengthHeader)) {
     return { ok: false, status: 411, code: "length-required" };
   }
-  if (Number(lengthHeader) > MAX_LOCAL_API_BODY_BYTES) {
+  const maximumBytes = profileRestore ? MAX_LOCAL_PROFILE_RESTORE_BYTES : MAX_LOCAL_API_BODY_BYTES;
+  if (Number(lengthHeader) > maximumBytes) {
     return { ok: false, status: 413, code: "payload-too-large" };
   }
   return { ok: true };

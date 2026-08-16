@@ -11,11 +11,13 @@ import {
 } from "../lib/analytical-narration.ts";
 import type { SqlExecutionResult } from "../lib/sql-runtime.ts";
 import { ensurePrivateDirectory, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
 
 const suite = "analytical-narration-frozen-v1";
 const runnerVersion = "1.0.0";
 const frozenAt = "2026-08-07";
-const outputDirectory = resolve("data/evaluations/results");
+const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Analytical narration evaluation" });
+const outputDirectory = profileMaintenance.dataPath("evaluations", "results");
 
 type NarrationCase = {
   id: string;
@@ -646,6 +648,7 @@ const report = {
 
 ensurePrivateDirectory(outputDirectory);
 const outputPath = resolve(outputDirectory, `${suite}-${completedAt.replace(/[:.]/g, "-")}.json`);
+profileMaintenance.assertCurrent();
 writePrivateJsonFileAtomic(outputPath, report);
 
 console.log(`Frozen analytical narration evaluator ${suite} (${cases.length} canonical cases + ${invalidShapeCases.length} invalid-shape cases, 0 model calls)`);
@@ -659,3 +662,4 @@ if (positivePassed !== positiveResults.length || negativePassed !== negativeResu
   for (const item of negativeResults.filter((result) => !result.passed)) console.error(`FAIL negative ${item.sourceCase}/${item.mutation}: ${item.audit.failures.join(", ") || "mutation was accepted"}`);
   process.exitCode = 1;
 }
+profileMaintenance.release();

@@ -28,8 +28,10 @@ const {
   readdirSync,
 } = identityFilesystem;
 
-export const DESKTOP_ARTIFACT_SCHEMA_VERSION = 1;
-export const DESKTOP_SOURCE_BASELINE_COMMIT = "f0e9f23e1d09e8fd709898be3f8b6a8ed63005ea";
+export const DESKTOP_ARTIFACT_SCHEMA_VERSION = 2;
+export const DESKTOP_SOURCE_BASE_COMMIT = "8b161635f79ac6a572524ba22e3af7364fe08a5b";
+export const DESKTOP_SOURCE_BASELINE_COMMIT = "ebc7bb6257da70cdc506d27e111b49d98a34dc31";
+export const DESKTOP_FUSE_POLICY_NAME = "electron-43-arm64-launchable-v1";
 
 const sha256Pattern = /^[0-9a-f]{64}$/;
 const gitCommitPattern = /^[0-9a-f]{40}$/;
@@ -70,6 +72,7 @@ export type DesktopRuntimeVersions = {
 };
 
 export type DesktopFusePolicy = {
+  policyName: typeof DESKTOP_FUSE_POLICY_NAME;
   runAsNode: false;
   enableCookieEncryption: true;
   enableNodeOptionsEnvironmentVariable: false;
@@ -82,6 +85,7 @@ export type DesktopFusePolicy = {
 };
 
 export const REQUIRED_DESKTOP_FUSE_POLICY: DesktopFusePolicy = Object.freeze({
+  policyName: DESKTOP_FUSE_POLICY_NAME,
   runAsNode: false,
   enableCookieEncryption: true,
   enableNodeOptionsEnvironmentVariable: false,
@@ -144,9 +148,14 @@ export type DesktopArtifactTarget = {
 };
 
 export type DesktopArtifactManifest = {
-  schemaVersion: 1;
+  schemaVersion: 2;
+  /** Founder-approved source merge from which Profiles v1 was developed. */
+  sourceBaseCommit: string;
   desktopArtifactId: string;
+  /** Profiles v1 behavior commit, before the packaging-only identity commit. */
   sourceBaselineCommit: string;
+  /** Exact clean packaging commit whose complete Git-visible files were frozen. */
+  sourceCommit: string;
   sourceDirty: boolean;
   sourceManifestSha256: string;
   sourceFiles: DesktopArtifactFile[];
@@ -506,7 +515,9 @@ export function deriveDesktopSourceManifestSha256(files: readonly DesktopArtifac
 function desktopIdentityPayload(manifest: Omit<DesktopArtifactManifest, "desktopArtifactId" | "generatedAt" | "resources" | "natives">) {
   return {
     schemaVersion: manifest.schemaVersion,
+    sourceBaseCommit: manifest.sourceBaseCommit,
     sourceBaselineCommit: manifest.sourceBaselineCommit,
+    sourceCommit: manifest.sourceCommit,
     sourceDirty: manifest.sourceDirty,
     sourceManifestSha256: manifest.sourceManifestSha256,
     packageLockSha256: manifest.packageLockSha256,
@@ -538,6 +549,12 @@ export function desktopArtifactBuildName(sourceVersion: string, arch: DesktopArt
 }
 
 export function createDesktopArtifactManifest(input: DesktopArtifactManifestInput): DesktopArtifactManifest {
+  if (!gitCommitPattern.test(input.sourceBaseCommit) || !gitCommitPattern.test(input.sourceCommit)) {
+    throw new Error("Desktop source commits are incomplete.");
+  }
+  if (input.sourceBaseCommit !== DESKTOP_SOURCE_BASE_COMMIT) {
+    throw new Error(`Desktop artifacts must bind original source base ${DESKTOP_SOURCE_BASE_COMMIT}.`);
+  }
   if (input.sourceBaselineCommit !== DESKTOP_SOURCE_BASELINE_COMMIT) {
     throw new Error(`Desktop artifacts must bind source baseline ${DESKTOP_SOURCE_BASELINE_COMMIT}.`);
   }
@@ -572,7 +589,9 @@ export function createDesktopArtifactManifest(input: DesktopArtifactManifestInpu
   const nativeManifestSha256 = fileManifestSha256("natives", input.target, natives, runtimeVersions.nativeModules);
   const partial = {
     schemaVersion: DESKTOP_ARTIFACT_SCHEMA_VERSION,
+    sourceBaseCommit: input.sourceBaseCommit,
     sourceBaselineCommit: input.sourceBaselineCommit,
+    sourceCommit: input.sourceCommit,
     sourceDirty: input.sourceDirty,
     sourceManifestSha256: input.sourceManifestSha256,
     sourceFiles,
@@ -597,12 +616,15 @@ export function createDesktopArtifactManifest(input: DesktopArtifactManifestInpu
 
 export function parseDesktopArtifactManifest(value: unknown): DesktopArtifactManifest | null {
   if (!isRecord(value) || !exactKeys(value, [
-    "schemaVersion", "desktopArtifactId", "sourceBaselineCommit", "sourceDirty", "sourceManifestSha256",
+    "schemaVersion", "sourceBaseCommit", "desktopArtifactId", "sourceBaselineCommit", "sourceCommit", "sourceDirty", "sourceManifestSha256",
     "sourceFiles", "packageLockSha256", "webFeedback", "launchProfile", "runtimeVersions", "target", "fuses", "packagingTooling", "bundleManifestSha256",
     "resourceManifestSha256", "nativeManifestSha256", "bundleFiles", "resources", "natives", "generatedAt",
   ]) || value.schemaVersion !== DESKTOP_ARTIFACT_SCHEMA_VERSION
+    || value.sourceBaseCommit !== DESKTOP_SOURCE_BASE_COMMIT
     || typeof value.desktopArtifactId !== "string" || !sha256Pattern.test(value.desktopArtifactId)
-    || value.sourceBaselineCommit !== DESKTOP_SOURCE_BASELINE_COMMIT || typeof value.sourceDirty !== "boolean"
+    || value.sourceBaselineCommit !== DESKTOP_SOURCE_BASELINE_COMMIT
+    || typeof value.sourceCommit !== "string" || !gitCommitPattern.test(value.sourceCommit)
+    || typeof value.sourceDirty !== "boolean"
     || typeof value.sourceManifestSha256 !== "string" || !sha256Pattern.test(value.sourceManifestSha256)
     || typeof value.packageLockSha256 !== "string" || !sha256Pattern.test(value.packageLockSha256)
     || typeof value.bundleManifestSha256 !== "string" || !sha256Pattern.test(value.bundleManifestSha256)
@@ -625,9 +647,11 @@ export function parseDesktopArtifactManifest(value: unknown): DesktopArtifactMan
     || !sourceFiles || deriveDesktopSourceManifestSha256(sourceFiles) !== value.sourceManifestSha256
     || !runtimeVersions || !fuses || !packagingTooling || !bundleFiles || !resources || !natives) return null;
   const manifest: DesktopArtifactManifest = {
-    schemaVersion: 1,
+    schemaVersion: DESKTOP_ARTIFACT_SCHEMA_VERSION,
+    sourceBaseCommit: value.sourceBaseCommit,
     desktopArtifactId: value.desktopArtifactId,
     sourceBaselineCommit: value.sourceBaselineCommit,
+    sourceCommit: value.sourceCommit,
     sourceDirty: value.sourceDirty,
     sourceManifestSha256: value.sourceManifestSha256,
     sourceFiles,
@@ -1013,7 +1037,7 @@ export function inspectDesktopArtifact(options: {
     state: "known",
     candidateBuildId: manifest.desktopArtifactId,
     build: desktopArtifactBuildName(manifest.webFeedback.sourceVersion, manifest.target.arch, manifest.desktopArtifactId),
-    baseCommit: manifest.sourceBaselineCommit,
+    baseCommit: manifest.sourceCommit,
     manifestSha256: manifest.sourceManifestSha256,
     artifactSha256: manifest.desktopArtifactId,
     sourceVersion: manifest.webFeedback.sourceVersion,

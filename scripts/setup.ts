@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { ensurePrivateDirectory, ensurePrivateFile } from "../lib/private-storage.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
 import { runtimePaths } from "../lib/runtime-paths.ts";
 
 type Registry = { models: Array<{ id: string; label: string; tier: string; minimumMemoryGb: number; recommendedContextTokens: number; uses: string[]; notes: string }>; embeddingModels: Array<{ id: string; label: string }> };
@@ -61,12 +62,17 @@ if (existsSync(envPath)) {
   console.log("\nCreated private .env.local configuration.");
 }
 
+const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Private workspace setup" });
 for (const directory of [
   runtimePaths.artifactsRoot,
   runtimePaths.knowledgeInbox,
   runtimePaths.knowledgeIndexes,
   runtimePaths.knowledgeProcessed,
   runtimePaths.knowledgeBackups,
-]) ensurePrivateDirectory(directory);
+]) {
+  profileMaintenance.assertDataPath(directory);
+  ensurePrivateDirectory(directory);
+}
+profileMaintenance.release();
 console.log("Initialized the private Knowledge Vault.");
 console.log("\nNext: add documents to data/knowledge/inbox, run npm run knowledge:ingest, then npm run dev.\n");

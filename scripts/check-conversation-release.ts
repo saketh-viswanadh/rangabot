@@ -4,14 +4,17 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { evaluateConversationReleaseGate } from "../lib/conversation-release-gate.ts";
 import { ensurePrivateFile } from "../lib/private-storage.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
 
-const privateRoot = resolve("data/evaluations");
+const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Conversation release evidence check" });
+const privateRoot = profileMaintenance.dataPath("evaluations");
 
 function valuesFor(name: string) {
   return process.argv.slice(2).filter((argument) => argument.startsWith(`--${name}=`)).map((argument) => argument.slice(name.length + 3));
 }
 
 function readPrivateArtifact(path: string): { value: unknown; sha256: string } {
+  profileMaintenance.assertCurrent();
   const resolved = resolve(path);
   if (!existsSync(resolved)) throw new Error(`Private release-gate input does not exist: ${basename(resolved)}`);
   ensurePrivateFile(resolved, { trustedRoot: privateRoot });
@@ -72,3 +75,4 @@ try {
   console.error(`Conversation release gate: FAIL\n- ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
 }
+profileMaintenance.release();

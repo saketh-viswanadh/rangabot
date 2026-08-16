@@ -8,10 +8,12 @@ import {
   lstatSync,
   openSync,
   readFileSync,
+  readdirSync,
+  type Stats,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import {
   ensurePrivateDirectory,
   ensurePrivateFile,
@@ -23,6 +25,7 @@ import { runtimePaths } from "./runtime-paths.ts";
 const runtimeLeaseVersion = 1;
 const maximumLeaseBytes = 4_096;
 const acquisitionAttempts = 8;
+const claimTokenPattern = /^[0-9a-f]{48}$/;
 
 export const defaultRuntimeLeasePath = runtimePaths.runtimeLease;
 
@@ -46,6 +49,12 @@ export type RuntimeLeaseOptions = {
   now?: () => Date;
   token?: () => string;
   inspectProcess?: (pid: number) => ProcessState;
+  /** @internal Deterministic race injection for runtime lease protocol tests. */
+  onLeaseClaimForTests?: (claim: Readonly<{
+    path: string;
+    claimPath: string;
+    expectedToken: string;
+  }>) => void;
 };
 
 export class RuntimeLeaseError extends Error {
@@ -78,20 +87,46 @@ function parseRecord(value: unknown): RuntimeLeaseRecord | undefined {
   return record as RuntimeLeaseRecord;
 }
 
-function readRecord(path: string): RuntimeLeaseRecord {
+function sameEntry(
+  left: Readonly<{ dev: number; ino: number }>,
+  right: Readonly<{ dev: number; ino: number }>,
+) {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+function readRecord(path: string, allowLeaseClaims = false): RuntimeLeaseRecord {
   let descriptor: number | undefined;
   try {
     const status = lstatSync(path);
-    if (status.isSymbolicLink() || !status.isFile() || status.size > maximumLeaseBytes) {
+    if (
+      status.isSymbolicLink()
+      || !status.isFile()
+      || (allowLeaseClaims ? status.nlink < 1 : status.nlink !== 1)
+      || status.size > maximumLeaseBytes
+    ) {
       throw new RuntimeLeaseError("invalid", "The private Rangabot runtime lease is invalid and was left untouched.");
     }
     const noFollow = supportsPosixPermissions() ? constants.O_NOFOLLOW : 0;
     descriptor = openSync(path, constants.O_RDONLY | noFollow);
     const opened = fstatSync(descriptor);
-    if (!opened.isFile() || opened.size > maximumLeaseBytes) {
+    if (
+      !opened.isFile()
+      || (allowLeaseClaims ? opened.nlink < 1 : opened.nlink !== 1)
+      || opened.size > maximumLeaseBytes
+      || !sameEntry(status, opened)
+    ) {
       throw new RuntimeLeaseError("invalid", "The private Rangabot runtime lease is invalid and was left untouched.");
     }
-    const parsed = parseRecord(JSON.parse(readFileSync(descriptor, { encoding: "utf8" })));
+    const content = readFileSync(descriptor, { encoding: "utf8" });
+    const after = fstatSync(descriptor);
+    if (
+      !sameEntry(opened, after)
+      || after.size !== opened.size
+      || Buffer.byteLength(content, "utf8") !== opened.size
+    ) {
+      throw new RuntimeLeaseError("invalid", "The private Rangabot runtime lease changed while it was being read.");
+    }
+    const parsed = parseRecord(JSON.parse(content));
     if (!parsed) throw new RuntimeLeaseError("invalid", "The private Rangabot runtime lease is invalid and was left untouched.");
     return parsed;
   } catch (error) {
@@ -123,21 +158,168 @@ function recordIsActive(record: RuntimeLeaseRecord, inspectProcess: (pid: number
     .some((pid) => inspectProcess(pid) !== "dead");
 }
 
-function removeVerifiedStaleRecord(path: string, expected: RuntimeLeaseRecord) {
-  const current = readRecord(path);
+function claimPrefix(path: string) {
+  return `.${basename(path)}.claim-`;
+}
+
+function claimNames(path: string) {
+  const prefix = claimPrefix(path);
+  return readdirSync(dirname(path))
+    .filter((name) => name.startsWith(prefix) && name.endsWith(".tmp"))
+    .filter((name) => claimTokenPattern.test(name.slice(prefix.length, -4)))
+    .sort();
+}
+
+function verifyClaimFile(path: string) {
+  const status = lstatSync(path);
   if (
-    current.token !== expected.token
+    status.isSymbolicLink()
+    || !status.isFile()
+    || status.size > maximumLeaseBytes
+    || (supportsPosixPermissions() && (status.mode & 0o077) !== 0)
+  ) {
+    throw new RuntimeLeaseError("invalid", "A Rangabot runtime lease claim is unsafe and was left untouched.");
+  }
+  return status;
+}
+
+function cleanupDetachedClaims(path: string) {
+  let canonical: Stats | undefined;
+  try { canonical = lstatSync(path); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  for (const name of claimNames(path)) {
+    const claimPath = join(dirname(path), name);
+    let claim: Stats;
+    try { claim = verifyClaimFile(claimPath); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
+    if (canonical && sameEntry(canonical, claim)) continue;
+    try { unlinkSync(claimPath); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+}
+
+function normalizeStaleClaims(path: string, expected: RuntimeLeaseRecord) {
+  for (let attempt = 0; attempt < acquisitionAttempts; attempt += 1) {
+    const before = lstatSync(path);
+    const current = readRecord(path, true);
+    const afterRead = lstatSync(path);
+    if (
+      !sameEntry(before, afterRead)
+      || current.token !== expected.token
+      || current.ownerPid !== expected.ownerPid
+      || current.runtimePid !== expected.runtimePid
+    ) return false;
+    if (afterRead.nlink === 1) return true;
+
+    let removedClaim = false;
+    for (const name of claimNames(path)) {
+      const claimPath = join(dirname(path), name);
+      let claim: Stats;
+      try { claim = verifyClaimFile(claimPath); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+      if (!sameEntry(before, claim)) continue;
+      try { unlinkSync(claimPath); removedClaim = true; }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
+    if (!removedClaim) {
+      throw new RuntimeLeaseError("invalid", "The Rangabot runtime lease has an unrecognized hard link and was left untouched.");
+    }
+    let finalLease: Stats;
+    try { finalLease = lstatSync(path); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw error;
+    }
+    if (!sameEntry(before, finalLease)) return false;
+    if (finalLease.nlink === 1) return true;
+  }
+  return false;
+}
+
+function removeVerifiedRecord(
+  path: string,
+  expected: RuntimeLeaseRecord,
+  onLeaseClaimForTests?: RuntimeLeaseOptions["onLeaseClaimForTests"],
+) {
+  const before = lstatSync(path);
+  const current = readRecord(path);
+  const after = lstatSync(path);
+  if (
+    !sameEntry(before, after)
+    || current.token !== expected.token
     || current.ownerPid !== expected.ownerPid
     || current.runtimePid !== expected.runtimePid
   ) return false;
-  unlinkSync(path);
-  return true;
+
+  // Claim the exact inspected inode through a private hard link. The public
+  // lease pathname cannot be replaced while it exists. If another reclaimer
+  // also claims the inode, the link count is no longer exactly two and this
+  // attempt backs off without unlinking any pathname it did not inspect.
+  let claimPath: string | undefined;
+  for (let attempt = 0; attempt < acquisitionAttempts; attempt += 1) {
+    const candidate = join(
+      dirname(path),
+      `${claimPrefix(path)}${randomBytes(24).toString("hex")}.tmp`,
+    );
+    try {
+      linkSync(path, candidate);
+      claimPath = candidate;
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw error;
+    }
+  }
+  if (claimPath === undefined) {
+    throw new RuntimeLeaseError("active", "A unique Rangabot runtime lease claim could not be created.");
+  }
+
+  let removed = false;
+  try {
+    const claimed = lstatSync(claimPath);
+    if (!sameEntry(before, claimed)) return false;
+
+    onLeaseClaimForTests?.({ path, claimPath, expectedToken: expected.token });
+
+    const finalLease = lstatSync(path);
+    const finalClaim = lstatSync(claimPath);
+    if (
+      !sameEntry(before, finalLease)
+      || !sameEntry(before, finalClaim)
+      || finalLease.nlink !== 2
+      || finalClaim.nlink !== 2
+    ) return false;
+    unlinkSync(path);
+    removed = true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  } finally {
+    try { unlinkSync(claimPath); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  return removed;
 }
 
 function publishRecord(path: string, record: RuntimeLeaseRecord, trustedRoot?: string) {
   ensurePrivateDirectory(dirname(path), { trustedRoot });
   const temporary = `${path}.${record.token}.tmp`;
   let descriptor: number | undefined;
+  let publishedIdentity: Readonly<{ dev: number; ino: number }> | undefined;
   try {
     const noFollow = supportsPosixPermissions() ? constants.O_NOFOLLOW : 0;
     descriptor = openSync(
@@ -147,19 +329,29 @@ function publishRecord(path: string, record: RuntimeLeaseRecord, trustedRoot?: s
     );
     writeFileSync(descriptor, `${JSON.stringify(record)}\n`, { encoding: "utf8" });
     fsyncSync(descriptor);
+    const written = fstatSync(descriptor);
+    publishedIdentity = Object.freeze({ dev: written.dev, ino: written.ino });
     closeSync(descriptor);
     descriptor = undefined;
     ensurePrivateFile(temporary, { trustedRoot });
     // A hard link publishes the already-complete record while preserving the
     // O_EXCL property across cooperating processes.
     linkSync(temporary, path);
-    ensurePrivateFile(path, { trustedRoot });
     unlinkSync(temporary);
+    // Remove the temporary link before enforcing the single-link private-file
+    // invariant. The published pathname remains the same verified inode.
+    ensurePrivateFile(path, { trustedRoot });
   } catch (error) {
     if (descriptor !== undefined) {
       try { closeSync(descriptor); } catch { /* Keep the original failure. */ }
     }
     try { unlinkSync(temporary); } catch { /* The temporary may not exist. */ }
+    if (publishedIdentity) {
+      try {
+        const published = lstatSync(path);
+        if (published.dev === publishedIdentity.dev && published.ino === publishedIdentity.ino) unlinkSync(path);
+      } catch { /* Never remove a replacement or mask the original failure. */ }
+    }
     throw error;
   }
 }
@@ -183,20 +375,23 @@ export function acquireRuntimeLease(options: RuntimeLeaseOptions): RuntimeLease 
   };
   if (!parseRecord(record)) throw new RuntimeLeaseError("invalid", "The Rangabot runtime lease could not be created safely.");
 
+  ensurePrivateDirectory(dirname(path), { trustedRoot: options.trustedRoot });
   let acquired = false;
   for (let attempt = 0; attempt < acquisitionAttempts; attempt += 1) {
+    cleanupDetachedClaims(path);
     try {
       publishRecord(path, record, options.trustedRoot);
       acquired = true;
       break;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      const existing = readRecord(path);
+      const existing = readRecord(path, true);
       if (recordIsActive(existing, inspectProcess)) {
         throw new RuntimeLeaseError("active", "Rangabot is already running or private maintenance is active. Stop it before continuing.");
       }
       try {
-        if (!removeVerifiedStaleRecord(path, existing)) continue;
+        if (!normalizeStaleClaims(path, existing)) continue;
+        if (!removeVerifiedRecord(path, existing, options.onLeaseClaimForTests)) continue;
       } catch (cleanupError) {
         if ((cleanupError as NodeJS.ErrnoException).code === "ENOENT") continue;
         throw cleanupError;
@@ -224,16 +419,18 @@ export function acquireRuntimeLease(options: RuntimeLeaseOptions): RuntimeLease 
     },
     release() {
       if (released) return false;
-      if (!ownsCurrentRecord()) {
+      try {
+        const removed = removeVerifiedRecord(path, record, options.onLeaseClaimForTests);
         released = true;
-        return false;
+        return removed;
       }
-      try { unlinkSync(path); }
       catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          released = true;
+          return false;
+        }
+        throw error;
       }
-      released = true;
-      return true;
     },
   };
 }

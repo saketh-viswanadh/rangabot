@@ -15,10 +15,12 @@ import {
   writePrivateJsonFileAtomic,
   writePrivateTextFileAtomic,
 } from "../lib/private-storage.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
 
 const command = process.argv[2];
 const option = (name: string) => process.argv.find((argument) => argument.startsWith(`--${name}=`))?.slice(name.length + 3);
-const privateRoot = resolve("data/evaluations");
+const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Conversation human review" });
+const privateRoot = profileMaintenance.dataPath("evaluations");
 const reviewRoot = resolve(privateRoot, "reviews");
 
 function rejectUnknownOptions(allowed: ReadonlySet<string>) {
@@ -30,6 +32,7 @@ function rejectUnknownOptions(allowed: ReadonlySet<string>) {
 }
 
 function readPrivateArtifact<T>(path: string): { value: T; sha256: string } {
+  profileMaintenance.assertCurrent();
   const resolved = resolve(path);
   if (!existsSync(resolved)) throw new Error(`Private review input does not exist: ${basename(resolved)}`);
   ensurePrivateFile(resolved, { trustedRoot: privateRoot });
@@ -75,6 +78,7 @@ if (command === "prepare") {
   );
   ensurePrivateDirectory(reviewRoot, { trustedRoot: privateRoot });
   const prefix = resolve(reviewRoot, `conversation-blind-${packet.packetId}`);
+  profileMaintenance.assertCurrent();
   writePrivateTextFileAtomic(`${prefix}.md`, packetMarkdown(packet), { trustedRoot: privateRoot });
   writePrivateJsonFileAtomic(`${prefix}.key.json`, key, { trustedRoot: privateRoot });
   writePrivateJsonFileAtomic(`${prefix}.ratings.json`, ratings, { trustedRoot: privateRoot });
@@ -91,6 +95,7 @@ if (command === "prepare") {
   const result = scoreBlindReview(key, ratings);
   ensurePrivateDirectory(reviewRoot, { trustedRoot: privateRoot });
   const output = resolve(reviewRoot, `conversation-blind-${result.packetId}.result.json`);
+  profileMaintenance.assertCurrent();
   writePrivateJsonFileAtomic(output, result, { trustedRoot: privateRoot });
   console.log(`Human usefulness: ${result.meanRating.toFixed(2)}/5 (${result.passed ? "PASS" : "FAIL"})`);
   console.log(`Private review result: ${output}`);
@@ -98,3 +103,4 @@ if (command === "prepare") {
 } else {
   throw new Error("Choose conversation human-review command: prepare or score.");
 }
+profileMaintenance.release();

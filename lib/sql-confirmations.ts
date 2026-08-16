@@ -1,11 +1,12 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { getApprovedDataset } from "./datasets.ts";
-import { defaultSqlConfirmationStorePath, maintainSqlConfirmationStoreAtPath, sqlConfirmationTempMaxAgeMs, type SqlConfirmationRecord, writeSqlConfirmationStore } from "./sql-confirmation-store.ts";
+import { maintainSqlConfirmationStoreAtPath, sqlConfirmationTempMaxAgeMs, type SqlConfirmationRecord, writeSqlConfirmationStore } from "./sql-confirmation-store.ts";
 import { executeReadOnlySql, inspectDatasetIdentity } from "./sql-runtime.ts";
+import { runtimePaths } from "./runtime-paths.ts";
 
 type Confirmation = SqlConfirmationRecord;
-const defaultStorePath = defaultSqlConfirmationStorePath;
-let storePath = defaultStorePath;
+let storePathOverride: string | undefined;
+function currentStorePath() { return storePathOverride ?? runtimePaths.sqlConfirmations; }
 const ttlMs = 5 * 60 * 1000;
 export { sqlConfirmationTempMaxAgeMs };
 
@@ -13,11 +14,11 @@ function hash(value: string) { return createHash("sha256").update(value).digest(
 function normalizeQuery(query: string) { return query.trim().replace(/;\s*$/, ""); }
 
 function writeStore(items: Confirmation[]) {
-  writeSqlConfirmationStore(storePath, items);
+  writeSqlConfirmationStore(currentStorePath(), items);
 }
 
 export function maintainSqlConfirmationStore(now = Date.now()) {
-  return maintainSqlConfirmationStoreAtPath(storePath, now);
+  return maintainSqlConfirmationStoreAtPath(currentStorePath(), now);
 }
 
 function readStore(): Confirmation[] {
@@ -68,5 +69,5 @@ export async function executeConfirmedSql(input: { confirmationId: string; token
   });
 }
 
-export function setSqlConfirmationStorePathForTests(path: string) { storePath = path; }
-export function resetSqlConfirmationStorePathForTests() { storePath = defaultStorePath; }
+export function setSqlConfirmationStorePathForTests(path: string) { storePathOverride = path; }
+export function resetSqlConfirmationStorePathForTests() { storePathOverride = undefined; }

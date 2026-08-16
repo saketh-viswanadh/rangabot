@@ -7,6 +7,9 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { createPackage } from "@electron/asar";
 import {
+  DESKTOP_ARTIFACT_SCHEMA_VERSION,
+  DESKTOP_FUSE_POLICY_NAME,
+  DESKTOP_SOURCE_BASE_COMMIT,
   DESKTOP_SOURCE_BASELINE_COMMIT,
   DESKTOP_FUSE_BINARY_PATH,
   REQUIRED_DESKTOP_FUSE_NAMES,
@@ -125,7 +128,9 @@ function manifestInput(
     { path: "src/app.ts", bytes: 8, sha256: sha("2") },
   ];
   return {
+    sourceBaseCommit: DESKTOP_SOURCE_BASE_COMMIT,
     sourceBaselineCommit: DESKTOP_SOURCE_BASELINE_COMMIT,
+    sourceCommit: "9".repeat(40),
     sourceDirty: false,
     sourceManifestSha256: deriveDesktopSourceManifestSha256(sourceFiles),
     sourceFiles,
@@ -188,6 +193,13 @@ test("desktop identity canonicalizes inventories and excludes generatedAt from i
     assert.equal(deriveDesktopSourceManifestSha256(sourceFiles), deriveDesktopSourceManifestSha256([...sourceFiles].reverse()));
 
     const forward = createDesktopArtifactManifest(manifestInput(fixture.arch, fixture.bundleFiles, fixture.resources, fixture.natives));
+    const otherPackagingCommit = createDesktopArtifactManifest(manifestInput(
+      fixture.arch,
+      fixture.bundleFiles,
+      fixture.resources,
+      fixture.natives,
+      { sourceCommit: "a".repeat(40) },
+    ));
     const reverse = createDesktopArtifactManifest(manifestInput(
       fixture.arch,
       fixture.bundleFiles,
@@ -204,6 +216,9 @@ test("desktop identity canonicalizes inventories and excludes generatedAt from i
       },
     ));
     assert.equal(forward.desktopArtifactId, reverse.desktopArtifactId);
+    assert.notEqual(forward.desktopArtifactId, otherPackagingCommit.desktopArtifactId);
+    assert.equal(forward.schemaVersion, DESKTOP_ARTIFACT_SCHEMA_VERSION);
+    assert.equal(forward.fuses.policyName, DESKTOP_FUSE_POLICY_NAME);
     assert.equal(forward.resourceManifestSha256, reverse.resourceManifestSha256);
     assert.equal(forward.nativeManifestSha256, reverse.nativeManifestSha256);
     assert.equal(deriveDesktopArtifactId(forward), forward.desktopArtifactId);
@@ -261,7 +276,7 @@ test("installed verification is known without Git or cwd discovery and exposes a
     assert.equal(verified.candidateBuildId, manifest.desktopArtifactId);
     assert.equal(verified.artifactSha256, manifest.desktopArtifactId);
     assert.equal(verified.manifestSha256, manifest.sourceManifestSha256);
-    assert.equal(verified.baseCommit, DESKTOP_SOURCE_BASELINE_COMMIT);
+    assert.equal(verified.baseCommit, manifest.sourceCommit);
     assert.equal(verified.build, `0.1.0+desktop.${fixture.arch}.${manifest.desktopArtifactId.slice(0, 12)}`);
     assert.deepEqual(requireKnownDesktopArtifact({
       resourceRoot: fixture.root,
@@ -380,6 +395,12 @@ test("manifest creation and parsing reject unsafe, duplicate, incomplete, and mi
       })),
       new RegExp(DESKTOP_SOURCE_BASELINE_COMMIT),
     );
+    assert.throws(
+      () => createDesktopArtifactManifest(manifestInput(fixture.arch, fixture.bundleFiles, fixture.resources, fixture.natives, {
+        sourceBaseCommit: "7".repeat(40),
+      })),
+      new RegExp(DESKTOP_SOURCE_BASE_COMMIT),
+    );
 
     const valid = createDesktopArtifactManifest(manifestInput(fixture.arch, fixture.bundleFiles, fixture.resources, fixture.natives));
     const unsafe = JSON.parse(JSON.stringify(valid)) as Record<string, unknown> & { resources: Array<Record<string, unknown>> };
@@ -390,6 +411,15 @@ test("manifest creation and parsing reject unsafe, duplicate, incomplete, and mi
     assert.equal(parseDesktopArtifactManifest(duplicate), null);
     const wrongIdentity = { ...valid, desktopArtifactId: sha("f") };
     assert.equal(parseDesktopArtifactManifest(wrongIdentity), null);
+    assert.equal(parseDesktopArtifactManifest({ ...valid, schemaVersion: 1 }), null);
+    const missingPackagingCommit = { ...valid } as Record<string, unknown>;
+    delete missingPackagingCommit.sourceCommit;
+    assert.equal(parseDesktopArtifactManifest(missingPackagingCommit), null);
+    assert.equal(parseDesktopArtifactManifest({ ...valid, sourceCommit: "invalid" }), null);
+    assert.equal(parseDesktopArtifactManifest({
+      ...valid,
+      fuses: { ...valid.fuses, policyName: "stale-electron-policy" },
+    }), null);
   } finally {
     rmSync(fixture.cleanupRoot, { recursive: true, force: true });
   }

@@ -155,6 +155,9 @@ test("wires the guard across all API routes and all browser API calls", () => {
   assert.match(proxy, /consumeOnce: process\.env\.RANGABOT_DESKTOP === "1"/);
   assert.match(proxy, /bootstrapTokenVerifier\.consume\(suppliedBootstrapToken\)/);
   assert.match(proxy, /if \(!sessionValid\) return forbidden\(false\)/);
+  assert.match(proxy, /request\.nextUrl\.pathname === "\/api\/profiles" && request\.method === "GET"/);
+  assert.match(proxy, /request\.nextUrl\.pathname === "\/api\/profiles\/recover" && request\.method === "POST"/);
+  assert.match(proxy, /if \(!recoveryRead && !recoveryMutation\) return forbidden\(true\)/);
   assert.doesNotMatch(proxy, /if \(!verifyLocalSessionToken\(current, sessionSecret\)\)\s*\{\s*response\.cookies\.set/);
   for (const path of ["app/page.tsx", "app/components/memory-panel.tsx", "app/components/sql-analysis-panel.tsx", "app/components/response-feedback.tsx"]) {
     const source = readFileSync(path, "utf8");

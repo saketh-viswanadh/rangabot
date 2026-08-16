@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { runtimePaths } from "./runtime-paths.ts";
 
-const defaultDatabasePath = runtimePaths.knowledgeDatabase;
 const maximumExcludedIds = 60;
 const maximumDocuments = 12;
 const maximumChunksPerWindow = 8;
@@ -208,7 +207,7 @@ export function selectBookWelcomeFact(options: {
   excludedIds?: Iterable<string>;
   random?: () => number;
 } = {}): BookWelcomeFact | null {
-  const databasePath = options.databasePath ?? defaultDatabasePath;
+  const databasePath = options.databasePath ?? runtimePaths.knowledgeDatabase;
   if (!existsSync(/*turbopackIgnore: true*/ databasePath)) return null;
   const random = options.random ?? Math.random;
   const excluded = new Set([...options.excludedIds ?? []].filter((id) => opaqueIdPattern.test(id)).slice(0, maximumExcludedIds));

@@ -6,7 +6,7 @@ import { auditVerifiedAnalyticalNarration, compileVerifiedAnalyticalNarration, t
 import { getApprovedDataset, type ApprovedDataset } from "./datasets.ts";
 import { getExpertPackManifest } from "./expert-pack-registry.ts";
 import { type ExpertPackFailureCode, type ExpertPackManifest, type ExpertPackModelResolution, type ExpertPackPermission, type ExpertPackRequest, type ExpertPackResult, type ExpertPackWarningCode, validateExpertPackRequest, validateExpertPackResult } from "./expert-packs.ts";
-import { getConfiguredChatModel } from "./local-runtime-config.ts";
+import { selectedChatModel } from "./model-manager.ts";
 import { completeJsonWithOllama } from "./providers/ollama.ts";
 import { ProviderError, type ChatMessage, type GenerationOptions } from "./providers/types.ts";
 import type { SqlProposal } from "./sql-proposals.ts";
@@ -35,7 +35,7 @@ const defaultDependencies: AnalyticsPackDependencies = {
   inspectSchema: inspectDatasetSchema,
   completeJson: completeJsonWithOllama,
   executeSql: executeReadOnlySql,
-  configuredModel: getConfiguredChatModel,
+  configuredModel: selectedChatModel,
 };
 
 export type AnalyticsPackOutcome = {

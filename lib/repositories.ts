@@ -26,10 +26,11 @@ export interface RepositoryRootIdentity {
   inode: string;
 }
 
-const defaultRegistryPath = runtimePaths.repositoriesRegistry;
-let registryPath = defaultRegistryPath;
+let registryPathOverride: string | undefined;
+function currentRegistryPath() { return registryPathOverride ?? runtimePaths.repositoriesRegistry; }
 
 function readRegistry(): AllowedRepository[] {
+  const registryPath = currentRegistryPath();
   if (!existsSync(/* turbopackIgnore: true */ registryPath)) return [];
   ensurePrivateFile(registryPath);
   const value: unknown = JSON.parse(readFileSync(/* turbopackIgnore: true */ registryPath, "utf8"));
@@ -64,7 +65,7 @@ function sameRootIdentity(left: RepositoryRootIdentity, right: RepositoryRootIde
 }
 
 function writeRegistry(repositories: AllowedRepository[]) {
-  writePrivateJsonFileAtomic(registryPath, repositories);
+  writePrivateJsonFileAtomic(currentRegistryPath(), repositories);
 }
 
 export function listAllowedRepositories() {
@@ -153,9 +154,9 @@ export function revokeRepository(id: string) {
 }
 
 export function setRepositoryRegistryPathForTests(path: string) {
-  registryPath = path;
+  registryPathOverride = path;
 }
 
 export function resetRepositoryRegistryPathForTests() {
-  registryPath = defaultRegistryPath;
+  registryPathOverride = undefined;
 }

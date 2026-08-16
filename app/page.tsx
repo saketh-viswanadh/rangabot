@@ -1,9 +1,15 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CONVERSATION_TURN_PROTOCOL_VERSION } from "@/lib/conversation-turn-contract";
-import { localApiFetch } from "@/lib/local-api-client";
+import {
+  downloadLocalApiFile,
+  isLegacyLocalProfileContext,
+  localApiBlob,
+  localApiFetch,
+  profileScopedStorageKey,
+} from "@/lib/local-api-client";
 import type { ChatMessage, ConversationTurnStatus, ProviderStatus } from "@/lib/providers/types";
 import { appendWelcomeHistory, chooseWelcomeIndex, parseWelcomeHistory, WELCOME_HISTORY_STORAGE_KEY, welcomeLines } from "@/lib/welcome-content";
 import { chooseGreetingIndex, formatWelcomeGreeting } from "@/lib/welcome-greeting";
@@ -24,11 +30,18 @@ import { SqlAnalysisPanel } from "@/app/components/sql-analysis-panel";
 import { WelcomePreferencesDialog } from "@/app/components/welcome-preferences";
 import { ResponseFeedback } from "@/app/components/response-feedback";
 import { ModelManager } from "@/app/components/model-manager";
+import { ProfileManager } from "@/app/components/profile-manager";
+import { FirstRunSetup } from "@/app/components/first-run-setup";
 import type { ResponseFeedbackRating, ResponseFeedbackView } from "@/lib/response-feedback-contract";
 import type { DesktopPreferences } from "@/lib/desktop-preferences";
+import type { OnboardingState } from "@/lib/onboarding-contract";
 import { mergeResponseFeedbackRead, responseFeedbackBindingMatches } from "@/lib/response-feedback-client-state";
 import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
 import { parseAnalysisTraceHeader, parsePackWarningCodesHeader } from "@/lib/chat-validation";
+import {
+  knowledgeImportFailureMessage as formatKnowledgeImportFailureMessage,
+  knowledgeImportMessage as formatKnowledgeImportMessage,
+} from "@/lib/knowledge-import-message";
 import {
   APPEARANCE_STORAGE_KEY,
   DEFAULT_PALETTE,
@@ -74,6 +87,7 @@ type CodePreview = { path: string; startLine: number; focusLine: number; lines: 
 type AttachedCodeContext = { repositoryId: string; repositoryName: string; path: string; line: number; startLine: number; endLine: number; characterCount: number };
 type KnowledgeSourceState = { name: string; status: "indexed" | "pending" | "incompatible"; detail: string; chunks: number };
 type KnowledgeStatus = { usedBytes: number; budgetBytes: number; documents: number; chunks: number; incompatible: number; pending: number; sources: KnowledgeSourceState[] };
+type DesktopFilePickerBridge = { pickLocalFiles(kind: "knowledge" | "dataset"): Promise<{ status: "selected" | "cancelled"; paths: string[] }> };
 type KnowledgeUpdates = { week: string; month: string; changelog: string; weekUpdatedAt: string | null };
 type KnowledgeTab = "discover" | "vault" | "updates";
 type ActiveConversationTurn = { conversationId: string; turnId: string };
@@ -188,7 +202,7 @@ async function startConversationTurn(payload: string, expectedTurnId: string, si
 
 function parseBookWelcomeHistory() {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(BOOK_WELCOME_HISTORY_STORAGE_KEY) ?? "[]");
+    const value: unknown = JSON.parse(localStorage.getItem(profileScopedStorageKey(BOOK_WELCOME_HISTORY_STORAGE_KEY)) ?? "[]");
     if (!Array.isArray(value)) return [];
     return value.filter((id): id is string => typeof id === "string" && /^wf_[A-Za-z0-9_-]{20}$/.test(id)).slice(-60);
   } catch {
@@ -203,6 +217,7 @@ function parseBookWelcomeHistory() {
  */
 function readSameOriginLegacyPreferencePreview(): LegacyPreferencesPreview | null {
   try {
+    if (!isLegacyLocalProfileContext()) return null;
     const welcomeValue = localStorage.getItem(WELCOME_PREFERENCES_STORAGE_KEY);
     const appearanceValue = localStorage.getItem(APPEARANCE_STORAGE_KEY);
     const paletteValue = localStorage.getItem(PALETTE_STORAGE_KEY);
@@ -233,22 +248,35 @@ export default function Home() {
   const [bookWelcomeLoading, setBookWelcomeLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [projectCreateOpen, setProjectCreateOpen] = useState(false);
+  const [projectMenuId, setProjectMenuId] = useState<string | null>(null);
+  const [conversationMenuId, setConversationMenuId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("smart");
   const [appearance, setAppearance] = useState<Appearance>("dark");
   const [palette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
   const [desktopPreferencesRevision, setDesktopPreferencesRevision] = useState(0);
+  const [desktopPreferences, setDesktopPreferences] = useState<DesktopPreferences | null>(null);
+  const [onboarding, setOnboarding] = useState<OnboardingState | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
   const [preferencesMessage, setPreferencesMessage] = useState("");
+  const [onboardingMessage, setOnboardingMessage] = useState("");
   const [legacyPreferencesPreview, setLegacyPreferencesPreview] = useState<LegacyPreferencesPreview | null>(null);
   const [replyTo, setReplyTo] = useState<DisplayMessage | null>(null);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [modelManagerOpen, setModelManagerOpen] = useState(false);
+  const [profileSwitching, setProfileSwitching] = useState(false);
+  const [profileRecoveryRequired, setProfileRecoveryRequired] = useState(false);
+  const [activeProfileContext, setActiveProfileContext] = useState<{ displayName: string; marker: string; kind: "default" | "personal" | "testing" } | null>(null);
+  const [wordPreview, setWordPreview] = useState<{ url: string; title: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [adoptedPendingTurn, setAdoptedPendingTurn] = useState<ActiveConversationTurn | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationSearch, setConversationSearch] = useState("");
   const [conversationTransferMessage, setConversationTransferMessage] = useState("");
+  const [draggedConversationId, setDraggedConversationId] = useState<string | null>(null);
+  const [conversationDropTarget, setConversationDropTarget] = useState<string | "all" | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [allowedRepositories, setAllowedRepositories] = useState<AllowedRepository[]>([]);
   const [repositoryPath, setRepositoryPath] = useState("");
@@ -268,6 +296,9 @@ export default function Home() {
   const [knowledgePanelOpen, setKnowledgePanelOpen] = useState(false);
   const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab>("discover");
   const [knowledgePeriod, setKnowledgePeriod] = useState<"week" | "month">("week");
+  const [knowledgeImportPaths, setKnowledgeImportPaths] = useState<string[]>([]);
+  const [knowledgeImportMessage, setKnowledgeImportMessage] = useState("");
+  const [knowledgeImporting, setKnowledgeImporting] = useState(false);
   const [readKnowledgeVersion, setReadKnowledgeVersion] = useState<string | null>(null);
   const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
   const [sqlPanelOpen, setSqlPanelOpen] = useState(false);
@@ -295,7 +326,14 @@ export default function Home() {
   const toolsTriggerRef = useRef<HTMLButtonElement>(null);
   const toolsPopoverRef = useRef<HTMLDivElement>(null);
   const preferencesTriggerRef = useRef<HTMLButtonElement>(null);
+  const setupReturnFocusRef = useRef<HTMLElement | null>(null);
   const bookWelcomeRequestRef = useRef<AbortController | null>(null);
+  const wordPreviewCloseRef = useRef<HTMLButtonElement>(null);
+  const wordPreviewReturnFocusRef = useRef<HTMLElement | null>(null);
+  const closeWordPreview = useCallback(() => {
+    setWordPreview(null);
+    requestAnimationFrame(() => wordPreviewReturnFocusRef.current?.focus());
+  }, []);
   const bindResponseFeedback = useCallback((conversationId: string | null, value: unknown) => {
     responseFeedbackConversationRef.current = conversationId;
     responseFeedbackGenerationRef.current += 1;
@@ -404,9 +442,10 @@ export default function Home() {
   const closeMemoryPanel = useCallback(() => setMemoryPanelOpen(false), []);
   const closeSqlPanel = useCallback(() => setSqlPanelOpen(false), []);
   const nextWelcomeIndex = useCallback((current: number, welcomeMode: WelcomeMode) => {
-    const history = parseWelcomeHistory(localStorage.getItem(WELCOME_HISTORY_STORAGE_KEY));
+    const storageKey = profileScopedStorageKey(WELCOME_HISTORY_STORAGE_KEY);
+    const history = parseWelcomeHistory(localStorage.getItem(storageKey));
     const next = chooseWelcomeIndex(current, history, Math.random, welcomeMode);
-    localStorage.setItem(WELCOME_HISTORY_STORAGE_KEY, JSON.stringify(appendWelcomeHistory(history, next)));
+    localStorage.setItem(storageKey, JSON.stringify(appendWelcomeHistory(history, next)));
     return next;
   }, []);
   const refreshBookWelcome = useCallback(async () => {
@@ -427,7 +466,7 @@ export default function Home() {
       const result = (await response.json()) as BookWelcomeResponse;
       if (result.status !== "ready") return;
       setBookWelcomeFact(result.fact);
-      localStorage.setItem(BOOK_WELCOME_HISTORY_STORAGE_KEY, JSON.stringify([...recent.filter((id) => id !== result.fact.id), result.fact.id].slice(-60)));
+      localStorage.setItem(profileScopedStorageKey(BOOK_WELCOME_HISTORY_STORAGE_KEY), JSON.stringify([...recent.filter((id) => id !== result.fact.id), result.fact.id].slice(-60)));
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) setBookWelcomeFact(null);
     } finally {
@@ -447,10 +486,9 @@ export default function Home() {
     }
   }
 
-  async function refreshConversations(query = conversationSearch, projectId = activeProjectId) {
+  async function refreshConversations(query = conversationSearch) {
     const parameters = new URLSearchParams();
     if (query.trim()) parameters.set("query", query.trim());
-    if (projectId) parameters.set("projectId", projectId);
     const response = await localApiFetch(`/api/conversations${parameters.size ? `?${parameters}` : ""}`, { cache: "no-store" });
     if (response.ok) {
       const data = (await response.json()) as { conversations: ConversationSummary[] };
@@ -559,6 +597,47 @@ export default function Home() {
     const [statusResponse, updatesResponse] = await Promise.all([localApiFetch("/api/knowledge/status", { cache: "no-store" }), localApiFetch("/api/knowledge/updates", { cache: "no-store" })]);
     if (statusResponse.ok) setKnowledgeStatus(await statusResponse.json());
     if (updatesResponse.ok) setKnowledgeUpdates(await updatesResponse.json());
+  }
+
+  async function chooseKnowledgeDocuments() {
+    const desktop = (window as typeof window & { rangabotDesktop?: DesktopFilePickerBridge }).rangabotDesktop;
+    if (!desktop) return setKnowledgeImportMessage("Use the RangaBot desktop app to choose local documents without typing paths.");
+    const selection = await desktop.pickLocalFiles("knowledge");
+    if (selection.status === "selected") {
+      setKnowledgeImportPaths(selection.paths);
+      setKnowledgeImportMessage(`${selection.paths.length} document${selection.paths.length === 1 ? "" : "s"} selected. Nothing has been copied yet.`);
+    }
+  }
+
+  async function importKnowledgeDocuments() {
+    if (!knowledgeImportPaths.length) return;
+    setKnowledgeImporting(true); setKnowledgeImportMessage("Copying into this profile and updating local Knowledge…");
+    try {
+      const response = await localApiFetch("/api/knowledge/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ paths: knowledgeImportPaths }) });
+      const data = await response.json() as {
+        selected?: number;
+        copied?: number;
+        retained?: string[];
+        partial?: boolean;
+        status?: { incompatible?: number; pending?: number };
+        error?: string;
+      };
+      if (!response.ok) {
+        if (data.partial) {
+          setKnowledgeImportPaths([]);
+          await refreshKnowledge();
+        }
+        return setKnowledgeImportMessage(formatKnowledgeImportFailureMessage(data));
+      }
+      setKnowledgeImportPaths([]);
+      setKnowledgeImportMessage(formatKnowledgeImportMessage({
+        selected: data.selected ?? knowledgeImportPaths.length,
+        copied: data.copied,
+        incompatible: data.status?.incompatible,
+        pending: data.status?.pending,
+      }));
+      await refreshKnowledge();
+    } finally { setKnowledgeImporting(false); }
   }
 
   async function createNewProject(event: FormEvent) {
@@ -703,6 +782,44 @@ export default function Home() {
     if (response.ok) await refreshConversations();
   }
 
+  async function moveConversation(conversation: ConversationSummary, projectId: string | null) {
+    const response = await localApiFetch(`/api/conversations/${conversation.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId }),
+    });
+    const data = await response.json().catch(() => null) as { error?: string } | null;
+    if (!response.ok) return setConversationTransferMessage(data?.error ?? "The chat could not be moved.");
+    setConversationMenuId(null);
+    setConversationTransferMessage(projectId
+      ? `Moved “${conversation.title}” into ${projects.find(({ id }) => id === projectId)?.name ?? "the project"}.`
+      : `Moved “${conversation.title}” to All chats.`);
+    await refreshConversations();
+  }
+
+  function beginConversationDrag(event: DragEvent<HTMLDivElement>, conversation: ConversationSummary) {
+    setDraggedConversationId(conversation.id);
+    setConversationTransferMessage("");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", conversation.id);
+  }
+
+  function allowConversationDrop(event: DragEvent<HTMLElement>, target: string | "all") {
+    if (!draggedConversationId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setConversationDropTarget(target);
+  }
+
+  function dropConversation(event: DragEvent<HTMLElement>, projectId: string | null) {
+    event.preventDefault();
+    const conversationId = draggedConversationId ?? event.dataTransfer.getData("text/plain");
+    const conversation = conversations.find(({ id }) => id === conversationId);
+    setDraggedConversationId(null);
+    setConversationDropTarget(null);
+    if (conversation && conversation.projectId !== projectId) void moveConversation(conversation, projectId);
+  }
+
   async function importConversation(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -746,6 +863,7 @@ export default function Home() {
           if (!response.ok) throw new Error("preferences unavailable");
           const data = await response.json() as { preferences?: DesktopPreferences };
           if (!data.preferences) throw new Error("preferences missing");
+          setDesktopPreferences(data.preferences);
           setDesktopPreferencesRevision(data.preferences.revision);
           applyPreferences(
             { version: 1, preferredName: data.preferences.preferredName || null, mode: data.preferences.welcomeMode },
@@ -761,14 +879,29 @@ export default function Home() {
               "Legacy preferences from a different local origin: MISSING. Rangabot does not scan old browser origins; use Preferences to re-enter them manually.",
             );
           }
+          try {
+            const onboardingResponse = await localApiFetch("/api/onboarding", { cache: "no-store" });
+            const onboardingData = await onboardingResponse.json() as { onboarding?: OnboardingState; error?: string };
+            if (!onboardingResponse.ok || !onboardingData.onboarding) {
+              throw new Error(onboardingData.error ?? "Setup progress is unavailable.");
+            }
+            setOnboarding(onboardingData.onboarding);
+            setOnboardingMessage("");
+          } catch (error) {
+            setOnboarding(null);
+            setOnboardingMessage(error instanceof Error ? error.message : "Setup & tour is unavailable. Your saved preferences were kept.");
+          }
         })
         .catch(() => {
           applyPreferences({ ...defaultWelcomePreferences }, null, DEFAULT_PALETTE);
           setLegacyPreferencesPreview(null);
+          setDesktopPreferences(null);
+          setOnboarding(null);
+          setOnboardingMessage("");
           setPreferencesMessage("Desktop preferences could not be loaded safely. No browser preferences were applied.");
         });
     }
-    setReadKnowledgeVersion(localStorage.getItem("rangabot-knowledge-read"));
+    setReadKnowledgeVersion(localStorage.getItem(profileScopedStorageKey("rangabot-knowledge-read")));
     setGreetingIndex((current) => chooseGreetingIndex(current));
     void refreshStatus();
     if (!publicDemo) {
@@ -777,6 +910,10 @@ export default function Home() {
       void refreshKnowledge();
     }
   }, [nextWelcomeIndex, refreshBookWelcome]);
+  useEffect(() => {
+    if (!activeProfileContext || !desktopPreferences || !onboarding || profileRecoveryRequired) return;
+    if (onboarding.status === "pending" || onboarding.status === "in-progress") setSetupOpen(true);
+  }, [activeProfileContext, desktopPreferences, onboarding, profileRecoveryRequired]);
   useEffect(() => {
     if (!sidebarOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -788,6 +925,11 @@ export default function Home() {
     requestAnimationFrame(() => sidebarCloseRef.current?.focus());
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [sidebarOpen]);
+  useEffect(() => {
+    if (!conversationTransferMessage) return;
+    const timer = window.setTimeout(() => setConversationTransferMessage(""), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [conversationTransferMessage]);
   useEffect(() => {
     if (!toolsOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -859,7 +1001,6 @@ export default function Home() {
     const timer = window.setTimeout(async () => {
       const parameters = new URLSearchParams();
       if (conversationSearch.trim()) parameters.set("query", conversationSearch.trim());
-      if (activeProjectId) parameters.set("projectId", activeProjectId);
       const response = await localApiFetch(`/api/conversations${parameters.size ? `?${parameters}` : ""}`, {
         cache: "no-store",
         signal: controller.signal,
@@ -873,7 +1014,7 @@ export default function Home() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [conversationSearch, activeProjectId]);
+  }, [conversationSearch]);
   useEffect(() => {
     if (!knowledgePanelOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -894,7 +1035,7 @@ export default function Home() {
   }, [repositoryPanelOpen]);
   useEffect(() => {
     if (!knowledgePanelOpen || knowledgeTab !== "discover" || !knowledgeUpdates?.weekUpdatedAt) return;
-    localStorage.setItem("rangabot-knowledge-read", knowledgeUpdates.weekUpdatedAt);
+    localStorage.setItem(profileScopedStorageKey("rangabot-knowledge-read"), knowledgeUpdates.weekUpdatedAt);
     setReadKnowledgeVersion(knowledgeUpdates.weekUpdatedAt);
   }, [knowledgePanelOpen, knowledgeTab, knowledgeUpdates?.weekUpdatedAt]);
   useEffect(() => {
@@ -937,7 +1078,7 @@ export default function Home() {
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || sendingRef.current || conversationLoadingRef.current) return;
+    if (!content || profileSwitching || sendingRef.current || conversationLoadingRef.current) return;
     sendingRef.current = true;
     setSending(true);
     setAdoptedPendingTurn(null);
@@ -1240,16 +1381,45 @@ export default function Home() {
     setWelcomeIndex((current) => nextWelcomeIndex(current, mode));
   }
 
-  function closeWelcomePreferences() {
-    setWelcomePreferencesOpen(false);
-    requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
+  function restoreWelcomePreferencesOpenerFocus() {
+    requestAnimationFrame(() => {
+      const mobile = window.matchMedia("(max-width: 720px)").matches;
+      const visibleOpener = mobile && !sidebarOpen ? mobileNavigationRef.current : preferencesTriggerRef.current;
+      visibleOpener?.focus();
+    });
   }
 
-  async function saveWelcomePreferences(preferences: WelcomePreferences, nextAppearance: Appearance, nextPalette: Palette) {
-    const previous = { preferences: welcomePreferences, appearance, palette };
+  function closeWelcomePreferences() {
+    setWelcomePreferencesOpen(false);
+    restoreWelcomePreferencesOpenerFocus();
+  }
+
+  function closeSetupAndRestoreFocus() {
+    setSetupOpen(false);
+    void Promise.all([refreshStatus(), refreshRepositories(), refreshKnowledge()]);
+    requestAnimationFrame(() => {
+      const mobile = window.matchMedia("(max-width: 720px)").matches;
+      if (mobile && !sidebarOpen) {
+        setupReturnFocusRef.current = null;
+        const visibleFallback = mobileNavigationRef.current
+          ?? document.querySelector<HTMLTextAreaElement>(".composer textarea");
+        visibleFallback?.focus();
+        return;
+      }
+      const opener = setupReturnFocusRef.current;
+      setupReturnFocusRef.current = null;
+      if (opener?.isConnected) { opener.focus(); return; }
+      const fallback = preferencesTriggerRef.current;
+      if (fallback) fallback.focus();
+      else document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
+    });
+  }
+
+  async function saveWelcomePreferences(preferences: WelcomePreferences, nextAppearance: Appearance | null, nextPalette: Palette) {
+    const previous = { preferences: welcomePreferences, appearance: desktopPreferences?.appearance ?? null, palette };
     let rollback = previous;
     setWelcomePreferences(preferences);
-    setAppearance(nextAppearance);
+    setAppearance(nextAppearance ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
     setPalette(nextPalette);
     setPreferencesMessage("");
     try {
@@ -1273,7 +1443,7 @@ export default function Home() {
               preferredName: data.preferences.preferredName || null,
               mode: data.preferences.welcomeMode,
             },
-            appearance: data.preferences.appearance ?? previous.appearance,
+            appearance: data.preferences.appearance,
             palette: data.preferences.palette,
           };
           setDesktopPreferencesRevision(data.preferences.revision);
@@ -1281,17 +1451,18 @@ export default function Home() {
         throw new Error(data.error ?? "save failed");
       }
       setDesktopPreferencesRevision(data.preferences.revision);
+      setDesktopPreferences(data.preferences);
       setLegacyPreferencesPreview(null);
       setPreferencesMessage("Preferences saved locally.");
       setWelcomePreferencesOpen(false);
       rotateWelcome(preferences.mode);
+      restoreWelcomePreferencesOpenerFocus();
     } catch {
       setWelcomePreferences(rollback.preferences);
-      setAppearance(rollback.appearance);
+      setAppearance(rollback.appearance ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
       setPalette(rollback.palette);
       setPreferencesMessage("Couldn’t save preferences on this device. Try again.");
     }
-    requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
   }
 
   async function importLegacyPreferences() {
@@ -1322,6 +1493,7 @@ export default function Home() {
       if (!response.ok || !data.preferences || !data.kind) throw new Error(data.error ?? "import failed");
       const saved = data.preferences;
       setDesktopPreferencesRevision(saved.revision);
+      setDesktopPreferences(saved);
       setWelcomePreferences({ version: 1, preferredName: saved.preferredName || null, mode: saved.welcomeMode });
       setAppearance(saved.appearance ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
       setPalette(saved.palette);
@@ -1334,12 +1506,84 @@ export default function Home() {
   }
 
   function chooseStarter(prompt: string) {
+    if (profileSwitching) return;
     setInput(prompt);
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus());
   }
 
+  function applyDesktopPreferences(saved: DesktopPreferences) {
+    setDesktopPreferences(saved);
+    setDesktopPreferencesRevision(saved.revision);
+    const nextWelcome = { version: 1 as const, preferredName: saved.preferredName || null, mode: saved.welcomeMode };
+    setWelcomePreferences(nextWelcome);
+    setAppearance(saved.appearance ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+    setPalette(saved.palette);
+    setLegacyPreferencesPreview(null);
+    rotateWelcome(saved.welcomeMode);
+  }
+
+  async function dismissOnboardingInvitation() {
+    if (!onboarding) return;
+    try {
+      const response = await localApiFetch("/api/onboarding", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "dismiss", expectedRevision: onboarding.revision, step: onboarding.step }),
+      });
+      const data = await response.json() as { onboarding?: OnboardingState; error?: string };
+      if (!response.ok || !data.onboarding) throw new Error(data.error ?? "Setup invitation could not be dismissed.");
+      setOnboarding(data.onboarding);
+    } catch (error) {
+      setPreferencesMessage(error instanceof Error ? error.message : "Setup invitation could not be dismissed.");
+    }
+  }
+
+  async function exportOpenConversation() {
+    if (!activeConversationId || profileSwitching) return;
+    setConversationTransferMessage("Preparing the open chat locally…");
+    try {
+      await downloadLocalApiFile(`/api/conversations/${activeConversationId}/export`, "rangabot-conversation.md");
+      setConversationTransferMessage("Open chat export ready.");
+    } catch (error) {
+      setConversationTransferMessage(error instanceof Error ? error.message : "The open chat could not be exported.");
+    }
+  }
+
+  async function downloadWordArtifact(id: string, filename: string) {
+    try {
+      await downloadLocalApiFile(`/api/artifacts/word/${id}/document`, filename);
+    } catch (error) {
+      setConversationTransferMessage(error instanceof Error ? error.message : "The document could not be downloaded.");
+    }
+  }
+
+  async function reviewWordArtifact(id: string, title: string) {
+    try {
+      const blob = await localApiBlob(`/api/artifacts/word/${id}/preview/1`);
+      wordPreviewReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setWordPreview({ url: URL.createObjectURL(blob), title });
+    } catch (error) {
+      setConversationTransferMessage(error instanceof Error ? error.message : "The document preview could not be opened.");
+    }
+  }
+
+  useEffect(() => {
+    if (!wordPreview) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") closeWordPreview(); };
+    document.addEventListener("keydown", closeOnEscape);
+    requestAnimationFrame(() => wordPreviewCloseRef.current?.focus());
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      URL.revokeObjectURL(wordPreview.url);
+    };
+  }, [closeWordPreview, wordPreview]);
+
   const ready = status?.available && status.modelInstalled;
-  const visibleConversations = conversations;
+  const profileWorkspaceBlocked = profileSwitching || profileRecoveryRequired;
+  const visibleConversations = conversationSearch
+    ? conversations
+    : conversations.filter(({ projectId }) => projectId === null);
+  const activeConversationTitle = conversations.find(({ id }) => id === activeConversationId)?.title ?? "New conversation";
   const weeklyBrief = useMemo(() => parseKnowledgeBrief(knowledgeUpdates?.week ?? ""), [knowledgeUpdates?.week]);
   const unreadKnowledge = knowledgeUpdates?.weekUpdatedAt && knowledgeUpdates.weekUpdatedAt !== readKnowledgeVersion
     ? weeklyBrief.length
@@ -1375,100 +1619,139 @@ export default function Home() {
 
   return (
     <main className="app-shell" data-appearance={appearance} data-palette={palette}>
-      <aside id="chat-navigation" className={`sidebar ${sidebarOpen ? "open" : ""}`}>
+      <aside id="chat-navigation" className={`sidebar ${sidebarOpen ? "open" : ""}`} inert={profileWorkspaceBlocked}>
         <div className="brand"><PrimaryBrandMark className="brand-mark" /><span>Rangabot</span><button ref={sidebarCloseRef} className="sidebar-close" type="button" onClick={() => { setSidebarOpen(false); requestAnimationFrame(() => mobileNavigationRef.current?.focus()); }} aria-label="Close chat navigation"><CraftIcon name="close" /></button></div>
         <button className="new-chat" onClick={() => startNewChat()}><CraftIcon name="add" /> New chat</button>
+        <button type="button" className="sidebar-search-trigger" onClick={() => document.querySelector<HTMLInputElement>(".conversation-search input")?.focus()}><span><CraftIcon name="search" size={16} /> Search</span></button>
+        <nav className="sidebar-destinations" aria-label="Workspace">
+          <button type="button" className={`${!activeProjectId ? "active" : ""} ${conversationDropTarget === "all" ? "conversation-drop-target" : ""}`} onClick={() => { setActiveProjectId(null); startNewChat(null); }} onDragOver={(event) => allowConversationDrop(event, "all")} onDragLeave={() => setConversationDropTarget(null)} onDrop={(event) => dropConversation(event, null)}><CraftIcon name="chat" size={17} /> All chats</button>
+          <button type="button" onClick={() => openKnowledgeBrief("vault")}><CraftIcon name="knowledge" size={17} /> Library</button>
+        </nav>
         <section className="projects" aria-label="Projects">
-          <div className="project-heading"><span>Projects</span><span>{projects.length}</span></div>
-          <button type="button" className={`project-row ${activeProjectId === null ? "active" : ""}`} onClick={() => { setActiveProjectId(null); startNewChat(null); }}><CraftIcon name="chat" /> All chats</button>
-          {projects.map((project) => <div className={`project-item ${activeProjectId === project.id ? "active" : ""}`} key={project.id}>
-            <button type="button" className="project-row" onClick={() => { setActiveProjectId(project.id); startNewChat(project.id); }}><CraftIcon name="folder" />{project.name}</button>
-            <button type="button" className="project-more" onClick={() => void renameProject(project)} aria-label={`Rename ${project.name}`}><CraftIcon name="edit" size={14} /></button>
-            <button type="button" className="project-more" onClick={() => void removeProject(project)} aria-label={`Delete ${project.name}`}><CraftIcon name="trash" size={14} /></button>
-          </div>)}
-          <form className="project-create" onSubmit={createNewProject}><input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="New project" maxLength={60} aria-label="New project name" /><button type="submit" disabled={!newProjectName.trim()} aria-label="Create project"><CraftIcon name="add" /></button></form>
+          <div className="project-heading"><span>Projects</span><button type="button" onClick={() => setProjectCreateOpen((open) => !open)} aria-label="Create a project"><CraftIcon name="add" size={14} /></button></div>
+          {projects.map((project) => {
+            const projectConversations = conversations.filter(({ projectId }) => projectId === project.id);
+            return <div className={`project-group ${activeProjectId === project.id ? "active" : ""}`} key={project.id}>
+              <div className={`project-item ${activeProjectId === project.id ? "active" : ""} ${conversationDropTarget === project.id ? "conversation-drop-target" : ""}`} onDragOver={(event) => allowConversationDrop(event, project.id)} onDragLeave={() => setConversationDropTarget(null)} onDrop={(event) => dropConversation(event, project.id)}>
+                <button type="button" className="project-row" onClick={() => { setActiveProjectId(project.id); startNewChat(project.id); }}><CraftIcon name="folder" />{project.name}<small>{projectConversations.length || ""}</small></button>
+                <button type="button" className="project-more" onClick={() => setProjectMenuId((id) => id === project.id ? null : project.id)} aria-label={`More options for ${project.name}`} aria-expanded={projectMenuId === project.id}><CraftIcon name="more" size={14} /></button>
+                {projectMenuId === project.id && <div className="project-menu"><button type="button" onClick={() => { setProjectMenuId(null); void renameProject(project); }}>Rename</button><button type="button" className="danger" onClick={() => { setProjectMenuId(null); void removeProject(project); }}>Delete</button></div>}
+              </div>
+              {projectConversations.length > 0 && <div className="project-conversations" aria-label={`${project.name} chats`}>
+                {projectConversations.map((conversation) => <div className={`project-conversation ${conversation.id === activeConversationId ? "active" : ""} ${draggedConversationId === conversation.id ? "dragging" : ""}`} key={conversation.id} draggable onDragStart={(event) => beginConversationDrag(event, conversation)} onDragEnd={() => { setDraggedConversationId(null); setConversationDropTarget(null); }}>
+                  <button type="button" onClick={() => void openConversation(conversation.id)}>{conversation.title}</button>
+                  <button type="button" onClick={() => setConversationMenuId((id) => id === conversation.id ? null : conversation.id)} aria-label={`More options for ${conversation.title}`} aria-expanded={conversationMenuId === conversation.id}><CraftIcon name="more" size={13} /></button>
+                  {conversationMenuId === conversation.id && <div className="conversation-menu project-conversation-menu"><button type="button" onClick={() => void toggleConversationPin(conversation)}>{conversation.pinned ? "Unpin chat" : "Pin chat"}</button><label><span>Move to</span><select value={conversation.projectId ?? ""} onChange={(event) => void moveConversation(conversation, event.target.value || null)}><option value="">All chats</option>{projects.map((targetProject) => <option key={targetProject.id} value={targetProject.id}>{targetProject.name}</option>)}</select></label><button type="button" className="danger" onClick={() => { setConversationMenuId(null); void removeConversation(conversation.id); }}>Delete chat</button></div>}
+                </div>)}
+              </div>}
+            </div>;
+          })}
+          {projectCreateOpen && <form className="project-create" onSubmit={(event) => { void createNewProject(event); setProjectCreateOpen(false); }}><input autoFocus value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="Project name" maxLength={60} aria-label="New project name" /><button type="submit" disabled={!newProjectName.trim()} aria-label="Create project"><CraftIcon name="arrow" /></button></form>}
         </section>
         <label className="conversation-search">
           <CraftIcon name="search" size={15} />
           <input value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Search chats" aria-label="Search conversations" maxLength={120} />
           {conversationSearch && <button type="button" onClick={() => setConversationSearch("")} aria-label="Clear conversation search"><CraftIcon name="close" size={13} /></button>}
         </label>
-        <div className="conversation-tools">
-          <button type="button" onClick={() => conversationImportRef.current?.click()}>Import .md</button>
-          {activeConversationId
-            ? <a href={`/api/conversations/${activeConversationId}/export`}>Export open chat</a>
-            : <span aria-disabled="true">Export open chat</span>}
-          <input ref={conversationImportRef} type="file" accept=".md,text/markdown,text/plain" onChange={(event) => void importConversation(event)} />
-        </div>
+        <input ref={conversationImportRef} className="visually-hidden-file" type="file" accept=".md,text/markdown,text/plain" onChange={(event) => void importConversation(event)} />
         {conversationTransferMessage && <p className="conversation-transfer-status" role="status">{conversationTransferMessage}</p>}
         {preferencesMessage && <p className="conversation-transfer-status" role="status" aria-live="polite">{preferencesMessage}</p>}
+        {onboardingMessage && <p className="conversation-transfer-status" role="status" aria-live="polite">{onboardingMessage}</p>}
         {legacyPreferencesPreview && (
           <button type="button" className="utility-button" onClick={() => void importLegacyPreferences()}>
             Review legacy preferences
           </button>
         )}
-        <nav className="history">
-          <span className="nav-label">{conversationSearch ? "Search results" : activeProjectId ? "Project chats" : "Recent chats"}</span>
+        {onboarding?.status === "available" && (
+          <section className="setup-invitation" aria-label="Optional setup and tour">
+            <PrimaryBrandMark className="setup-invitation-mark" />
+            <div><strong>Meet the new setup</strong><small>Review local models, preferences and private context when it suits you.</small></div>
+            <button type="button" onClick={(event) => { setupReturnFocusRef.current = event.currentTarget; setSetupOpen(true); }}>Open</button>
+            <button type="button" className="setup-invitation-dismiss" onClick={() => void dismissOnboardingInvitation()} aria-label="Dismiss setup invitation"><CraftIcon name="close" size={13} /></button>
+          </section>
+        )}
+        <nav className={`history ${conversationDropTarget === "all" ? "conversation-drop-target" : ""}`} onDragOver={(event) => allowConversationDrop(event, "all")} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setConversationDropTarget(null); }} onDrop={(event) => dropConversation(event, null)}>
+          <span className="nav-label">{conversationSearch ? "Search results" : conversationDropTarget === "all" ? "Drop here to remove from project" : "Recent chats"}</span>
           {visibleConversations.length === 0 && <p className="history-empty">{conversationSearch ? "No local conversations match this search." : "Your local conversations will appear here."}</p>}
           {visibleConversations.map((conversation) => (
-            <div className={`history-row ${conversation.id === activeConversationId ? "active" : ""} ${conversation.pinned ? "pinned" : ""}`} key={conversation.id}>
-              <button type="button" onClick={() => void openConversation(conversation.id)}>{conversation.title}</button>
-              <button type="button" className="pin-chat" onClick={() => void toggleConversationPin(conversation)} aria-label={`${conversation.pinned ? "Unpin" : "Pin"} ${conversation.title}`} aria-pressed={conversation.pinned}><CraftIcon name="pin" size={13} /></button>
-              <button type="button" className="delete-chat" onClick={() => void removeConversation(conversation.id)} aria-label={`Delete ${conversation.title}`}><CraftIcon name="trash" size={13} /></button>
+            <div className={`history-row ${conversation.id === activeConversationId ? "active" : ""} ${conversation.pinned ? "pinned" : ""} ${draggedConversationId === conversation.id ? "dragging" : ""}`} key={conversation.id} draggable onDragStart={(event) => beginConversationDrag(event, conversation)} onDragEnd={() => { setDraggedConversationId(null); setConversationDropTarget(null); }}>
+              <button type="button" onClick={() => void openConversation(conversation.id)}><span>{conversation.title}</span></button>
+              <button type="button" className="conversation-more" onClick={() => setConversationMenuId((id) => id === conversation.id ? null : conversation.id)} aria-label={`More options for ${conversation.title}`} aria-expanded={conversationMenuId === conversation.id}><CraftIcon name="more" size={14} /></button>
+              {conversationMenuId === conversation.id && <div className="conversation-menu">
+                <button type="button" onClick={() => void toggleConversationPin(conversation)}>{conversation.pinned ? "Unpin chat" : "Pin chat"}</button>
+                <label><span>Move to</span><select value={conversation.projectId ?? ""} onChange={(event) => void moveConversation(conversation, event.target.value || null)}><option value="">All chats</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+                <button type="button" className="danger" onClick={() => { setConversationMenuId(null); void removeConversation(conversation.id); }}>Delete chat</button>
+              </div>}
             </div>
           ))}
         </nav>
+        <button ref={preferencesTriggerRef} type="button" className="sidebar-settings" onClick={() => { setWelcomePreferencesOpen(true); setSidebarOpen(false); }}><CraftIcon name="settings" size={17} /><span>Settings</span></button>
+        {!publicDemo && <div className="sidebar-profile"><ProfileManager onSwitchingChange={setProfileSwitching} onActiveProfileChange={setActiveProfileContext} onRecoveryRequiredChange={setProfileRecoveryRequired} /></div>}
       </aside>
       {sidebarOpen && <button className="sidebar-backdrop" type="button" onClick={() => setSidebarOpen(false)} aria-label="Dismiss chat navigation" />}
 
       <section className={`chat-panel ${messages.length === 0 ? "fresh-chat" : ""}`} inert={sidebarOpen}>
         <header className="chat-header">
           <div className="chat-identity">
-            <button ref={mobileNavigationRef} className="mobile-navigation" type="button" onClick={() => setSidebarOpen(true)} aria-label="Open chats and projects" aria-controls="chat-navigation" aria-expanded={sidebarOpen}><CraftIcon name="menu" /></button>
-            <div><h1>Rangabot</h1><p>Code, think, and build privately</p></div>
+            <button ref={mobileNavigationRef} className="mobile-navigation" type="button" onClick={() => setSidebarOpen(true)} aria-label="Open chats and projects" aria-controls="chat-navigation" aria-expanded={sidebarOpen} disabled={profileWorkspaceBlocked}><CraftIcon name="menu" /></button>
+            <div><h1>{activeConversationTitle}</h1><p>{activeProjectId ? projects.find(({ id }) => id === activeProjectId)?.name ?? "Project" : "Chats"}</p></div>
           </div>
           <div className="header-actions">
-            <button type="button" className="utility-button brief-button" onClick={() => openKnowledgeBrief()} aria-label={`Open Knowledge Brief${unreadKnowledge ? `, ${unreadKnowledge} new items` : ""}`}>
-              <CraftIcon name="knowledge" size={15} /><span>Brief</span>{unreadKnowledge > 0 && <b>{unreadKnowledge}</b>}
-            </button>
-            <button ref={preferencesTriggerRef} type="button" className="utility-button preferences-button" onClick={() => { setToolsOpen(false); setWelcomePreferencesOpen(true); }} aria-label="Open Preferences">
-              <CraftIcon name="settings" size={15} /><span>Preferences</span>
-            </button>
+            <div className="profile-gated-header-actions" inert={profileWorkspaceBlocked}>
+            <div className="header-intelligence-controls">
+              <button type="button" className={`header-model-status ${ready ? "ready" : "attention"}`} onClick={() => setModelManagerOpen(true)} aria-label={`${ready ? status.configuredModel : status?.available ? "Choose a model" : "Model engine starting"}. Local model status`}>
+                <span className="header-model-light" aria-hidden="true" />
+                <strong>{ready ? status.configuredModel : status?.available ? "Choose a model" : "Model engine starting"}</strong>
+                <small><CraftIcon name="shield" size={12} /> On this Mac</small>
+              </button>
+              <label className="header-route-control" title={routeDescription}>
+                <span className="sr-only">Response mode</span>
+                <select value={mode} onChange={(event) => setMode(event.target.value as Mode)} aria-label="Response mode" aria-describedby="route-mode-description" disabled={profileWorkspaceBlocked}>
+                  <option value="local">Local only</option>
+                  <option value="smart">Smart</option>
+                  <option value="teach">Teacher</option>
+                  <option value="codex">Codex</option>
+                </select>
+              </label>
+              <span id="route-mode-description" className="sr-only">{routeDescription}</span>
+            </div>
             <div className="tools-menu">
-              <button ref={toolsTriggerRef} type="button" className="utility-button" onClick={() => setToolsOpen((open) => !open)} aria-label="Open Tools" aria-expanded={toolsOpen} aria-controls="rangabot-tools"><CraftIcon name="tune" size={15} /><span>Tools</span></button>
+              <button ref={toolsTriggerRef} type="button" className="toolbar-more" onClick={() => setToolsOpen((open) => !open)} aria-label="Conversation and workspace options" aria-expanded={toolsOpen} aria-controls="rangabot-tools"><CraftIcon name="more" size={18} /></button>
               {toolsOpen && <div ref={toolsPopoverRef} id="rangabot-tools" className="tools-popover" role="region" aria-label="Rangabot tools">
-                <div className="tools-popover-heading"><div><strong>Local workbench</strong><small>Choose what Rangabot may use</small></div><span className="privacy-indicator"><CraftIcon name="shield" size={14} /> Local</span></div>
+                <div className="tools-popover-heading"><div><strong>Workspace</strong><small>Actions for this private profile</small></div></div>
                 <nav className="tools-grid" aria-label="Workbench tools">
+                  <button type="button" onClick={() => { openKnowledgeBrief(); setToolsOpen(false); }}><CraftIcon name="knowledge" /><span><strong>Knowledge</strong><small>{unreadKnowledge ? `${unreadKnowledge} new updates` : "Your local library"}</small></span></button>
                   <button type="button" onClick={() => { setMemoryPanelOpen(true); setToolsOpen(false); }}><CraftIcon name="memory" /><span><strong>Memory</strong><small>Review saved facts</small></span></button>
-                  <button type="button" onClick={() => { setSqlPanelOpen(true); setToolsOpen(false); }}><CraftIcon name="analysis" /><span><strong>Analyze</strong><small>Use approved local data</small></span></button>
-                  <a href="/mastery"><CraftIcon name="mastery" /><span><strong>Mastery</strong><small>Evidence-backed roadmap</small></span></a>
+                  <button type="button" onClick={() => { setSqlPanelOpen(true); setToolsOpen(false); }}><CraftIcon name="analysis" /><span><strong>Data</strong><small>Analyze approved files</small></span></button>
+                  <button type="button" onClick={() => { setModelManagerOpen(true); setToolsOpen(false); }}><CraftIcon name="model" /><span><strong>Models</strong><small>Choose local intelligence</small></span></button>
                 </nav>
                 <section className="tools-folders" aria-label="Allowed local folders">
-                  <div className="tools-section-heading"><span><CraftIcon name="folder" size={15} /> Local folders</span><small>{allowedRepositories.length} allowed</small></div>
+                  <div className="tools-section-heading"><span><CraftIcon name="folder" size={15} /> Folders</span><small>{allowedRepositories.length} allowed</small></div>
                   <div className="repository-popover-list">
-                    {allowedRepositories.map((repository) => <div className="repository-item" key={repository.id} title={repository.path}>
-                      <button type="button" className="repository-open" onClick={() => { openRepositorySearch(repository); setToolsOpen(false); }} aria-label={`Search ${repository.name}`}><CraftIcon name="search" /><span><strong>{repository.name}</strong><small>{repository.path}</small></span></button>
+                    {allowedRepositories.map((repository) => <div className="repository-item" key={repository.id}>
+                      <button type="button" className="repository-open" onClick={() => { openRepositorySearch(repository); setToolsOpen(false); }}><span><strong>{repository.name}</strong><small>Search approved files</small></span></button>
                       <button type="button" onClick={() => void revokeLocalRepository(repository)} aria-label={`Revoke ${repository.name}`}><CraftIcon name="close" size={14} /></button>
                     </div>)}
-                    {!allowedRepositories.length && <p>No folders allowed yet.</p>}
+                    {!allowedRepositories.length && <p>No folders approved.</p>}
                   </div>
-                  <form className="repository-create" onSubmit={allowLocalRepository}>
-                    <input value={repositoryPath} onChange={(event) => setRepositoryPath(event.target.value)} placeholder="/absolute/path/to/project" aria-label="Repository folder path" maxLength={1024} />
-                    <button type="submit" disabled={!repositoryPath.trim()}>Allow</button>
-                  </form>
-                  <p className="repository-disclosure">Approval is stored locally. Files are read only after you choose a folder and search it.</p>
+                  <form className="repository-create" onSubmit={allowLocalRepository}><input value={repositoryPath} onChange={(event) => setRepositoryPath(event.target.value)} placeholder="Folder path" aria-label="Repository folder path" maxLength={1024} /><button type="submit" disabled={!repositoryPath.trim()}>Allow</button></form>
                   {repositoryMessage && <p className="repository-status" role="status">{repositoryMessage}</p>}
                 </section>
+                <div className="workspace-menu-divider" />
+                <button type="button" className="workspace-menu-row" onClick={() => { setWelcomePreferencesOpen(true); setToolsOpen(false); }}><CraftIcon name="settings" size={16} /> Settings</button>
+                <button type="button" className="workspace-menu-row" onClick={() => { conversationImportRef.current?.click(); setToolsOpen(false); }}><CraftIcon name="arrow" size={16} /> Import conversation</button>
+                {activeConversationId && <button type="button" className="workspace-menu-row" onClick={() => { void exportOpenConversation(); setToolsOpen(false); }}><CraftIcon name="document" size={16} /> Export conversation</button>}
               </div>}
             </div>
-            <button className={`status ${ready ? "ready" : "offline"}`} onClick={() => setModelManagerOpen(true)} title="Open Model Manager">
-              <span /> {ready ? `${status.configuredModel} ready` : status?.available ? "Model not installed" : "Ollama offline"}
-            </button>
+            </div>
           </div>
         </header>
 
+        {profileRecoveryRequired && <section className="profile-workspace-blocked" role="alert" aria-live="assertive"><strong>Profile Recovery required</strong><span>Normal workspace access is paused. Open Profiles and recover the last validated local state before continuing.</span></section>}
+
         <div
           className="messages"
+          inert={profileWorkspaceBlocked}
           onScroll={(event) => {
             const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
             followLatestRef.current = isNearMessageBottom(scrollTop, clientHeight, scrollHeight);
@@ -1482,12 +1765,12 @@ export default function Home() {
               <div className="welcome-intro">
                 <div className="welcome-heading">
                   {welcomePreferencesReady ? <div className="welcome-greeting-line">
-                    <h2 id="welcome-title">{formatWelcomeGreeting(greetingIndex, welcomePreferences.preferredName ?? "")}</h2>
+                    <h2 id="welcome-title">{formatWelcomeGreeting(greetingIndex, welcomePreferences.preferredName?.trim() || activeProfileContext?.displayName || "")}</h2>
                   </div> : <div className="welcome-loading" role="status">Preparing your private workspace…</div>}
                 </div>
               </div>
               {welcomePreferencesReady && (
-                <div className={`welcome-note ${welcomePreferences.mode === "books" ? "book-fact" : ""}`} aria-live="polite">
+                <div className={`welcome-note welcome-inspiration ${welcomePreferences.mode === "books" ? "book-fact" : ""}`} aria-live="polite">
                   {welcomePreferences.mode !== "books" && <ConversationSpark className="welcome-spark" />}
                   {welcomePreferences.mode === "books" ? (
                     bookWelcomeLoading ? <p className="welcome-note-loading">Choosing a cited sentence from your local books…</p>
@@ -1496,24 +1779,6 @@ export default function Home() {
                   ) : <><blockquote>{welcomeLine.kind === "QUOTE" ? `“${welcomeLine.text}”` : welcomeLine.text}</blockquote><cite>{welcomeLine.kind === "QUOTE" ? `— ${welcomeLine.credit}` : welcomeLine.credit}</cite></>}
                 </div>
               )}
-              <div className="starter-grid" aria-label="Conversation starters">
-                <button type="button" onClick={() => chooseStarter("Help me think through an idea: ")} aria-label="Explore an idea locally" title="Brainstorm an idea locally">
-                  <span className="starter-icon idea"><CraftIcon name="spark" /></span>
-                  <strong>Explore an idea</strong>
-                </button>
-                <button type="button" onClick={() => chooseStarter("Help me with this coding task: ")} aria-label="Build something with local coding help" title="Plan or improve code locally">
-                  <span className="starter-icon code"><CraftIcon name="code" /></span>
-                  <strong>Build something</strong>
-                </button>
-                <button type="button" onClick={() => chooseStarter("Help me write this email. Ask me for the audience, purpose, tone, and key details before drafting: ")} aria-label="Write an email locally" title="Draft an email in the right tone">
-                  <span className="starter-icon mail"><CraftIcon name="mail" /></span>
-                  <strong>Write an email</strong>
-                </button>
-                <button type="button" onClick={() => chooseStarter("I want to create a professional Word document. Please ask me what you need before creating it: ")} aria-label="Create a Word document locally" title="Create and preview a Word document">
-                  <span className="starter-icon document"><CraftIcon name="document" /></span>
-                  <strong>Create a document</strong>
-                </button>
-              </div>
             </section>
           )}
           {messages.map((message) => (
@@ -1522,7 +1787,7 @@ export default function Home() {
               <div className="message-body">
                 {message.replyTo && <div className="reply-reference"><strong>{message.replyTo.role === "assistant" ? "Rangabot" : "You"}</strong><span>{message.replyTo.excerpt}</span></div>}
                 {message.codeContext && <div className="message-code-reference"><strong>Attached code</strong><span>{message.codeContext.repository} · {message.codeContext.path} · lines {message.codeContext.startLine}–{message.codeContext.endLine}</span></div>}
-                {message.wordArtifact && <div className="chat-word-artifact"><span><CraftIcon name="document" /></span><div><strong>{message.wordArtifact.title}</strong><small>{message.wordArtifact.filename} · {message.wordArtifact.previewPages} rendered page{message.wordArtifact.previewPages === 1 ? "" : "s"}</small><nav><a href={`/api/artifacts/word/${message.wordArtifact.id}/document`}>Download .docx</a>{message.wordArtifact.previewPages > 0 && <a href={`/api/artifacts/word/${message.wordArtifact.id}/preview/1`} target="_blank" rel="noreferrer">Review preview</a>}</nav></div></div>}
+                {message.wordArtifact && <div className="chat-word-artifact"><span><CraftIcon name="document" /></span><div><strong>{message.wordArtifact.title}</strong><small>{message.wordArtifact.filename} · {message.wordArtifact.previewPages} rendered page{message.wordArtifact.previewPages === 1 ? "" : "s"}</small><nav><button type="button" onClick={() => void downloadWordArtifact(message.wordArtifact!.id, message.wordArtifact!.filename)}>Download .docx</button>{message.wordArtifact.previewPages > 0 && <button type="button" onClick={() => void reviewWordArtifact(message.wordArtifact!.id, message.wordArtifact!.title)}>Review preview</button>}</nav></div></div>}
                 {message.source && <span className="source">{formatAnswerReceipt(message)}</span>}
                 {message.content && (message.role === "assistant"
                   ? <MarkdownMessage content={message.content} />
@@ -1560,17 +1825,23 @@ export default function Home() {
           <div ref={endRef} />
         </div>
 
-        <div className={`composer-wrap ${messages.length === 0 ? "empty-chat" : ""}`}>
+        <div className={`composer-wrap ${messages.length === 0 ? "empty-chat" : ""}`} inert={profileWorkspaceBlocked}>
+          {messages.length === 0 && <div className="starter-grid" aria-label="Conversation starters">
+            <button type="button" onClick={() => chooseStarter("Help me think through an idea: ")}><span className="starter-icon idea"><CraftIcon name="spark" /></span><strong>Explore an idea</strong></button>
+            <button type="button" onClick={() => chooseStarter("Help me with this coding task: ")}><span className="starter-icon code"><CraftIcon name="code" /></span><strong>Build something</strong></button>
+            <button type="button" onClick={() => chooseStarter("Help me write this email. Ask me for the audience, purpose, tone, and key details before drafting: ")}><span className="starter-icon mail"><CraftIcon name="mail" /></span><strong>Write an email</strong></button>
+          </div>}
           {!ready && <div className="setup-hint">
             <strong>{status?.available ? "Choose a local model" : "Starting RangaBot’s model engine"}</strong>
             <span>{status?.available ? "Open Model Manager to install or select a model—no terminal required." : "The private model engine is not ready yet."}</span>
             <button type="button" onClick={() => setModelManagerOpen(true)}>Model Manager</button>
           </div>}
-          <form className="composer" onSubmit={sendMessage} aria-busy={conversationLoading}>
+          <form className="composer" onSubmit={sendMessage} aria-busy={conversationLoading || profileWorkspaceBlocked}>
             {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
             {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
             {attachedDataset && <div className="composer-code-context"><span><strong>Local data available to this chat</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>This attachment is remembered for this chat. Analytical requests may run bounded read-only SQL locally; expand the calculation trace to inspect it.</small></span><button type="button" onClick={() => void attachDatasetToChat(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
             <div className="composer-main-row">
+              <button type="button" className="composer-add" onClick={() => { setSqlPanelOpen(true); }} aria-label="Add local context"><CraftIcon name="add" size={18} /></button>
               <textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
@@ -1582,32 +1853,35 @@ export default function Home() {
                 }}
                 placeholder="Message Rangabot…"
                 rows={1}
+                disabled={profileWorkspaceBlocked}
               />
               <div className="composer-actions">
-                <select value={mode} onChange={(event) => setMode(event.target.value as Mode)} aria-label="Routing mode" aria-describedby="route-mode-description" title={routeDescription}>
-                  <option value="local">Local only</option>
-                  <option value="smart">Smart</option>
-                  <option value="teach">Teacher</option>
-                  <option value="codex">Codex</option>
-                </select>
-                <span id="route-mode-description" className="sr-only">{routeDescription}</span>
                 {sending ? (
-                  <button className="stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating"><CraftIcon name="stop" /></button>
+                  <button className="composer-submit stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating"><CraftIcon name="stop" /></button>
                 ) : (
-                  <button type="submit" disabled={!input.trim() || conversationLoading} aria-label="Send"><CraftIcon name="send" /></button>
+                  <button className="composer-submit send-button" type="submit" disabled={!input.trim() || conversationLoading || profileWorkspaceBlocked} aria-label="Send"><CraftIcon name="send" /></button>
                 )}
               </div>
             </div>
           </form>
-          <small>Local models can make mistakes. Review important code and decisions.</small>
+          <small>RangaBot can make mistakes. Review important work.</small>
         </div>
       </section>
 
-      {knowledgePanelOpen && (
+      {!profileRecoveryRequired && wordPreview && <div className="word-preview-backdrop" onMouseDown={closeWordPreview}>
+        <section className="word-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="word-preview-title" onMouseDown={(event) => event.stopPropagation()}>
+          <header><h2 id="word-preview-title">{wordPreview.title}</h2><button ref={wordPreviewCloseRef} type="button" onClick={closeWordPreview} aria-label="Close document preview"><CraftIcon name="close" /></button></header>
+          {/* The preview bytes arrived through the profile-bound same-origin client before this private blob URL was created. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={wordPreview.url} alt={`First-page preview of ${wordPreview.title}`} />
+        </section>
+      </div>}
+
+      {!profileRecoveryRequired && knowledgePanelOpen && (
         <div className="knowledge-backdrop" onMouseDown={() => setKnowledgePanelOpen(false)}>
           <aside className="knowledge-panel" role="dialog" aria-modal="true" aria-labelledby="knowledge-panel-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="knowledge-panel-header">
-              <div><span>Local intelligence</span><h2 id="knowledge-panel-title">Knowledge Brief</h2></div>
+              <div><span>Local intelligence</span><h2 id="knowledge-panel-title">Knowledge Brief</h2><small>Active profile: {activeProfileContext?.marker ?? "Loading…"}</small></div>
               <button type="button" ref={knowledgeCloseRef} onClick={() => setKnowledgePanelOpen(false)} aria-label="Close Knowledge Brief"><CraftIcon name="close" /></button>
             </div>
             <nav className="knowledge-tabs" aria-label="Knowledge Brief sections">
@@ -1639,6 +1913,12 @@ export default function Home() {
                 ) : <div className="knowledge-markdown"><MarkdownMessage content={knowledgeUpdates?.month ?? "No monthly brief is available yet."} /></div>}
               </>}
               {knowledgeTab === "vault" && <section className="vault-overview">
+                <div className="vault-import-card">
+                  <div><span>Books and documents</span><strong>Add knowledge without paths or Terminal</strong><p>Choose PDF, Word, Markdown, HTML, or text files. RangaBot copies them into this profile only when you press Import.</p></div>
+                  <div className="vault-import-actions"><button type="button" onClick={() => void chooseKnowledgeDocuments()} disabled={knowledgeImporting}><CraftIcon name="document" size={16} /> Choose files</button><button type="button" className="primary" onClick={() => void importKnowledgeDocuments()} disabled={knowledgeImporting || !knowledgeImportPaths.length}>{knowledgeImporting ? "Importing…" : `Import${knowledgeImportPaths.length ? ` ${knowledgeImportPaths.length}` : ""}`}</button></div>
+                  {knowledgeImportPaths.length > 0 && <ul>{knowledgeImportPaths.map((path) => <li key={path}>{path.split(/[\\/]/).at(-1)}</li>)}</ul>}
+                  {knowledgeImportMessage && <p role="status">{knowledgeImportMessage}</p>}
+                </div>
                 <div className="vault-stat-grid">
                   <div><strong>{knowledgeStatus?.documents ?? "—"}</strong><span>Documents</span></div>
                   <div><strong>{knowledgeStatus?.chunks ?? "—"}</strong><span>Passages</span></div>
@@ -1651,7 +1931,7 @@ export default function Home() {
                     <span>{source.status}</span><div><strong>{source.name}</strong><small>{source.detail}</small></div>
                   </div>)}
                 </div>}
-                <div className="vault-note"><strong>Private by design</strong><p>Documents, passages, embeddings and retrieval stay on this computer. Add material to <code>data/knowledge/inbox/</code> and run <code>npm run knowledge:ingest</code>.</p></div>
+                <div className="vault-note"><strong>Private by design</strong><p>Documents, passages, embeddings and retrieval stay in this active profile on this computer. Use the supported Knowledge ingestion flow; it binds ingestion to the exact active profile and never uses the legacy shared data path.</p></div>
               </section>}
               {knowledgeTab === "updates" && <div className="knowledge-markdown changelog"><MarkdownMessage content={knowledgeUpdates?.changelog ?? "No Rangabot changelog is available yet."} /></div>}
             </div>
@@ -1659,11 +1939,11 @@ export default function Home() {
         </div>
       )}
 
-      {repositoryPanelOpen && selectedRepository && (
+      {!profileRecoveryRequired && repositoryPanelOpen && selectedRepository && (
         <div className="knowledge-backdrop" onMouseDown={() => setRepositoryPanelOpen(false)}>
           <aside className="code-panel" role="dialog" aria-modal="true" aria-labelledby="code-panel-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="knowledge-panel-header">
-              <div><span>Approved folder · local only</span><h2 id="code-panel-title">{selectedRepository.name}</h2><small>{selectedRepository.path}</small></div>
+              <div><span>Approved folder · local only</span><h2 id="code-panel-title">{selectedRepository.name}</h2><small>Active profile: {activeProfileContext?.marker ?? "Loading…"}</small><small>{selectedRepository.path}</small></div>
               <button type="button" ref={repositoryCloseRef} onClick={() => setRepositoryPanelOpen(false)} aria-label="Close code search"><CraftIcon name="close" /></button>
             </div>
             <form className="code-search-form" onSubmit={searchAllowedRepository}>
@@ -1689,10 +1969,19 @@ export default function Home() {
           </aside>
         </div>
       )}
-      <MemoryPanel open={memoryPanelOpen} onClose={closeMemoryPanel} />
-      <SqlAnalysisPanel key={sqlDraft ? `${sqlDraft.datasetId}:${sqlDraft.query}` : "manual"} open={sqlPanelOpen} onClose={closeSqlPanel} onAttach={(dataset) => { void attachDatasetToChat(dataset); setSqlDraft(null); }} initialDraft={sqlDraft} />
-      {welcomePreferencesOpen && <WelcomePreferencesDialog preferences={welcomePreferences} appearance={appearance} palette={palette} onClose={closeWelcomePreferences} onSave={saveWelcomePreferences} />}
-      {modelManagerOpen && <ModelManager onClose={() => setModelManagerOpen(false)} onChanged={() => void refreshStatus()} />}
+      <MemoryPanel open={!profileRecoveryRequired && memoryPanelOpen} onClose={closeMemoryPanel} activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} />
+      <SqlAnalysisPanel key={sqlDraft ? `${sqlDraft.datasetId}:${sqlDraft.query}` : "manual"} open={!profileRecoveryRequired && sqlPanelOpen} onClose={closeSqlPanel} onAttach={(dataset) => { void attachDatasetToChat(dataset); setSqlDraft(null); }} initialDraft={sqlDraft} activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} />
+      {!profileRecoveryRequired && welcomePreferencesOpen && <WelcomePreferencesDialog preferences={welcomePreferences} appearance={desktopPreferences?.appearance ?? null} palette={palette} activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} onClose={closeWelcomePreferences} onSave={saveWelcomePreferences} onOpenSetup={() => { setupReturnFocusRef.current = preferencesTriggerRef.current; setWelcomePreferencesOpen(false); setSetupOpen(true); }} />}
+      {!profileRecoveryRequired && modelManagerOpen && <ModelManager activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} onClose={() => setModelManagerOpen(false)} onChanged={() => void refreshStatus()} />}
+      {!profileRecoveryRequired && setupOpen && activeProfileContext && desktopPreferences && onboarding && <FirstRunSetup
+        profile={activeProfileContext}
+        preferences={desktopPreferences}
+        onboarding={onboarding}
+        onClose={closeSetupAndRestoreFocus}
+        onPreferencesChanged={applyDesktopPreferences}
+        onOnboardingChanged={setOnboarding}
+        onAppearancePreview={(nextAppearance, nextPalette) => { setAppearance(nextAppearance ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")); setPalette(nextPalette); }}
+      />}
     </main>
   );
 }

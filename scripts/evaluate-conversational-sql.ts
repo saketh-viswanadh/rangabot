@@ -15,6 +15,7 @@ import { shouldRunSqlAnalysis } from "../lib/conversational-analysis.ts";
 import { buildConversationMessages } from "../lib/conversation-orchestration.ts";
 import type { SqlProposal } from "../lib/sql-proposals.ts";
 import { ensurePrivateDirectory, ensurePrivateFile, writePrivateJsonFileAtomic, writePrivateTextFileAtomic } from "../lib/private-storage.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
 
 type Evaluation = {
   id: string;
@@ -32,12 +33,14 @@ type Evaluation = {
   error?: string;
 };
 
-const resultsDirectory = resolve("data/evaluations/results");
+const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Conversational SQL evaluation" });
+const resultsDirectory = profileMaintenance.dataPath("evaluations", "results");
 const databasePath = resolve(resultsDirectory, "rangabot-multitable-benchmark.duckdb");
 const checkpointPath = resolve(resultsDirectory, "conversational-sql-checkpoint.json");
 ensurePrivateDirectory(resultsDirectory);
 
 async function createDatabase() {
+  profileMaintenance.assertCurrent();
   if (existsSync(databasePath)) rmSync(databasePath);
   const instance = await DuckDBInstance.create(databasePath);
   const connection = await instance.connect();
@@ -259,14 +262,17 @@ for (const testCase of selectedCases) {
   if (results.some((result) => result.id === testCase.id)) { console.log(`SKIP ${testCase.id} (checkpointed)`); continue; }
   const result = await runCase(testCase, dataset, schema);
   results.push(result);
+  profileMaintenance.assertCurrent();
   writePrivateJsonFileAtomic(checkpointPath, results);
   console.log(`${result.passed ? "PASS" : "FAIL"} ${testCase.id} ${testCase.difficulty}/${testCase.context} (${(result.latencyMs / 1000).toFixed(1)}s)${result.error ? `: ${result.error}` : ""}`);
 }
 const outputJson = resolve(resultsDirectory, `conversational-sql-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
 const outputMarkdown = outputJson.replace(/\.json$/, ".md");
 const summary = { suite: { name: "rangabot-conversational-sql", version: "1.0.0" }, database: { synthetic: true, tables: new Set(schema.map((column) => column.table)).size, columns: schema.length }, total: results.length, passed: results.filter((result) => result.passed).length, byDifficulty: aggregate(results, "difficulty"), byContext: aggregate(results, "context"), results };
+profileMaintenance.assertCurrent();
 writePrivateJsonFileAtomic(outputJson, summary);
 writePrivateTextFileAtomic(outputMarkdown, markdownReport(results));
 console.log(`\nPass rate: ${summary.passed}/${summary.total} (${(100 * summary.passed / summary.total).toFixed(1)}%)`);
 console.log(`Private JSON: ${outputJson}`);
 console.log(`Private report: ${outputMarkdown}`);
+profileMaintenance.release();

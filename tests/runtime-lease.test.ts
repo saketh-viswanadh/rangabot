@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  linkSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -13,6 +23,21 @@ import { privateFileMode, supportsPosixPermissions } from "../lib/private-storag
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "rangabot-runtime-lease-"));
   return { root, path: join(root, "private", "runtime.lock") };
+}
+
+function leaseRecord(ownerPid: number, token: string) {
+  return {
+    version: 1,
+    role: "app",
+    ownerPid,
+    token,
+    createdAt: "2026-08-13T00:00:00.000Z",
+  } as const;
+}
+
+function leaseClaimNames(path: string) {
+  return readdirSync(join(path, ".."))
+    .filter((name) => name.startsWith(".runtime.lock.claim-"));
 }
 
 test("publishes one private exclusive lease and releases only its own token", () => {
@@ -49,6 +74,122 @@ test("reclaims a fully written stale PID record but never removes an active repl
     assert.equal(existsSync(path), true);
     assert.match(readFileSync(path, "utf8"), /"ownerPid":202/);
     assert.equal(replacement.release(), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("stale reclamation never unlinks a replacement published after inode inspection", () => {
+  const { root, path } = fixture();
+  const staleToken = "s".repeat(43);
+  const replacementToken = "p".repeat(43);
+  let injected = false;
+  try {
+    acquireRuntimeLease({
+      path,
+      role: "app",
+      ownerPid: 101,
+      inspectProcess: () => "alive",
+      token: () => staleToken,
+    });
+
+    assert.throws(
+      () => acquireRuntimeLease({
+        path,
+        role: "maintenance",
+        ownerPid: 202,
+        inspectProcess: (pid) => pid === 101 ? "dead" : "alive",
+        token: () => "n".repeat(43),
+        onLeaseClaimForTests({ path: claimedPath, expectedToken }) {
+          if (injected || expectedToken !== staleToken) return;
+          injected = true;
+          unlinkSync(claimedPath);
+          writeFileSync(
+            claimedPath,
+            `${JSON.stringify(leaseRecord(303, replacementToken))}\n`,
+            { mode: 0o600 },
+          );
+        },
+      }),
+      (error) => error instanceof RuntimeLeaseError && error.code === "active",
+    );
+
+    assert.equal(injected, true);
+    assert.equal(readFileSync(path, "utf8"), `${JSON.stringify(leaseRecord(303, replacementToken))}\n`);
+    assert.deepEqual(leaseClaimNames(path), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("competing stale claims are normalized before one bounded reclaimer proceeds", () => {
+  const { root, path } = fixture();
+  const staleToken = "s".repeat(43);
+  let competingClaim = "";
+  try {
+    acquireRuntimeLease({
+      path,
+      role: "app",
+      ownerPid: 101,
+      inspectProcess: () => "alive",
+      token: () => staleToken,
+    });
+
+    const replacement = acquireRuntimeLease({
+      path,
+      role: "maintenance",
+      ownerPid: 202,
+      inspectProcess: () => "dead",
+      token: () => "r".repeat(43),
+      onLeaseClaimForTests({ path: claimedPath, expectedToken }) {
+        if (competingClaim || expectedToken !== staleToken) return;
+        competingClaim = join(
+          claimedPath,
+          "..",
+          `.runtime.lock.claim-${"c".repeat(48)}.tmp`,
+        );
+        linkSync(claimedPath, competingClaim);
+      },
+    });
+
+    assert.notEqual(competingClaim, "");
+    assert.equal(existsSync(competingClaim), false);
+    assert.deepEqual(leaseClaimNames(path), []);
+    assert.match(readFileSync(path, "utf8"), /"ownerPid":202/);
+    assert.equal(replacement.release(), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("release never unlinks a replacement published after inode inspection", () => {
+  const { root, path } = fixture();
+  const ownerToken = "o".repeat(43);
+  const replacementToken = "p".repeat(43);
+  let injected = false;
+  try {
+    const lease = acquireRuntimeLease({
+      path,
+      role: "app",
+      ownerPid: 101,
+      inspectProcess: () => "alive",
+      token: () => ownerToken,
+      onLeaseClaimForTests({ path: claimedPath, expectedToken }) {
+        if (injected || expectedToken !== ownerToken) return;
+        injected = true;
+        unlinkSync(claimedPath);
+        writeFileSync(
+          claimedPath,
+          `${JSON.stringify(leaseRecord(303, replacementToken))}\n`,
+          { mode: 0o600 },
+        );
+      },
+    });
+
+    assert.equal(lease.release(), false);
+    assert.equal(injected, true);
+    assert.equal(readFileSync(path, "utf8"), `${JSON.stringify(leaseRecord(303, replacementToken))}\n`);
+    assert.deepEqual(leaseClaimNames(path), []);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

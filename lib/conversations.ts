@@ -38,14 +38,21 @@ export interface Conversation extends ConversationSummary {
   messages: ChatMessage[];
 }
 
-const defaultDatabasePath = runtimePaths.conversationDatabase;
-let databasePath = defaultDatabasePath;
+let databasePathOverride: string | undefined;
+let openedDatabasePath: string | undefined;
 let database: Database | undefined;
 
+function currentDatabasePath() {
+  return databasePathOverride ?? runtimePaths.conversationDatabase;
+}
+
 export function getConversationDatabase() {
-  if (database) return database;
+  const databasePath = currentDatabasePath();
+  if (database && openedDatabasePath === databasePath) return database;
+  if (database) closeConversationDatabase();
   preparePrivateSqliteStorage(databasePath);
   database = new DatabaseSync(databasePath);
+  openedDatabasePath = databasePath;
   let transactionStarted = false;
   try {
     database.exec(`
@@ -133,6 +140,7 @@ export function getConversationDatabase() {
     }
     try { database.close(); } catch { /* Preserve the initialization error. */ }
     database = undefined;
+    openedDatabasePath = undefined;
     hardenPrivateSqliteFiles(databasePath);
     throw error;
   }
@@ -354,6 +362,20 @@ export function setConversationDataset(id: string, datasetId: string | null): Co
   return result.changes ? getConversation(id) : null;
 }
 
+export function setConversationProject(id: string, projectId: string | null): ConversationSummary | null {
+  const database = getConversationDatabase();
+  if (projectId && !database.prepare("SELECT 1 FROM projects WHERE id = ?").get(projectId)) return null;
+  const updatedAt = new Date().toISOString();
+  const result = database.prepare("UPDATE conversations SET project_id = ?, updated_at = ? WHERE id = ?")
+    .run(projectId, updatedAt, id);
+  if (!result.changes) return null;
+  const row = database.prepare(`
+    SELECT id, title, project_id AS projectId, dataset_id AS datasetId, pinned, created_at AS createdAt, updated_at AS updatedAt
+    FROM conversations WHERE id = ?
+  `).get(id) as unknown as ConversationSummaryRow;
+  return toConversationSummary(row);
+}
+
 export function listProjects(): ProjectSummary[] {
   return getConversationDatabase().prepare(`
     SELECT id, name, created_at AS createdAt, updated_at AS updatedAt
@@ -398,12 +420,22 @@ export function titleFromMessages(messages: ChatMessage[]): string {
   return firstUserMessage.length > 42 ? `${firstUserMessage.slice(0, 39)}…` : firstUserMessage;
 }
 
-export function closeConversationDatabaseForTests() {
+export function closeConversationDatabase() {
   database?.close();
   database = undefined;
+  openedDatabasePath = undefined;
+}
+
+export function closeConversationDatabaseForTests() {
+  closeConversationDatabase();
 }
 
 export function setConversationDatabasePathForTests(path: string) {
   closeConversationDatabaseForTests();
-  databasePath = path;
+  databasePathOverride = path;
+}
+
+export function resetConversationDatabasePathForTests() {
+  closeConversationDatabaseForTests();
+  databasePathOverride = undefined;
 }

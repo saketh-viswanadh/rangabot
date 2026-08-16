@@ -9,6 +9,7 @@ import {
   type ConversationEvaluationAssessment,
   type ConversationEvaluationAssessmentInput,
 } from "../lib/conversation-evaluation-assessment.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
 
 type Profile = (typeof modelRegistry.models)[number];
 type ConversationSummary = ConversationEvaluationAssessmentInput & {
@@ -49,10 +50,12 @@ const undersized = profiles.filter((profile) => memoryGb < profile.minimumMemory
 if (undersized.length && !allowUndersizedMemory) {
   throw new Error(`${undersized.map((profile) => profile.id).join(", ")} exceeds this ${memoryGb} GB machine's registry guidance. Rerun with --allow-undersized-memory only after closing memory-heavy apps.`);
 }
+const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Conversation model matrix evaluation" });
 
 const matrixStartedAt = new Date().toISOString();
 const matrix: Array<{ model: string; contextTokens: number; result: string; exitCode: number; summary?: ConversationSummary; assessment?: ConversationEvaluationAssessment }> = [];
 for (const profile of profiles) {
+  profileMaintenance.assertCurrent();
   console.log(`\n=== ${profile.label} (${profile.id}) ===`);
   spawnSync("ollama", ["stop", profile.id], { stdio: "ignore" });
   const args = ["--experimental-strip-types", "scripts/evaluate-conversation.ts", "--cold"];
@@ -61,7 +64,12 @@ for (const profile of profiles) {
   const run = spawnSync(process.execPath, args, {
     cwd: process.cwd(),
     encoding: "utf8",
-    env: { ...process.env, OLLAMA_MODEL: profile.id, OLLAMA_NUM_CTX: String(profile.recommendedContextTokens) },
+    env: {
+      ...process.env,
+      ...profileMaintenance.childEnvironment(),
+      OLLAMA_MODEL: profile.id,
+      OLLAMA_NUM_CTX: String(profile.recommendedContextTokens),
+    },
     maxBuffer: 8 * 1024 * 1024,
   });
   process.stdout.write(run.stdout ?? "");
@@ -81,9 +89,10 @@ for (const profile of profiles) {
   matrix.push(entry);
 }
 
-const outputDirectory = resolve("data/evaluations/results");
+const outputDirectory = profileMaintenance.dataPath("evaluations", "results");
 ensurePrivateDirectory(outputDirectory);
 const output = resolve(outputDirectory, `model-matrix-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+profileMaintenance.assertCurrent();
 writePrivateJsonFileAtomic(output, {
   schemaVersion: 1,
   suiteMode: full ? "full" : requestedCaseIds.length ? "selected" : "critical-only",
@@ -96,3 +105,4 @@ writePrivateJsonFileAtomic(output, {
 });
 console.log(`\nPrivate matrix result: ${output}`);
 if (matrix.some((entry) => entry.exitCode !== 0 || !entry.summary || !entry.assessment?.passed)) process.exitCode = 1;
+profileMaintenance.release();

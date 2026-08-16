@@ -9,8 +9,9 @@ import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
 type Dataset = { id: string; name: string; format: "csv" | "parquet" | "duckdb"; sizeBytes: number; addedAt: string };
 type Preview = { confirmationId: string; token: string; expiresAt: string; dataset: { id: string; name: string; format: string; sizeBytes: number; sha256: string }; query: string; limits: { readOnly: true; externalAccess: false; maxRows: number; timeoutMs: number } };
 type Result = { columns: string[]; rows: unknown[][]; receipt: { engine: "duckdb"; input: { filename: string; sha256: string; sizeBytes: number }; querySha256: string; rowLimit: number; returnedRows: number; truncated: boolean; durationMs: number } };
+type DesktopFilePickerBridge = { pickLocalFiles(kind: "knowledge" | "dataset"): Promise<{ status: "selected" | "cancelled"; paths: string[] }> };
 
-export function SqlAnalysisPanel({ open, onClose, onAttach, initialDraft }: { open: boolean; onClose: () => void; onAttach: (dataset: AttachedDataset) => void; initialDraft?: SqlDraft | null }) {
+export function SqlAnalysisPanel({ open, onClose, onAttach, initialDraft, activeProfileMarker }: { open: boolean; onClose: () => void; onAttach: (dataset: AttachedDataset) => void; initialDraft?: SqlDraft | null; activeProfileMarker: string }) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [datasetPath, setDatasetPath] = useState("");
   const [datasetId, setDatasetId] = useState(initialDraft?.datasetId ?? "");
@@ -49,6 +50,16 @@ export function SqlAnalysisPanel({ open, onClose, onAttach, initialDraft }: { op
     await refresh();
   }
 
+  async function chooseDataset() {
+    const desktop = (window as typeof window & { rangabotDesktop?: DesktopFilePickerBridge }).rangabotDesktop;
+    if (!desktop) return setMessage("Use the RangaBot desktop app to choose a local data file without typing its path.");
+    const selection = await desktop.pickLocalFiles("dataset");
+    if (selection.status === "selected" && selection.paths[0]) {
+      setDatasetPath(selection.paths[0]);
+      setMessage(`${selection.paths[0].split(/[\\/]/).at(-1)} selected. Press Allow to grant read-only access.`);
+    }
+  }
+
   async function revoke(dataset: Dataset) {
     const response = await localApiFetch(`/api/datasets/${dataset.id}`, { method: "DELETE" });
     if (!response.ok) return setMessage("Could not revoke this dataset.");
@@ -76,11 +87,11 @@ export function SqlAnalysisPanel({ open, onClose, onAttach, initialDraft }: { op
 
   if (!open) return null;
   return <div className="knowledge-backdrop" onMouseDown={onClose}><aside className="sql-panel" role="dialog" aria-modal="true" aria-labelledby="sql-panel-title" onMouseDown={(event) => event.stopPropagation()}>
-    <div className="knowledge-panel-header"><div><span>Private local analysis</span><h2 id="sql-panel-title">SQL workspace</h2><small>Nothing runs until you approve the exact query.</small></div><button ref={closeRef} type="button" onClick={onClose} aria-label="Close SQL workspace"><CraftIcon name="close" /></button></div>
+    <div className="knowledge-panel-header"><div><span>Private local analysis</span><h2 id="sql-panel-title">SQL workspace</h2><small>Active profile: {activeProfileMarker}</small><small>Nothing runs until you approve the exact query.</small></div><button ref={closeRef} type="button" onClick={onClose} aria-label="Close SQL workspace"><CraftIcon name="close" /></button></div>
     <div className="sql-panel-content"><section className="sql-datasets"><header><div><strong>Approved data</strong><small>CSV, Parquet or DuckDB · 100 MB maximum</small></div><span>{datasets.length}</span></header>
       <div className="sql-dataset-list">{datasets.map((dataset) => <div key={dataset.id} className={dataset.id === datasetId ? "selected" : ""}><button type="button" onClick={() => { setDatasetId(dataset.id); setPreview(null); setResult(null); }}><strong>{dataset.name}</strong><small>{dataset.format.toUpperCase()} · {(dataset.sizeBytes / 1024 ** 2).toFixed(1)} MB</small></button><button type="button" onClick={() => void revoke(dataset)} aria-label={`Revoke ${dataset.name}`}><CraftIcon name="close" size={13} /></button></div>)}</div>
       {datasetId && <button type="button" className="sql-attach" onClick={() => { const dataset = datasets.find((item) => item.id === datasetId); if (dataset) { onAttach(dataset); onClose(); } }}>Use selected data in chat</button>}
-      <form className="sql-allow-form" onSubmit={approve}><input value={datasetPath} onChange={(event) => setDatasetPath(event.target.value)} placeholder="/absolute/path/to/data.duckdb" aria-label="Dataset path" maxLength={1024} /><button type="submit" disabled={busy || !datasetPath.trim()}>Allow</button></form><p>Approval stores only the local path. Revoking never deletes the file.</p>
+      <form className="sql-allow-form" onSubmit={approve}><button type="button" className="sql-file-picker" onClick={() => void chooseDataset()}><CraftIcon name="document" size={15} /> Choose data file</button>{datasetPath && <span title={datasetPath}>{datasetPath.split(/[\\/]/).at(-1)}</span>}<button type="submit" disabled={busy || !datasetPath.trim()}>Allow read-only</button></form><p>Approval stores only the local path. Revoking never deletes the file.</p>
     </section><section className="sql-workbench"><form className="sql-query-form" onSubmit={createPreview}><label htmlFor="sql-query">Exact read-only query</label><textarea id="sql-query" value={query} onChange={(event) => { setQuery(event.target.value); setPreview(null); setResult(null); }} rows={7} spellCheck={false} /><button type="submit" disabled={busy || !datasetId || !query.trim()}>{busy ? "Preparing…" : "Review query"}</button></form>
       {preview && <article className="sql-proposal" aria-label="SQL execution proposal"><header><div><span>Approval required</span><strong>{preview.dataset.name}</strong></div><time dateTime={preview.expiresAt}>Expires {new Date(preview.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></header><pre><code>{preview.query}</code></pre><dl><div><dt>Access</dt><dd>Read only · external access off</dd></div><div><dt>Limits</dt><dd>{preview.limits.maxRows} rows · {preview.limits.timeoutMs / 1000}s</dd></div><div><dt>Dataset fingerprint</dt><dd>{preview.dataset.sha256.slice(0, 12)}…</dd></div></dl><footer><button type="button" className="sql-reject" onClick={() => { setPreview(null); setMessage("Proposal rejected. Nothing was executed."); }}>Reject</button><button type="button" className="sql-run" disabled={busy} onClick={() => void runOnce()}>{busy ? "Running…" : "Run once"}</button></footer></article>}
       {result && <article className="sql-result"><header><div><span>Verified local result</span><strong>{result.receipt.returnedRows} row{result.receipt.returnedRows === 1 ? "" : "s"}{result.receipt.truncated ? " · truncated" : ""}</strong></div><small>{result.receipt.durationMs} ms · DuckDB</small></header><div className="sql-result-table"><table><thead><tr>{result.columns.map((column, index) => <th key={`${column}-${index}`}>{column}</th>)}</tr></thead><tbody>{result.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{formatSqlCell(cell)}</td>)}</tr>)}</tbody></table></div><details><summary>Execution receipt</summary><code>input {result.receipt.input.sha256}</code><code>query {result.receipt.querySha256}</code></details></article>}

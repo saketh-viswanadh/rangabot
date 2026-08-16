@@ -27,6 +27,12 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Turbopack's file tracer can conservatively retain source-only test files
+  // reached while it analyzes dynamic private-root validation. Tests are never
+  // runtime inputs and must not enter the packaged standalone application.
+  outputFileTracingExcludes: {
+    "/*": ["./tests/**/*"],
+  },
   poweredByHeader: false,
   generateBuildId: async () => desktopStagingBuildId ?? sourceBuildId ?? requireKnownResponseFeedbackCandidate().build,
   serverExternalPackages: ["sqlite-vec", "@duckdb/node-api", "@duckdb/node-bindings"],

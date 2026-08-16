@@ -3,10 +3,14 @@ import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { loadKnowledgeEvaluationCases, scoreKnowledgeAnswer } from "../lib/knowledge-evaluation.ts";
 import { countCitedSources, generateGroundedTeacherAnswer } from "../lib/knowledge-grounding.ts";
-import { knowledgeEvaluationFixtures, knowledgeEvaluationResults, searchKnowledge } from "../lib/knowledge.ts";
+import { closeKnowledgeDatabase, knowledgeDatabasePath, knowledgeEvaluationFixtures, searchKnowledge } from "../lib/knowledge.ts";
 import { runtimePaths } from "../lib/runtime-paths.ts";
 import { buildTeacherMessages } from "../lib/teacher-mode.ts";
 import { ensurePrivateDirectory, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
+
+const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Knowledge answer evaluation" });
+profileMaintenance.assertDataPath(knowledgeDatabasePath);
 
 const option = (name: string) => process.argv.find((argument) => argument.startsWith(`--${name}=`))?.slice(name.length + 3);
 const localEnvironmentPath = resolve(runtimePaths.resourceRoot, ".env.local");
@@ -54,7 +58,7 @@ type AnswerEvaluationResult = ReturnType<typeof scoreKnowledgeAnswer> & {
   grounding: Awaited<ReturnType<typeof generateGroundedTeacherAnswer>>["audit"] | null;
   error?: string;
 };
-const outputRoot = knowledgeEvaluationResults;
+const outputRoot = profileMaintenance.dataPath("knowledge", "evaluations", "results");
 ensurePrivateDirectory(outputRoot);
 const runKey = createHash("sha256").update(JSON.stringify({ fixturePath, ids: cases.map((item) => item.id), model: evaluationModel, contextTokens: evaluationContextTokens })).digest("hex").slice(0, 12);
 const checkpointPath = resolve(outputRoot, `answers-checkpoint-${runKey}.json`);
@@ -64,9 +68,11 @@ const completedIds = new Set(completedResults.map((result) => result.id));
 if (completedResults.length) console.log(`Resuming from checkpoint: ${completedResults.length}/${cases.length} completed.`);
 const errorResults: AnswerEvaluationResult[] = [];
 const saveCheckpoint = () => {
+  profileMaintenance.assertCurrent();
   writePrivateJsonFileAtomic(checkpointPath, { fixturePath, model: evaluationModel, contextTokens: evaluationContextTokens, results: completedResults });
 };
 for (const [index, item] of cases.entries()) {
+  profileMaintenance.assertCurrent();
   if (completedIds.has(item.id)) {
     console.log(`SKIP ${index + 1}/${cases.length} ${item.id} (checkpointed)`);
     continue;
@@ -118,6 +124,7 @@ const summary = {
 const stamp = new Date().toISOString().replaceAll(/[:.]/g, "-");
 const modelSlug = evaluationModel.replaceAll(/[^a-zA-Z0-9]+/g, "-").replaceAll(/^-|-$/g, "").toLowerCase();
 const outputPath = resolve(outputRoot, `answers-${modelSlug}-${stamp}.json`);
+profileMaintenance.assertCurrent();
 writePrivateJsonFileAtomic(outputPath, { generatedAt: new Date().toISOString(), fixturePath, runtime: { model: evaluationModel, contextTokens: evaluationContextTokens }, summary, results });
 console.log("\nEnd-to-end answer quality summary");
 console.log(`Completed-case pass rate: ${(summary.passRate * 100).toFixed(1)}% (${summary.passed}/${summary.completedCases})`);
@@ -131,4 +138,9 @@ console.log(`Private result: ${outputPath}`);
 if (errorResults.length) {
   console.log(`${errorResults.length} case(s) ended with an execution error. Rerun the same command to resume and retry only unfinished cases.`);
   process.exitCode = 1;
-} else if (existsSync(checkpointPath)) unlinkSync(checkpointPath);
+} else if (existsSync(checkpointPath)) {
+  profileMaintenance.assertCurrent();
+  unlinkSync(checkpointPath);
+}
+closeKnowledgeDatabase();
+profileMaintenance.release();

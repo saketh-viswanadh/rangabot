@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { applyMemoryImport, maxMemoryImportBytes, previewMemoryImport } from "@/lib/memories";
 import { assertExternalImportAccess } from "@/lib/desktop-external-filesystem-policy";
+import { assertProfileAcceptsExternalUserData, StaleProfileRequestError, withProfileRequest } from "@/lib/profile-request";
 
 export const runtime = "nodejs";
 
@@ -23,13 +24,16 @@ async function readBoundedBody(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    assertExternalImportAccess("memory-import");
-    const text = await readBoundedBody(request);
-    const body = JSON.parse(text) as { action?: unknown; export?: unknown; replaceSourceIds?: unknown };
-    if (body.action === "preview") return NextResponse.json({ preview: previewMemoryImport(body.export) });
-    if (body.action === "apply") return NextResponse.json({ result: applyMemoryImport(body.export, body.replaceSourceIds) });
-    throw new Error("Choose preview or apply for the memory import.");
+    return await withProfileRequest(request, { kind: "import", label: "memory import" }, async () => {
+      assertProfileAcceptsExternalUserData();
+      assertExternalImportAccess("memory-import");
+      const text = await readBoundedBody(request);
+      const body = JSON.parse(text) as { action?: unknown; export?: unknown; replaceSourceIds?: unknown };
+      if (body.action === "preview") return NextResponse.json({ preview: previewMemoryImport(body.export) });
+      if (body.action === "apply") return NextResponse.json({ result: applyMemoryImport(body.export, body.replaceSourceIds) });
+      throw new Error("Choose preview or apply for the memory import.");
+    });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Memory import failed." }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Memory import failed." }, { status: error instanceof StaleProfileRequestError ? 409 : 400 });
   }
 }

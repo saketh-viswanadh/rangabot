@@ -5,6 +5,9 @@ import { selectRelevantMemoriesFrom } from "../lib/memories.ts";
 import { buildConversationMemoryQuery } from "../lib/conversation-orchestration.ts";
 import { compileAnswerContract } from "../lib/conversation-contract.ts";
 import { ensurePrivateDirectory, writePrivateJsonFileAtomic } from "../lib/private-storage.ts";
+import { acquireProfileMaintenanceBinding } from "../lib/profile-maintenance.ts";
+
+const profileMaintenance = acquireProfileMaintenanceBinding({ label: "Memory selection evaluation" });
 
 type Fixture = {
   id: string;
@@ -65,10 +68,13 @@ const results = fixtures.map((fixture) => {
 const precision = truePositive / Math.max(1, truePositive + falsePositive);
 const recall = truePositive / Math.max(1, truePositive + falseNegative);
 const summary = { suite, fixtures: fixtures.length, truePositive, falsePositive, falseNegative, precision, recall, passed: precision >= 0.95 && recall >= 0.90 && results.every((result) => result.passed), results };
-ensurePrivateDirectory(resolve("data/evaluations/results"));
-const output = resolve("data/evaluations/results", `memory-selection-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+const outputDirectory = profileMaintenance.dataPath("evaluations", "results");
+ensurePrivateDirectory(outputDirectory);
+const output = resolve(outputDirectory, `memory-selection-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+profileMaintenance.assertCurrent();
 writePrivateJsonFileAtomic(output, summary);
 console.log(`Memory selection ${suite.version}: precision ${(precision * 100).toFixed(1)}% (${truePositive}/${truePositive + falsePositive}), recall ${(recall * 100).toFixed(1)}% (${truePositive}/${truePositive + falseNegative})`);
 for (const result of results.filter((item) => !item.passed)) console.log(`FAIL ${result.id}: expected [${result.expected.join(", ")}], selected [${result.selected.join(", ")}]`);
 console.log(`Private synthetic result: ${output}`);
 if (!summary.passed) process.exitCode = 1;
+profileMaintenance.release();
