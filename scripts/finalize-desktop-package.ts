@@ -29,6 +29,7 @@ import {
   type DesktopArtifactFile,
   type DesktopArtifactTarget,
 } from "../lib/desktop-artifact-identity.ts";
+import { isForbiddenDesktopPrivateResourcePath } from "../lib/desktop-private-payload-policy.ts";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 const require = createRequire(import.meta.url);
@@ -96,13 +97,10 @@ function assertRequiredResources(files: readonly DesktopArtifactFile[], platform
   if (![...paths].some((path) => path.startsWith("rangabot-resources/.next/static/"))) {
     throw new Error("Final desktop package is missing Next static assets.");
   }
+  const resourcePrefix = "rangabot-resources/";
   const forbidden = [...paths].find((path) => /(^|\/)(?:\.git|\.env(?:\.|$)|tests?)(?:\/|$)/i.test(path)
-    || /(?:^|\/)(?:rangabot(?:-memory)?\.db|datasets\.json|repositories\.json|sql-confirmations\.json)(?:$|\/)/i.test(path)
-    || /(?:\.sqlite3?|\.duckdb|-wal|-shm|\.journal)$/i.test(path)
-    || /(?:\.gguf|\.ggml|\.safetensors)$/i.test(path)
-    || /(^|\/)\.ollama(?:\/|$)/i.test(path)
-    || /(^|\/)models\/(?:blobs|manifests)(?:\/|$)/i.test(path)
-    || /(?:^|\/)(?:artifacts|inbox|processed|indexes|backups|results)(?:\/|$)/i.test(path));
+    || (path.toLowerCase().startsWith(resourcePrefix)
+      && isForbiddenDesktopPrivateResourcePath(path.slice(resourcePrefix.length))));
   if (forbidden) throw new Error(`Final desktop package contains forbidden private/developer data: ${forbidden}.`);
 }
 

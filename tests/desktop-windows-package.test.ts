@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { handleSquirrelStartup, parseSquirrelStartupEvent } from "../desktop/electron/squirrel-lifecycle.ts";
+import { isForbiddenDesktopPrivateResourcePath } from "../lib/desktop-private-payload-policy.ts";
 import { assertStableRegularFileUnchanged, inspectStableRegularFile } from "../scripts/verify-windows-distributables.ts";
 
 const text = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -57,8 +58,37 @@ test("Windows package inputs are exact, platform-typed, and contain no model wei
   assert.match(prepare, /7b4f6ce09c1f2c3b21561b323779beaf3ca3c7012f8e4522605a13cbbb19f0b8/);
   assert.match(prepare, /ef0709cfa719739acce73de6f9b684304baf38c6454376638a70d34a7cecffe0/);
   assert.match(prepare, /ollama-windows-amd64\.zip/);
-  assert.match(prepare, /\.gguf\|\\\.ggml\|\\\.safetensors/);
+  assert.match(prepare, /isForbiddenDesktopPrivateResourcePath\(file\.path\)/);
+  assert.match(text("lib/desktop-private-payload-policy.ts"), /\.gguf\|\\\.ggml\|\\\.safetensors/);
   assert.match(prepare, /verification \? "packaged-resources-verification" : "packaged-resources", target\.platform, arch/);
+});
+
+test("desktop private-payload policy rejects storage roots without mistaking compiled routes for user data", () => {
+  for (const path of [
+    "artifacts/report.docx",
+    "data/artifacts/report.docx",
+    "data/knowledge/inbox/book.pdf",
+    "data/knowledge/indexes/knowledge.db",
+    "data/evaluations/results/run.json",
+    "knowledge/backups/knowledge.db",
+    ".ollama/models/blobs/sha256-secret",
+    "models/manifests/registry/model",
+    "weights/model.gguf",
+    "rangabot.db",
+  ]) assert.equal(isForbiddenDesktopPrivateResourcePath(path), true, path);
+  for (const path of [
+    ".next/server/app/api/artifacts/word/[id]/document/route.js",
+    ".next/server/app/api/repositories/[id]/search/route.js",
+    ".next/server/chunks/results/runtime.js",
+    "data/knowledge/NEW_THIS_WEEK.md",
+    "data/knowledge/NEW_THIS_MONTH.md",
+    "data/knowledge/SOURCE_MANIFEST.json",
+    "data/knowledge/evaluations/starter.json",
+    "runtime/ollama/ollama.exe",
+  ]) assert.equal(isForbiddenDesktopPrivateResourcePath(path), false, path);
+  const finalizer = text("scripts/finalize-desktop-package.ts");
+  assert.match(finalizer, /path\.toLowerCase\(\)\.startsWith\(resourcePrefix\)/);
+  assert.match(finalizer, /isForbiddenDesktopPrivateResourcePath\(path\.slice\(resourcePrefix\.length\)\)/);
 });
 
 test("Forge creates Windows ZIP and per-user Squirrel outputs with the Windows icon and PE fuse target", () => {
@@ -209,7 +239,7 @@ test("Windows finalizer seals PE/native/fuse evidence but keeps unsigned candida
   assert.match(finalizer, /assertWindowsPeCertificateTableAbsent\(executable, "Final RangaBot\.exe"\)/);
   assert.match(finalizer, /runtime\/ollama\/ollama\.exe/);
   assert.match(finalizer, /node\|dll\|so\|dylib\|exe/);
-  assert.match(finalizer, /\.gguf\|\\\.ggml\|\\\.safetensors/);
+  assert.match(finalizer, /isForbiddenDesktopPrivateResourcePath/);
   const verifier = text("scripts/verify-windows-distributables.ts");
   assert.match(verifier, /applicationEmbeddedPeCertificateTable/);
   assert.doesNotMatch(`${finalizer}\n${verifier}`, /Get-AuthenticodeSignature|powershell\.exe|applicationSignatureStatus/);

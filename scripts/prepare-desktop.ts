@@ -27,6 +27,7 @@ import {
   type DesktopNativeModuleVersion,
   type DesktopWebFeedbackIdentity,
 } from "../lib/desktop-artifact-identity.ts";
+import { isForbiddenDesktopPrivateResourcePath } from "../lib/desktop-private-payload-policy.ts";
 import {
   desktopLaunchProfileForBuild,
   DESKTOP_FINDER_VERIFICATION_BUILD_PROFILE,
@@ -343,24 +344,12 @@ function materializeSafeStagedSymlinks(directory: string, resourceRoot: string) 
 }
 
 function assertNoPrivatePayload(files: readonly DesktopArtifactFile[]) {
-  const allowedDataFiles = new Set([
-    "data/knowledge/NEW_THIS_WEEK.md",
-    "data/knowledge/NEW_THIS_MONTH.md",
-    "data/knowledge/SOURCE_MANIFEST.json",
-    "data/knowledge/evaluations/starter.json",
-  ]);
   const forbidden = files.find((file) => {
     const lower = file.path.toLowerCase();
     return /(^|\/)(?:\.git|\.env(?:\.|$)|tests?)(?:\/|$)/.test(lower)
       || /^(?:out|desktop)(?:\/|$)/.test(lower)
       || lower === "tsconfig.json"
-      || (/^data\//.test(lower) && !allowedDataFiles.has(file.path))
-      || /(?:^|\/)(?:rangabot(?:-memory)?\.db|datasets\.json|repositories\.json|sql-confirmations\.json)(?:$|\/)/.test(lower)
-      || /(?:\.sqlite3?|\.duckdb|-wal|-shm|\.journal)$/.test(lower)
-      || /(?:\.gguf|\.ggml|\.safetensors)$/.test(lower)
-      || /(^|\/)\.ollama(?:\/|$)/.test(lower)
-      || /(^|\/)models\/(?:blobs|manifests)(?:\/|$)/.test(lower)
-      || /^(?:artifacts|inbox|processed|indexes|backups|results)(?:\/|$)/.test(lower);
+      || isForbiddenDesktopPrivateResourcePath(file.path);
   });
   if (forbidden) throw new Error(`Desktop resource payload contains a forbidden private/developer path: ${forbidden.path}.`);
 }
