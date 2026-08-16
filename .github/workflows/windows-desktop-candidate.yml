@@ -1,0 +1,77 @@
+name: Windows desktop candidate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [agent/windows-desktop-package-2026-08-16]
+    paths:
+      - ".github/workflows/windows-desktop-candidate.yml"
+      - "desktop/**"
+      - "forge.config.cjs"
+      - "lib/desktop-artifact-identity.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/finalize-desktop-package.ts"
+      - "scripts/prepare-desktop.ts"
+      - "scripts/verify-windows-distributables.ts"
+      - "tests/desktop-windows-package.test.ts"
+      - "tests/model-runtime.test.ts"
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - ".github/workflows/windows-desktop-candidate.yml"
+      - "desktop/**"
+      - "forge.config.cjs"
+      - "lib/desktop-artifact-identity.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/finalize-desktop-package.ts"
+      - "scripts/prepare-desktop.ts"
+      - "scripts/verify-windows-distributables.ts"
+      - "tests/desktop-windows-package.test.ts"
+      - "tests/model-runtime.test.ts"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-desktop-candidate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build and verify unsigned win32-x64 candidate
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm audit --omit=dev
+      - run: npm run desktop:make:windows:x64
+      - run: node --experimental-strip-types scripts/verify-windows-distributables.ts
+        env:
+          RANGABOT_EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Print candidate evidence summary
+        shell: pwsh
+        run: |
+          Get-Content desktop/out/desktop-artifact-win32-x64.json | ConvertFrom-Json | Select-Object desktopArtifactId,target,packagingTooling | ConvertTo-Json -Depth 8
+          Get-Content desktop/out/windows-distributables-win32-x64.json
+      - name: Retain exact public-safe candidate evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: RangaBot-windows-x64-unsigned-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            desktop/out/desktop-artifact-win32-x64.json
+            desktop/out/windows-distributables-win32-x64.json
+          if-no-files-found: error
+          retention-days: 7

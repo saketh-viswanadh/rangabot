@@ -248,7 +248,7 @@ untouched, and the shared synthetic model marker hash does not change.
 ## Candidate limits and release gate
 
 The unsigned arm64 development package uses the explicitly named
-`electron-43-arm64-launchable-v1` fuse policy. Its required V1 wire is
+`electron-43-hardened-v2` fuse policy. Its required V1 wire is
 `010011001`: index 6, `LoadBrowserProcessSpecificV8Snapshot`, remains disabled.
 The Electron 43 arm64 payload does not include
 `browser_v8_context_snapshot.bin`, and prior native launch testing found that

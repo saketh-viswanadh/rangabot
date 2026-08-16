@@ -21,6 +21,7 @@ import {
   type VerifiedDesktopResources,
 } from "./startup-verification.ts";
 import { prepareDesktopStartupProfileBeforeLock, type PreparedDesktopStartupProfile } from "./verification-profile.ts";
+import { handleSquirrelStartup, parseSquirrelStartupEvent } from "./squirrel-lifecycle.ts";
 
 const PRELOAD_PATH = join(import.meta.dirname, "preload.cjs");
 const STARTUP_TIMEOUT_MS = 30_000;
@@ -254,6 +255,8 @@ export async function startDesktopRuntime(input: {
   return Object.freeze({ state, stop: () => stopRuntime(state) });
 }
 
+const squirrelStartupEvent = process.platform === "win32" ? parseSquirrelStartupEvent(process.argv) : null;
+
 let initialVerification: VerifiedDesktopResources | undefined;
 let initialProfile: PreparedDesktopStartupProfile | undefined;
 let startupPreludeStage: DesktopStartupStage = "S10_ARTIFACT_VERIFY";
@@ -269,12 +272,17 @@ try {
   });
   const launchProfile = initialVerification.artifact.manifest?.launchProfile;
   if (!launchProfile) throw new Error("The verified desktop artifact has no sealed launch profile.");
-  startupPreludeStage = "S20_PROFILE_BIND";
-  emitStartupStage(startupPreludeStage);
-  initialProfile = prepareDesktopStartupProfileBeforeLock({
-    electronApp: app,
-    launchProfile,
-  });
+  if (squirrelStartupEvent) {
+    handleSquirrelStartup({ event: squirrelStartupEvent, exit: (code) => app.exit(code) });
+    initialVerification = undefined;
+  } else {
+    startupPreludeStage = "S20_PROFILE_BIND";
+    emitStartupStage(startupPreludeStage);
+    initialProfile = prepareDesktopStartupProfileBeforeLock({
+      electronApp: app,
+      launchProfile,
+    });
+  }
 } catch {
   emitStartupStage(startupPreludeStage, true);
   // Reject an untrusted app without resolving private paths, presenting UI or
@@ -283,6 +291,7 @@ try {
 }
 
 if (initialVerification && initialProfile) {
+  if (process.platform === "win32") app.setAppUserModelId("com.squirrel.RangaBot.RangaBot");
   emitStartupStage("S30_SANDBOX_ENABLE");
   app.enableSandbox();
   emitStartupStage("S40_LOCK_REQUEST");

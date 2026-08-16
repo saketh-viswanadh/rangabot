@@ -12,6 +12,7 @@ import {
   DESKTOP_SOURCE_BASE_COMMIT,
   DESKTOP_SOURCE_BASELINE_COMMIT,
   DESKTOP_FUSE_BINARY_PATH,
+  WINDOWS_DESKTOP_FUSE_BINARY_PATH,
   REQUIRED_DESKTOP_FUSE_NAMES,
   REQUIRED_DESKTOP_FUSE_POLICY,
   REQUIRED_DESKTOP_FUSE_WIRE_STATES,
@@ -59,6 +60,25 @@ function runtimeEvidence(arch: DesktopArtifactArch): DesktopRuntimeEvidence {
   };
 }
 
+function windowsNativeModules(): DesktopNativeModuleVersion[] {
+  return [
+    { name: "sqlite-vec", version: "0.1.9" },
+    { name: "sqlite-vec-windows-x64", version: "0.1.9" },
+    { name: "@duckdb/node-api", version: "1.5.4-r.1" },
+    { name: "@duckdb/node-bindings-win32-x64", version: "1.5.4-r.1" },
+    { name: "@duckdb/node-bindings", version: "1.5.4-r.1" },
+  ];
+}
+
+function syntheticPeX64() {
+  const source = Buffer.alloc(192);
+  source.writeUInt16LE(0x5a4d, 0);
+  source.writeUInt32LE(128, 0x3c);
+  source.writeUInt32LE(0x00004550, 128);
+  source.writeUInt16LE(0x8664, 132);
+  return source;
+}
+
 function writeFixtureFile(root: string, path: string, content: string | Buffer) {
   const destination = join(root, ...path.split("/"));
   mkdirSync(dirname(destination), { recursive: true });
@@ -94,6 +114,22 @@ function createResourceFixture(arch: DesktopArtifactArch = "arm64") {
   const natives = resources.filter((file) => /\.(?:node|dylib)$/.test(file.path));
   const bundleFiles = collectDesktopBundleFiles(contentsRoot);
   return { cleanupRoot, root, contentsRoot, resources, natives, bundleFiles, arch };
+}
+
+function createWindowsResourceFixture() {
+  const cleanupRoot = mkdtempSync(join(tmpdir(), "rangabot-desktop-win32-identity-"));
+  const root = join(cleanupRoot, "resources");
+  writeFixtureFile(root, "app.asar", "synthetic packaged app\n");
+  writeFixtureFile(root, "app.asar.unpacked/node_modules/@duckdb/node-bindings-win32-x64/duckdb.node", syntheticPeX64());
+  writeFixtureFile(root, "app.asar.unpacked/node_modules/@duckdb/node-bindings-win32-x64/duckdb.dll", syntheticPeX64());
+  writeFixtureFile(root, "app.asar.unpacked/node_modules/sqlite-vec-windows-x64/vec0.dll", syntheticPeX64());
+  writeFixtureFile(root, "rangabot-resources/runtime/ollama/ollama.exe", syntheticPeX64());
+  writeFixtureFile(cleanupRoot, "RangaBot.exe", syntheticPeX64());
+  writeFixtureFile(cleanupRoot, "chrome_elf.dll", syntheticPeX64());
+  const resources = collectDesktopArtifactFiles(root);
+  const natives = resources.filter((file) => /\.(?:node|dll|exe)$/i.test(file.path));
+  const bundleFiles = collectDesktopBundleFiles(cleanupRoot, "win32");
+  return { cleanupRoot, root, resources, natives, bundleFiles };
 }
 
 test("bundle identity binds launcher code without creating a signature-manifest cycle", () => {
@@ -277,7 +313,7 @@ test("installed verification is known without Git or cwd discovery and exposes a
     assert.equal(verified.artifactSha256, manifest.desktopArtifactId);
     assert.equal(verified.manifestSha256, manifest.sourceManifestSha256);
     assert.equal(verified.baseCommit, manifest.sourceCommit);
-    assert.equal(verified.build, `0.1.0+desktop.${fixture.arch}.${manifest.desktopArtifactId.slice(0, 12)}`);
+    assert.equal(verified.build, `0.1.0+desktop.darwin.${fixture.arch}.${manifest.desktopArtifactId.slice(0, 12)}`);
     assert.deepEqual(requireKnownDesktopArtifact({
       resourceRoot: fixture.root,
       manifestPath,
@@ -301,12 +337,58 @@ test("x64 identities accept only the independently inventoried x64 native chain"
     writeFileSync(manifestPath, JSON.stringify(manifest));
     const verified = inspectDesktopArtifact({ resourceRoot: fixture.root, manifestPath, runtime: runtimeEvidence("x64") });
     assert.equal(verified.state, "known");
-    assert.match(verified.build ?? "", /\+desktop\.x64\.[0-9a-f]{12}$/);
+    assert.match(verified.build ?? "", /\+desktop\.darwin\.x64\.[0-9a-f]{12}$/);
     assert.equal(inspectDesktopArtifact({
       resourceRoot: fixture.root,
       manifestPath,
       runtime: runtimeEvidence("arm64"),
     }).reason, "runtime-mismatch");
+  } finally {
+    rmSync(fixture.cleanupRoot, { recursive: true, force: true });
+  }
+});
+
+test("exact unsigned Windows x64 artifacts are launchable but never release-known", () => {
+  const fixture = createWindowsResourceFixture();
+  const manifestPath = join(fixture.root, "rangabot-desktop-artifact.json");
+  try {
+    const base = manifestInput("x64", fixture.bundleFiles, fixture.resources, fixture.natives);
+    const windowsInput: DesktopArtifactManifestInput = {
+      ...base,
+      runtimeVersions: { ...base.runtimeVersions, nativeModules: windowsNativeModules() },
+      target: { platform: "win32", arch: "x64" },
+      packagingTooling: {
+        ...base.packagingTooling,
+        fuseInspection: { ...base.packagingTooling.fuseInspection, inspectedPath: WINDOWS_DESKTOP_FUSE_BINARY_PATH },
+        signature: { mode: "unsigned-candidate", postFuseMutation: true, deepStrictVerified: false },
+      },
+    };
+    const manifest = createDesktopArtifactManifest(windowsInput);
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const runtime: DesktopRuntimeEvidence = {
+      platform: "win32",
+      arch: "x64",
+      electron: "43.4.0",
+      embeddedNode: "24.13.1",
+      next: "16.2.12",
+      nativeModules: windowsNativeModules(),
+    };
+    const verified = inspectDesktopArtifact({ resourceRoot: fixture.root, manifestPath, runtime });
+    assert.equal(verified.state, "dirty");
+    assert.equal(verified.reason, "distribution-unsigned");
+    assert.ok(manifest.natives.some((file) => file.path.endsWith("runtime/ollama/ollama.exe")));
+    assert.match(verified.manifest?.packagingTooling.fuseInspection.inspectedPath ?? "", /RangaBot\.exe$/);
+    assert.throws(() => requireKnownDesktopArtifact({ resourceRoot: fixture.root, manifestPath, runtime }), /distribution-unsigned/);
+
+    const staged = createDesktopArtifactManifest({
+      ...windowsInput,
+      packagingTooling: {
+        ...windowsInput.packagingTooling,
+        signature: { mode: "unsigned-candidate", postFuseMutation: false, deepStrictVerified: false },
+      },
+    });
+    writeFileSync(manifestPath, `${JSON.stringify(staged, null, 2)}\n`);
+    assert.equal(inspectDesktopArtifact({ resourceRoot: fixture.root, manifestPath, runtime }).reason, "manifest-invalid");
   } finally {
     rmSync(fixture.cleanupRoot, { recursive: true, force: true });
   }
