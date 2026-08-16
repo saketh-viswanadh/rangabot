@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import {
   closeSync,
   constants,
@@ -11,11 +11,18 @@ import {
   writeFileSync,
   type BigIntStats,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseDesktopArtifactManifest } from "../lib/desktop-artifact-identity.ts";
 
 const projectRoot = resolve(import.meta.dirname, "..");
+const require = createRequire(import.meta.url);
+const { assertWindowsPeCertificateTableAbsent } = require("../desktop/electron/windows-pe-certificate.cjs") as {
+  assertWindowsPeCertificateTableAbsent(path: string, label?: string): Readonly<{
+    embeddedPeCertificateTable: "absent";
+  }>;
+};
 const maximumReleaseAssetBytes = 2 * 1024 * 1024 * 1024;
 const maximumManifestBytes = 4 * 1024 * 1024;
 
@@ -120,23 +127,6 @@ export function assertStableRegularFileUnchanged(pathInput: string, evidence: St
   if (!sameIdentity(evidence.identity, fileIdentity(current))) throw new Error(`${label} changed after it was inspected.`);
 }
 
-function authenticodeStatus(path: string) {
-  const result = spawnSync("powershell.exe", [
-    "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-    "(Get-AuthenticodeSignature -LiteralPath $env:RANGABOT_SIGNATURE_PATH).Status.ToString()",
-  ], {
-    encoding: "utf8",
-    env: { ...process.env, RANGABOT_SIGNATURE_PATH: path },
-    windowsHide: true,
-    timeout: 10_000,
-  });
-  const status = result.stdout.trim();
-  if (result.error || result.signal || result.status !== 0 || !status) {
-    throw new Error(`Authenticode inspection failed for ${path}.`);
-  }
-  return status;
-}
-
 export async function verifyWindowsDistributables() {
   const expectedPaths = [
     "out/make/squirrel.windows/x64/RangaBot-win32-x64-Setup.exe",
@@ -148,25 +138,24 @@ export async function verifyWindowsDistributables() {
   for (const path of files.sort()) {
     const label = `Windows distributable ${relative(projectRoot, path)}`;
     const inspected = inspectStableRegularFile(path, { label, maximumBytes: maximumReleaseAssetBytes });
-    const signatureStatus = /\.exe$/i.test(path) ? authenticodeStatus(path) : null;
+    const embeddedPeCertificateTable = /\.exe$/i.test(path)
+      ? assertWindowsPeCertificateTableAbsent(path, label).embeddedPeCertificateTable
+      : null;
     assertStableRegularFileUnchanged(path, inspected, label);
-    if (/Setup\.exe$/i.test(path) && signatureStatus !== "NotSigned") {
-      throw new Error(`Unsigned candidate Setup.exe has unexpected Authenticode status ${signatureStatus}.`);
-    }
     evidence.push({
       path: relative(projectRoot, path).replaceAll("\\", "/"),
       bytes: inspected.bytes,
       sha256: inspected.sha256,
-      signatureStatus,
+      embeddedPeCertificateTable,
     });
   }
   const applicationPath = resolve(projectRoot, "out", "RangaBot-win32-x64", "RangaBot.exe");
   const applicationEvidence = inspectStableRegularFile(applicationPath, { label: "Packaged RangaBot.exe" });
-  const applicationSignatureStatus = authenticodeStatus(applicationPath);
+  const applicationEmbeddedPeCertificateTable = assertWindowsPeCertificateTableAbsent(
+    applicationPath,
+    "Packaged RangaBot.exe",
+  ).embeddedPeCertificateTable;
   assertStableRegularFileUnchanged(applicationPath, applicationEvidence, "Packaged RangaBot.exe");
-  if (applicationSignatureStatus !== "NotSigned") {
-    throw new Error(`Unsigned candidate RangaBot.exe has unexpected Authenticode status ${applicationSignatureStatus}.`);
-  }
   const manifestPath = resolve(projectRoot, "desktop", "out", "desktop-artifact-win32-x64.json");
   const manifestEvidence = inspectStableRegularFile(manifestPath, {
     label: "External Windows artifact manifest",
@@ -196,7 +185,7 @@ export async function verifyWindowsDistributables() {
     applicationPath: relative(projectRoot, applicationPath).replaceAll("\\", "/"),
     applicationBytes: applicationEvidence.bytes,
     applicationSha256: applicationEvidence.sha256,
-    applicationSignatureStatus,
+    applicationEmbeddedPeCertificateTable,
     files: evidence,
   }, null, 2)}\n`);
   console.log(JSON.stringify({ evidencePath: output, files: evidence }, null, 2));

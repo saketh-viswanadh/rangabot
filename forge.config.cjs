@@ -4,8 +4,9 @@ const { spawnSync } = require("node:child_process");
 const { MakerDMG } = require("@electron-forge/maker-dmg");
 const { MakerSquirrel } = require("@electron-forge/maker-squirrel");
 const { MakerZIP } = require("@electron-forge/maker-zip");
-const { flipFuses, getCurrentFuseWire, FuseVersion, FuseV1Options } = require("@electron/fuses");
+const { flipFuses, FuseVersion, FuseV1Options } = require("@electron/fuses");
 const { hardenPackagedMacOSInfoPlist } = require("./desktop/electron/macos-plist-policy.cjs");
+const { assertWindowsPeCertificateTableAbsent } = require("./desktop/electron/windows-pe-certificate.cjs");
 
 const FUSE_POLICY_NAME = "electron-43-hardened-v2";
 
@@ -64,60 +65,6 @@ function electronExecutableFromBuildPath(buildPath) {
   return path.resolve(buildPath, "..", "..", "MacOS", "Electron");
 }
 
-function windowsSignTool() {
-  const programFiles = process.env["ProgramFiles(x86)"];
-  if (!programFiles) throw new Error("Windows SDK discovery requires ProgramFiles(x86).");
-  const binRoot = path.join(programFiles, "Windows Kits", "10", "bin");
-  const versions = fs.readdirSync(binRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && /^10\.\d+(?:\.\d+){2}$/.test(entry.name))
-    .map((entry) => entry.name)
-    .sort((left, right) => right.localeCompare(left, "en", { numeric: true }));
-  const selected = versions.map((version) => path.join(binRoot, version, "x64", "signtool.exe"))
-    .find((candidate) => fs.existsSync(candidate));
-  if (!selected) throw new Error("A Windows 10/11 SDK x64 SignTool is required to remove Electron's invalidated signature.");
-  return selected;
-}
-
-function numericFuseStates(wire) {
-  return Object.keys(wire).filter((key) => /^\d+$/.test(key)).map(Number).sort((left, right) => left - right)
-    .map((key) => Number(wire[key]));
-}
-
-function windowsAuthenticodeStatus(executable) {
-  const result = spawnSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-    "(Get-AuthenticodeSignature -LiteralPath $env:RANGABOT_SIGNATURE_PATH).Status.ToString()"], {
-    encoding: "utf8",
-    env: { ...process.env, RANGABOT_SIGNATURE_PATH: executable },
-    windowsHide: true,
-    timeout: 10_000,
-  });
-  if (result.error) throw result.error;
-  if (result.signal || result.status !== 0) throw new Error("Windows Authenticode inspection failed.");
-  return result.stdout.trim();
-}
-
-async function normalizeWindowsUnsignedExecutable(executable) {
-  const status = windowsAuthenticodeStatus(executable);
-  if (status === "NotSigned") return;
-  if (status !== "HashMismatch") {
-    throw new Error(`RangaBot.exe must be exactly Authenticode NotSigned after fuse mutation; found ${status || "unavailable"}.`);
-  }
-  const before = numericFuseStates(await getCurrentFuseWire(executable));
-  const result = spawnSync(windowsSignTool(), ["remove", "/s", "/q", executable], {
-    stdio: "inherit",
-    windowsHide: true,
-    timeout: 30_000,
-  });
-  if (result.error) throw result.error;
-  if (result.status !== 0 || result.signal) throw new Error("Windows SDK SignTool failed to remove the invalidated Electron signature.");
-  const after = numericFuseStates(await getCurrentFuseWire(executable));
-  if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error("Authenticode removal changed the Electron fuse wire.");
-  const normalizedStatus = windowsAuthenticodeStatus(executable);
-  if (normalizedStatus !== "NotSigned") {
-    throw new Error(`RangaBot.exe must be exactly Authenticode NotSigned after signature normalization; found ${normalizedStatus || "unavailable"}.`);
-  }
-}
-
 function runFinalizer(packageResult) {
   if (packageResult.platform === "darwin") {
     for (const outputPath of packageResult.outputPaths) hardenPackagedMacOSInfoPlist(outputPath);
@@ -139,7 +86,7 @@ async function finalizePackagedExecutables(packageResult) {
       const executable = path.resolve(outputPath, "RangaBot.exe");
       if (!fs.existsSync(executable)) throw new Error("Final Windows package is missing RangaBot.exe before fuse mutation.");
       await flipFuses(executable, { ...fuseConfiguration, resetAdHocDarwinSignature: false });
-      await normalizeWindowsUnsignedExecutable(executable);
+      assertWindowsPeCertificateTableAbsent(executable, "Fuse-mutated RangaBot.exe");
     }
   }
   runFinalizer(packageResult);

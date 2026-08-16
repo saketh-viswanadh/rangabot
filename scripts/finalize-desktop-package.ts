@@ -11,6 +11,7 @@ import {
   renameSync,
   writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import { FuseState, FuseV1Options, FuseVersion, getCurrentFuseWire } from "@electron/fuses";
 import {
@@ -30,6 +31,12 @@ import {
 } from "../lib/desktop-artifact-identity.ts";
 
 const projectRoot = resolve(import.meta.dirname, "..");
+const require = createRequire(import.meta.url);
+const { assertWindowsPeCertificateTableAbsent } = require("../desktop/electron/windows-pe-certificate.cjs") as {
+  assertWindowsPeCertificateTableAbsent(path: string, label?: string): Readonly<{
+    embeddedPeCertificateTable: "absent";
+  }>;
+};
 
 function parseArguments(arguments_: string[]) {
   const archValues = arguments_.filter((value) => value.startsWith("--arch=")).map((value) => value.slice(7));
@@ -184,22 +191,6 @@ function assertPeX64(path: string) {
   }
 }
 
-function assertWindowsAuthenticodeNotSigned(path: string) {
-  const result = spawnSync("powershell.exe", [
-    "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-    "(Get-AuthenticodeSignature -LiteralPath $env:RANGABOT_SIGNATURE_PATH).Status.ToString()",
-  ], {
-    encoding: "utf8",
-    env: { ...process.env, RANGABOT_SIGNATURE_PATH: path },
-    windowsHide: true,
-    timeout: 10_000,
-  });
-  const status = result.stdout.trim();
-  if (result.error || result.signal || result.status !== 0 || status !== "NotSigned") {
-    throw new Error(`RangaBot.exe must be exactly Authenticode NotSigned; found ${status || "unavailable"}.`);
-  }
-}
-
 function assertMachOArchitecture(path: string, arch: DesktopArtifactArch) {
   const reported = execFileSync("/usr/bin/lipo", ["-archs", path], { encoding: "utf8" }).trim().split(/\s+/);
   const expected = arch === "x64" ? "x86_64" : "arm64";
@@ -279,7 +270,7 @@ async function finalizeWindows(output: string, target: DesktopArtifactTarget) {
   }
   const executable = join(appPath, "RangaBot.exe");
   assertPeX64(executable);
-  assertWindowsAuthenticodeNotSigned(executable);
+  assertWindowsPeCertificateTableAbsent(executable, "Final RangaBot.exe");
   for (const native of natives) assertPeX64(join(artifactRoot, ...native.path.split("/")));
   const wire = await assertFuses(executable, target);
   const bundleFiles = collectDesktopBundleFiles(appPath, "win32");

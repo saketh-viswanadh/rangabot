@@ -19,11 +19,13 @@ The official Windows runtime archive is about 1.36 GB before packaging because i
 ## Reproducible build route
 
 Run on a clean Windows x64 host with Node 24. After Electron fuses are flipped,
-the build requires Authenticode status `NotSigned` before sealing the candidate.
-The pinned Electron archive is already unsigned, so its normal path does not
-alter a signature. If a future input reports `HashMismatch`, the build uses the
-Windows 10/11 SDK x64 SignTool to remove only that invalidated signature,
-rechecks all nine fuses, and again requires `NotSigned`:
+the build parses the PE header directly and requires the embedded certificate
+table to be absent before sealing the candidate. The pinned Electron archive
+has no embedded PE certificate table. Any future input with one fails
+closed and requires an explicit signing-policy review; the candidate build does
+not silently strip or rewrite signatures. This byte-level check does not claim
+that the host has no external catalog association, and it is not a substitute
+for final Authenticode signing and clean-machine trust testing:
 
 ```powershell
 npm ci

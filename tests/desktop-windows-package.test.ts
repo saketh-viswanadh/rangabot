@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -7,6 +8,46 @@ import { handleSquirrelStartup, parseSquirrelStartupEvent } from "../desktop/ele
 import { assertStableRegularFileUnchanged, inspectStableRegularFile } from "../scripts/verify-windows-distributables.ts";
 
 const text = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const require = createRequire(import.meta.url);
+const {
+  assertWindowsPeCertificateTableAbsent,
+  inspectWindowsPeCertificateTable,
+  inspectWindowsPeCertificateTableBuffer,
+} = require("../desktop/electron/windows-pe-certificate.cjs") as {
+  assertWindowsPeCertificateTableAbsent(path: string, label?: string): Readonly<{ embeddedPeCertificateTable: "absent" }>;
+  inspectWindowsPeCertificateTable(path: string, label?: string): Readonly<{ embeddedPeCertificateTable: "absent" | "present" }>;
+  inspectWindowsPeCertificateTableBuffer(source: Buffer, label?: string): Readonly<{
+    format: "PE32" | "PE32+";
+    embeddedPeCertificateTable: "absent" | "present";
+  }>;
+};
+
+function syntheticWindowsPe(input: {
+  format?: "PE32" | "PE32+";
+  directoryCount?: number;
+  certificateTableOffset?: number;
+  certificateTableBytes?: number;
+} = {}) {
+  const format = input.format ?? "PE32+";
+  const source = Buffer.alloc(1024);
+  const peOffset = 128;
+  const optionalHeaderOffset = peOffset + 24;
+  const directoryCountOffset = format === "PE32+" ? 108 : 92;
+  const directoryStartOffset = format === "PE32+" ? 112 : 96;
+  source.writeUInt16LE(0x5a4d, 0);
+  source.writeUInt32LE(peOffset, 0x3c);
+  source.writeUInt32LE(0x00004550, peOffset);
+  source.writeUInt16LE(format === "PE32+" ? 0x8664 : 0x014c, peOffset + 4);
+  source.writeUInt16LE(format === "PE32+" ? 240 : 224, peOffset + 20);
+  source.writeUInt16LE(format === "PE32+" ? 0x20b : 0x10b, optionalHeaderOffset);
+  const directoryCount = input.directoryCount ?? 16;
+  source.writeUInt32LE(directoryCount, optionalHeaderOffset + directoryCountOffset);
+  if (directoryCount > 4) {
+    source.writeUInt32LE(input.certificateTableOffset ?? 0, optionalHeaderOffset + directoryStartOffset + 32);
+    source.writeUInt32LE(input.certificateTableBytes ?? 0, optionalHeaderOffset + directoryStartOffset + 36);
+  }
+  return source;
+}
 
 test("Windows package inputs are exact, platform-typed, and contain no model weights", () => {
   const packageRecord = JSON.parse(text("package.json")) as { devDependencies: Record<string, string>; scripts: Record<string, string> };
@@ -28,10 +69,8 @@ test("Forge creates Windows ZIP and per-user Squirrel outputs with the Windows i
   assert.match(forge, /path\.resolve\(outputPath, "RangaBot\.exe"\)/);
   assert.match(forge, /packageAfterCopy:[\s\S]*if \(platform === "darwin"\)/);
   assert.match(forge, /postPackage:[\s\S]*finalizePackagedExecutables/);
-  assert.match(forge, /if \(status === "NotSigned"\) return/);
-  assert.match(forge, /status !== "HashMismatch"/);
-  assert.match(forge, /windowsSignTool\(\), \["remove", "\/s", "\/q", executable\]/);
-  assert.match(forge, /Authenticode removal changed the Electron fuse wire/);
+  assert.match(forge, /assertWindowsPeCertificateTableAbsent\(executable, "Fuse-mutated RangaBot\.exe"\)/);
+  assert.doesNotMatch(forge, /Get-AuthenticodeSignature|powershell\.exe|signtool|HashMismatch/);
   const icon = readFileSync(new URL("../desktop/assets/rangabot.ico", import.meta.url));
   assert.equal(icon.readUInt16LE(0), 0);
   assert.equal(icon.readUInt16LE(2), 1);
@@ -94,15 +133,86 @@ test("Squirrel shortcut lifecycle handles install, update, uninstall, and failur
   assert.equal(exitCode, 1);
 });
 
+test("Windows unsigned policy directly rejects embedded PE certificate tables", () => {
+  assert.equal(inspectWindowsPeCertificateTableBuffer(syntheticWindowsPe()).embeddedPeCertificateTable, "absent");
+  assert.equal(inspectWindowsPeCertificateTableBuffer(syntheticWindowsPe({ format: "PE32" })).format, "PE32");
+  assert.equal(inspectWindowsPeCertificateTableBuffer(syntheticWindowsPe({ directoryCount: 4 })).embeddedPeCertificateTable, "absent");
+  const present = syntheticWindowsPe({ certificateTableOffset: 768, certificateTableBytes: 32 });
+  assert.equal(inspectWindowsPeCertificateTableBuffer(present).embeddedPeCertificateTable, "present");
+  assert.throws(
+    () => inspectWindowsPeCertificateTableBuffer(syntheticWindowsPe({ certificateTableOffset: 768, certificateTableBytes: 0 })),
+    /inconsistent embedded certificate-table entry/,
+  );
+  assert.throws(
+    () => inspectWindowsPeCertificateTableBuffer(syntheticWindowsPe({ certificateTableOffset: 0, certificateTableBytes: 32 })),
+    /inconsistent embedded certificate-table entry/,
+  );
+  assert.throws(
+    () => inspectWindowsPeCertificateTableBuffer(syntheticWindowsPe({ certificateTableOffset: 769, certificateTableBytes: 32 })),
+    /malformed embedded certificate table/,
+  );
+  assert.throws(
+    () => inspectWindowsPeCertificateTableBuffer(syntheticWindowsPe({ certificateTableOffset: 768, certificateTableBytes: 4 })),
+    /malformed embedded certificate table/,
+  );
+  assert.throws(
+    () => inspectWindowsPeCertificateTableBuffer(syntheticWindowsPe({ certificateTableOffset: 1000, certificateTableBytes: 32 })),
+    /out-of-bounds embedded certificate table/,
+  );
+  const wrongMachine = syntheticWindowsPe();
+  wrongMachine.writeUInt16LE(0xaa64, 132);
+  assert.throws(() => inspectWindowsPeCertificateTableBuffer(wrongMachine), /unsupported PE machine/);
+  const badMz = syntheticWindowsPe();
+  badMz.writeUInt16LE(0, 0);
+  assert.throws(() => inspectWindowsPeCertificateTableBuffer(badMz), /missing the MZ header/);
+  const badPe = syntheticWindowsPe();
+  badPe.writeUInt32LE(0, 128);
+  assert.throws(() => inspectWindowsPeCertificateTableBuffer(badPe), /missing the PE signature/);
+  const unsupportedMagic = syntheticWindowsPe();
+  unsupportedMagic.writeUInt16LE(0x107, 152);
+  assert.throws(() => inspectWindowsPeCertificateTableBuffer(unsupportedMagic), /unsupported PE optional-header format/);
+  const wrongMagic = syntheticWindowsPe();
+  wrongMagic.writeUInt16LE(0x10b, 152);
+  assert.throws(() => inspectWindowsPeCertificateTableBuffer(wrongMagic), /inconsistent PE machine/);
+  const truncatedOptionalHeader = syntheticWindowsPe();
+  truncatedOptionalHeader.writeUInt16LE(110, 148);
+  assert.throws(() => inspectWindowsPeCertificateTableBuffer(truncatedOptionalHeader), /complete data-directory count/);
+  const overlappingHeader = syntheticWindowsPe();
+  overlappingHeader.writeUInt32LE(2, 0x3c);
+  assert.throws(() => inspectWindowsPeCertificateTableBuffer(overlappingHeader), /out-of-bounds PE header/);
+  assert.throws(
+    () => inspectWindowsPeCertificateTableBuffer(syntheticWindowsPe({ directoryCount: 17 })),
+    /data directories outside its optional header/,
+  );
+
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "rangabot-pe-certificate-")));
+  const unsignedPath = join(root, "unsigned.exe");
+  const signedPath = join(root, "signed.exe");
+  const linkedPath = join(root, "linked.exe");
+  try {
+    writeFileSync(unsignedPath, syntheticWindowsPe());
+    writeFileSync(signedPath, present);
+    assert.equal(assertWindowsPeCertificateTableAbsent(unsignedPath).embeddedPeCertificateTable, "absent");
+    assert.equal(inspectWindowsPeCertificateTable(signedPath).embeddedPeCertificateTable, "present");
+    assert.throws(() => assertWindowsPeCertificateTableAbsent(signedPath), /contains an embedded PE certificate table/);
+    symlinkSync(unsignedPath, linkedPath, "file");
+    assert.throws(() => inspectWindowsPeCertificateTable(linkedPath), /stable, non-linked regular PE file/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("Windows finalizer seals PE/native/fuse evidence but keeps unsigned candidates non-release", () => {
   const finalizer = text("scripts/finalize-desktop-package.ts");
   assert.match(finalizer, /mode: "unsigned-candidate", postFuseMutation: true, deepStrictVerified: false/);
   assert.match(finalizer, /verified\.reason !== "distribution-unsigned"/);
-  assert.match(finalizer, /assertWindowsAuthenticodeNotSigned\(executable\)/);
+  assert.match(finalizer, /assertWindowsPeCertificateTableAbsent\(executable, "Final RangaBot\.exe"\)/);
   assert.match(finalizer, /runtime\/ollama\/ollama\.exe/);
   assert.match(finalizer, /node\|dll\|so\|dylib\|exe/);
   assert.match(finalizer, /\.gguf\|\\\.ggml\|\\\.safetensors/);
-  assert.match(text("scripts/verify-windows-distributables.ts"), /applicationSignatureStatus !== "NotSigned"/);
+  const verifier = text("scripts/verify-windows-distributables.ts");
+  assert.match(verifier, /applicationEmbeddedPeCertificateTable/);
+  assert.doesNotMatch(`${finalizer}\n${verifier}`, /Get-AuthenticodeSignature|powershell\.exe|applicationSignatureStatus/);
   const workflow = text(".github/workflows/windows-desktop-candidate.yml");
   assert.match(workflow, /npm audit --omit=dev/);
   assert.doesNotMatch(workflow, /release create|upload-release-asset/i);
