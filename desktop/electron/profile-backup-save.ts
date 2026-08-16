@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { BrowserWindow, Dialog } from "electron";
+import { syncDirectoryMetadata } from "../../lib/directory-durability.ts";
 import { inspectProfileBackup } from "../../lib/profile-backup.ts";
 
 export const PROFILE_BACKUP_SAVE_CHANNEL = "rangabot:save-profile-backup";
@@ -76,17 +77,6 @@ function hashExactFile(path: string, expected: Stats) {
   }
 }
 
-function syncDirectory(path: string) {
-  let descriptor: number | undefined;
-  try {
-    descriptor = openSync(path, constants.O_RDONLY | (process.platform === "win32" ? 0 : constants.O_NOFOLLOW));
-    if (!fstatSync(descriptor).isDirectory()) throw new Error("The selected backup directory is invalid.");
-    fsyncSync(descriptor);
-  } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
-  }
-}
-
 function saveNewPrivateFile(
   path: string,
   bytes: Uint8Array,
@@ -130,7 +120,7 @@ function saveNewPrivateFile(
       || hashExactFile(candidate, finalStatus) !== sha256(bytes)) {
       throw new Error("The published profile backup failed its local integrity check.");
     }
-    syncDirectory(parent);
+    syncDirectoryMetadata(parent, "The selected backup directory");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") {
       throw new Error("That file already exists. Choose a new backup filename so no file is overwritten.");

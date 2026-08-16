@@ -15,6 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { syncDirectoryMetadata } from "./directory-durability.ts";
 import { PROFILE_DATA_DIRECTORY_NAME } from "./profile-registry.ts";
 
 export const PROFILE_OPERATION_RECOVERY_SCHEMA_VERSION = 1 as const;
@@ -97,20 +98,8 @@ function assertOwnedPrivateFile(path: string, label: string) {
   return status;
 }
 
-function directoryFlags() {
-  return constants.O_RDONLY | (posixGuards ? constants.O_NOFOLLOW : 0);
-}
-
 export function syncProfileDirectory(path: string) {
-  let descriptor: number | undefined;
-  try {
-    descriptor = openSync(path, directoryFlags());
-    const status = fstatSync(descriptor);
-    if (!status.isDirectory()) throw new Error("Profile durability boundary is not a directory.");
-    fsyncSync(descriptor);
-  } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
-  }
+  syncDirectoryMetadata(path, "Profile durability boundary");
 }
 
 function layout(managedRoot: string) {

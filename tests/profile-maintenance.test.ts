@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -69,6 +80,75 @@ test("an app-held runtime lease blocks offline profile maintenance", () => {
     );
   } finally {
     appLease.release();
+    rmSync(paths.root, { recursive: true, force: true });
+  }
+});
+
+test("fresh owner-controlled source data is hardened before the first Recovery read", {
+  skip: process.platform === "win32",
+}, () => {
+  const paths = fixture();
+  const sentinel = join(paths.root, "tracked-source-sentinel.txt");
+  writeFileSync(sentinel, "unchanged\n", { mode: 0o600 });
+  chmodSync(paths.root, 0o755);
+  const maintenance = acquireProfileMaintenanceBinding({
+    label: "Fresh source evaluation",
+    leasePath: paths.leasePath,
+    trustedRoot: paths.root,
+    environment: {},
+    inspectProcess: () => "alive",
+    readContext: () => activeContext(firstProfileId, 0, paths.root),
+  });
+  try {
+    assert.equal(statSync(paths.root).mode & 0o777, 0o700);
+    assert.equal(readFileSync(sentinel, "utf8"), "unchanged\n");
+  } finally {
+    maintenance.release();
+    assert.equal(existsSync(paths.leasePath), false);
+    rmSync(paths.root, { recursive: true, force: true });
+  }
+});
+
+test("fresh-root hardening refuses a linked profile registry", {
+  skip: process.platform === "win32",
+}, () => {
+  const paths = fixture();
+  symlinkSync(paths.first, join(paths.root, "profiles-v1"));
+  chmodSync(paths.root, 0o755);
+  try {
+    assert.throws(() => acquireProfileMaintenanceBinding({
+      label: "Unsafe source evaluation",
+      leasePath: paths.leasePath,
+      trustedRoot: paths.root,
+      environment: {},
+      inspectProcess: () => "alive",
+      readContext: () => activeContext(firstProfileId, 0, paths.root),
+    }), /symbolic links/);
+    assert.equal(existsSync(paths.leasePath), false);
+    assert.equal(statSync(paths.root).mode & 0o777, 0o755);
+  } finally {
+    rmSync(paths.root, { recursive: true, force: true });
+  }
+});
+
+test("fresh-root hardening never repairs permissions after profile state exists", {
+  skip: process.platform === "win32",
+}, () => {
+  const paths = fixture();
+  mkdirSync(join(paths.root, "profiles-v1"), { mode: 0o700 });
+  chmodSync(paths.root, 0o755);
+  try {
+    assert.throws(() => acquireProfileMaintenanceBinding({
+      label: "Existing profile evaluation",
+      leasePath: paths.leasePath,
+      trustedRoot: paths.root,
+      environment: {},
+      inspectProcess: () => "alive",
+      readContext: () => activeContext(firstProfileId, 1, paths.first),
+    }), /owner-private/);
+    assert.equal(existsSync(paths.leasePath), false);
+    assert.equal(statSync(paths.root).mode & 0o777, 0o755);
+  } finally {
     rmSync(paths.root, { recursive: true, force: true });
   }
 });

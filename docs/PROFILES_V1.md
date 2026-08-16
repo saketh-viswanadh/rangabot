@@ -212,8 +212,11 @@ In source/web mode the browser download remains local. In the desktop shell,
 backup uses a narrow IPC contract and native Save dialog; it validates the
 backup before the dialog, writes a same-directory private temporary file,
 `fsync`s and verifies exact length/hash, publishes without overwrite, and
-`fsync`s the destination directory. A sealed verification-only desktop profile
-does not install this IPC and rejects backup/restore before file bytes are read.
+`fsync`s the destination directory on POSIX. Windows retains strict file
+flushes, exact directory verification, no-overwrite publication, and Recovery
+journals, but its filesystem API does not provide the same directory-entry
+`fsync` boundary. A sealed verification-only desktop profile does not install
+this IPC and rejects backup/restore before file bytes are read.
 
 ## Developer canaries
 

@@ -10,6 +10,8 @@ import {
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { LocalProfileSessionBinding } from "./local-session-token.ts";
 import { getProfileContext, type ProfileContext } from "./profile-context.ts";
+import { ensurePrivateDirectory, supportsPosixPermissions } from "./private-storage.ts";
+import { PROFILE_REGISTRY_DIRECTORY_NAME } from "./profile-registry.ts";
 import { requireNoProfileRecovery } from "./profile-recovery.ts";
 import { acquireRuntimeLease, inspectLocalProcess, type ProcessState } from "./runtime-lease.ts";
 import { resolveRuntimePathWithinRoot, runtimePaths } from "./runtime-paths.ts";
@@ -151,6 +153,28 @@ function canonicalLabel(value: string) {
   return label;
 }
 
+function hardenFreshManagedRootBeforeRecovery(trustedRoot: string) {
+  const registryRoot = resolveRuntimePathWithinRoot(trustedRoot, PROFILE_REGISTRY_DIRECTORY_NAME);
+  try {
+    lstatSync(registryRoot);
+    return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const status = lstatSync(trustedRoot);
+  if (status.isSymbolicLink() || !status.isDirectory()) {
+    throw new Error("The private maintenance root must be a real local directory.");
+  }
+  if (supportsPosixPermissions() && process.getuid && status.uid !== process.getuid()) {
+    throw new Error("The private maintenance root must be owned by the current local user.");
+  }
+  // Git does not preserve directory privacy bits. A fresh source checkout has
+  // no profile registry yet, so harden its owner-controlled data root before
+  // the first recovery read. Existing profile state never takes this repair
+  // path and remains subject to the strict Recovery privacy checks.
+  ensurePrivateDirectory(trustedRoot, { trustedRoot });
+}
+
 /**
  * Bind one offline maintenance process to the exact active profile. The app
  * and all cooperating maintenance tools share one managed-root runtime lease,
@@ -165,6 +189,7 @@ export function acquireProfileMaintenanceBinding(options: ProfileMaintenanceOpti
   const environment = options.environment ?? process.env;
   const readContext = options.readContext ?? getProfileContext;
   const inspectProcess = options.inspectProcess ?? inspectLocalProcess;
+  hardenFreshManagedRootBeforeRecovery(trustedRoot);
   requireNoProfileRecovery(trustedRoot);
   const suppliedDelegation = environment[delegationEnvironmentKey];
   const parsedDelegation = parseDelegation(suppliedDelegation);

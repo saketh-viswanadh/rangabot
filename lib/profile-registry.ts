@@ -18,6 +18,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { syncDirectoryMetadata } from "./directory-durability.ts";
 
 export const PROFILE_REGISTRY_SCHEMA_VERSION = 1 as const;
 export const PROFILE_REGISTRY_DIRECTORY_NAME = "profiles-v1";
@@ -372,13 +373,7 @@ function verifySameDirectory(path: string, expected: Readonly<{ dev: number; ino
 }
 
 function syncDirectory(path: string) {
-  let descriptor: number | undefined;
-  try {
-    descriptor = openSync(path, directoryFlags());
-    fsyncSync(descriptor);
-  } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
-  }
+  syncDirectoryMetadata(path, "Profile registry durability directory");
 }
 
 function verifyPrivateFile(path: string, maximumBytes: number, label: string, allowLockClaims = false) {
