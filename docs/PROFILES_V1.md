@@ -261,8 +261,8 @@ runtime-compatibility policy, not a release or signing claim.
 
 For this candidate line, `sourceBaseCommit` is the original merged source
 `8b161635f79ac6a572524ba22e3af7364fe08a5b` and
-`sourceBaselineCommit` is the completed first-run onboarding and mobile review
-behavior commit `ebc7bb6257da70cdc506d27e111b49d98a34dc31`. The generated v2 manifest records
+`sourceBaselineCommit` is the completed first-run onboarding, mobile review,
+and Windows desktop behavior commit `75045d7029bd6c7e9ee74f5e6eb4c208ef9d0747`. The generated v3 manifest records
 the exact clean packaging HEAD as `sourceCommit`; the installed verifier uses
 that value as its commit identity and does not require `.git`.
 
