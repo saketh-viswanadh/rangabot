@@ -99,7 +99,7 @@ test("retains the verified final root when registry activation may have committe
   assert.equal(existsSync(join(managedRoot, "rangabot.db")), true);
 });
 
-test("detects source corruption and unsafe owner modes before cutover", () => {
+test("detects source corruption and, on POSIX, unsafe owner modes before cutover", () => {
   const managedRoot = fixture();
   const inventory = inventoryLegacyProfileData(managedRoot);
   writeFileSync(join(managedRoot, "rangabot.db"), "changed", { mode: 0o600 });
@@ -112,9 +112,11 @@ test("detects source corruption and unsafe owner modes before cutover", () => {
     activateRegistry() { throw new Error("must not activate"); },
   }), /changed after preflight/);
 
-  const unsafe = fixture();
-  chmodSync(unsafe, 0o755);
-  assert.throws(() => inventoryLegacyProfileData(unsafe), /owner-private/);
+  if (process.platform !== "win32") {
+    const unsafe = fixture();
+    chmodSync(unsafe, 0o755);
+    assert.throws(() => inventoryLegacyProfileData(unsafe), /owner-private/);
+  }
 });
 
 test("rejects a symlinked migration container before copying or activating", () => {
