@@ -1,5 +1,5 @@
 export const ELECTRON_MAJOR_VERSION = 43;
-export const ELECTRON_FUSE_POLICY_NAME = "electron-43-arm64-launchable-v1";
+export const ELECTRON_FUSE_POLICY_NAME = "electron-43-hardened-v2";
 
 /**
  * Electron 43 packaging must apply this policy to the final executable.
@@ -14,13 +14,13 @@ export const ELECTRON_FUSE_POLICY = Object.freeze({
   EnableNodeCliInspectArguments: false,
   EnableEmbeddedAsarIntegrityValidation: true,
   OnlyLoadAppFromAsar: true,
-  // The Electron 43 arm64 archive has no browser_v8_context_snapshot.bin;
-  // prior native testing proved that enabling this fuse prevents launch.
+  // Current pinned Electron archives do not require the browser-specific
+  // snapshot; keeping this disabled is launch-compatible on macOS and Windows.
   LoadBrowserProcessSpecificV8Snapshot: false,
   GrantFileProtocolExtraPrivileges: false,
   WasmTrapHandlers: true,
 });
 
-export const ELECTRON_FUSE_OPTIONS = Object.freeze({
-  resetAdHocDarwinSignature: true,
-});
+export function electronFuseOptions(platform: NodeJS.Platform, arch: string) {
+  return Object.freeze({ resetAdHocDarwinSignature: platform === "darwin" && arch === "arm64" });
+}
