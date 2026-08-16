@@ -53,7 +53,7 @@ test("Squirrel actions run only after immutable verification and before profile 
 });
 
 test("Squirrel shortcut lifecycle handles install, update, uninstall, and failures deterministically", () => {
-  const executablePath = "/opt/RangaBot/current/RangaBot.exe";
+  const executablePath = "C:\\Users\\Synthetic\\AppData\\Local\\RangaBot\\app-0.1.0\\RangaBot.exe";
   const calls: Array<{ path: string; arguments_: readonly string[]; cwd: string }> = [];
   const inspectUpdateExecutable = () => ({ isSymbolicLink: () => false, isFile: () => true });
   const runUpdateExecutable = (path: string, arguments_: readonly string[], options: { cwd: string }) => {
@@ -77,7 +77,10 @@ test("Squirrel shortcut lifecycle handles install, update, uninstall, and failur
     assert.equal(exitCode, 0);
     assert.deepEqual(calls.at(-1)?.arguments_, [expected, "RangaBot.exe"]);
   }
-  assert.ok(calls.every((call) => call.path === "/opt/RangaBot/Update.exe" && call.cwd === "/opt/RangaBot"));
+  assert.ok(calls.every((call) => (
+    call.path === "C:\\Users\\Synthetic\\AppData\\Local\\RangaBot\\Update.exe"
+      && call.cwd === "C:\\Users\\Synthetic\\AppData\\Local\\RangaBot"
+  )));
 
   let exitCode: number | undefined;
   handleSquirrelStartup({

@@ -550,6 +550,7 @@ test("desktop lease waits for Electron's asynchronous utility-process spawn iden
       return child;
     },
     listDescendants: async () => [],
+    platform: "darwin",
   });
   assert.deepEqual(events, ["fork"]);
   const leased = await leasedPromise;
@@ -586,6 +587,7 @@ test("desktop lease releases when a utility process exits before spawn", async (
       return child;
     },
     listDescendants: async () => [],
+    platform: "darwin",
     spawnTimeoutMs: 10,
   }), /exited before spawning \(exit 17\)/);
   assert.deepEqual(events, ["release"]);
@@ -615,6 +617,7 @@ test("utility-process supervisor uses explicit resources and terminates the proc
       signals.push([pid, signal as NodeJS.Signals]);
       return true;
     },
+    platform: "darwin",
   });
   assert.equal(forkInput?.[0], boundary.serverEntrypoint);
   assert.deepEqual(forkInput?.[1], []);
@@ -656,6 +659,7 @@ test("utility-process supervisor force-kills a process tree that ignores gracefu
       return true;
     },
     inspectProcess: (pid) => pid === 701 && descendantAlive ? "alive" : "dead",
+    platform: "darwin",
     gracefulTimeoutMs: 1,
     forceTimeoutMs: 10,
   });
@@ -742,6 +746,7 @@ test("desktop lease is acquired before fork, binds the utility PID and releases 
       return child;
     },
     listDescendants: async () => [],
+    platform: "darwin",
   });
   assert.equal(leased.leasePath, join(boundary.dataRoot, "rangabot.db-runtime.lock"));
   assert.deepEqual(events, ["acquire", "fork", "register"]);
@@ -765,6 +770,7 @@ test("an active desktop runtime lease prevents a second database writer before f
     launch: createDesktopLaunch({ boundary, port: 43106, baseEnvironment: {} }),
     fork: () => new SyntheticUtilityProcess(),
     listDescendants: async () => [],
+    platform: "darwin",
   });
   assert.equal(existsSync(first.leasePath), true);
   let forked = false;
@@ -809,6 +815,7 @@ test("lease registration failure stops the utility process before releasing the 
     },
     fork: () => child,
     listDescendants: async () => [],
+    platform: "darwin",
   }), /synthetic lease registration failure/);
   assert.deepEqual(events, ["register-failed", "exit", "release"]);
 });
@@ -836,6 +843,7 @@ test("failed process-tree termination retains the desktop runtime lease", async 
     fork: () => child,
     listDescendants: async () => [],
     sendSignal: () => true,
+    platform: "darwin",
     gracefulTimeoutMs: 1,
     forceTimeoutMs: 1,
   });
