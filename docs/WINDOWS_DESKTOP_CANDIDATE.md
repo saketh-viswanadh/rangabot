@@ -80,22 +80,29 @@ distribution.
 
 ## Required acceptance before release
 
-1. Produce and structurally verify the exact MSIX on the pinned Windows SDK;
-   record the source commit, desktop artifact ID, MakeAppx identity, block map,
-   size and SHA-256.
-2. Sign that exact post-fuse MSIX with the approved publisher certificate and a
-   trusted timestamp, then re-run package-integrity verification with zero
-   post-sign mutation.
-3. On clean standard-user Windows 10 and Windows 11 x64 VMs, install, launch,
+1. Retain the structurally verified internal unsigned MSIX only as validation
+   evidence; record its source commit, desktop artifact ID, MakeAppx identity,
+   block map, size and SHA-256.
+2. Create an approved production manifest and package identity whose Publisher
+   exactly matches the approved signing certificate subject and omits the
+   internal unsigned-package OID. Rebuild it from the same sealed post-fuse
+   application/source with the pinned MakeAppx, then structurally verify the
+   rebuilt unsigned-before-signing bytes.
+3. Sign and timestamp that production package. A future signature-aware final
+   verifier must prove its manifest and decoded application identity, trusted
+   chain and timestamp, signature coverage, exact final SHA-256 and zero
+   post-sign mutation; the current internal verifier intentionally accepts only
+   unsigned candidate packages.
+4. On clean standard-user Windows 10 and Windows 11 x64 VMs, install, launch,
    finish onboarding, close, relaunch, upgrade and uninstall the exact signed
    bytes. Run Windows App Certification Kit and Defender/SmartScreen checks.
-4. Confirm loopback-only listeners, no unsolicited model download, no orphaned
+5. Confirm loopback-only listeners, no unsolicited model download, no orphaned
    RangaBot/Ollama processes, package-owned private state, and in-place reuse of
    existing models without copied bytes.
-5. Seed package-owned data, a shared model store, a user-selected Knowledge
+6. Seed package-owned data, a shared model store, a user-selected Knowledge
    file and an exported backup. After uninstall, prove package-owned state is
    removed and every external user-controlled byte is unchanged.
-6. Only after those gates pass, create a new versioned GitHub release and update
+7. Only after those gates pass, create a new versioned GitHub release and update
    the website with exact architecture, requirements, size, checksum, signature
    status, install/uninstall instructions and known limits.
 
