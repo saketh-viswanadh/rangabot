@@ -35,6 +35,10 @@ of electron-winstaller 5.4.4's vendor directory and sets only the COFF
 build verifies the package-lock integrity, complete original and staged vendor
 inventories, both binaries' original and patched hashes, PE32/i386 shape, and
 single-byte difference before Squirrel runs. It never edits `node_modules`.
+electron-winstaller's npm install script creates host-specific `7z.exe` and
+`7z.dll` aliases; those two generated alias paths are excluded from the locked
+package-owned source inventory, then deterministically regenerated from the
+exact hashed x64 vendor files and included in the complete prepared inventory.
 
 This is an explicitly bounded compatibility experiment, not a release
 architecture claim. The distributable verifier streams the final PE `DATA`

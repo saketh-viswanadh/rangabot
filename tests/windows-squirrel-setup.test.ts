@@ -218,6 +218,14 @@ test("Squirrel vendor staging makes only the two exact locked PE32 inputs large-
     });
     assert.equal(staged.destinationDirectory, join(root, "vendor"));
     assert.doesNotThrow(() => assertPreparedSquirrelVendor(staged.destinationDirectory));
+    assert.deepEqual(
+      readFileSync(join(staged.destinationDirectory, "7z.exe")),
+      readFileSync(join(packageRoot, "vendor", "7z-x64.exe")),
+    );
+    assert.deepEqual(
+      readFileSync(join(staged.destinationDirectory, "7z.dll")),
+      readFileSync(join(packageRoot, "vendor", "7z-x64.dll")),
+    );
     assert.match(readFileSync(join(staged.destinationDirectory, "ELECTRON-WINSTALLER-LICENSE.txt"), "utf8"), /MIT License|Permission is hereby granted/);
     const nugetPath = join(staged.destinationDirectory, "nuget.exe");
     writeFileSync(nugetPath, Buffer.concat([readFileSync(nugetPath), Buffer.from("tamper")]));

@@ -23,8 +23,9 @@ const ELECTRON_WINSTALLER_VERSION = "5.4.4";
 const ELECTRON_WINSTALLER_LOCK_INTEGRITY = "sha512-j9ETcBGJaXxAY/b6UBpR7LZfjdU4BAO+yvr4ifqHEdyuc3UNCy91PDGkWKY5UQ4coHNYfnwFggrqD6QPeFGAlg==";
 const SQUIRREL_WINDOWS_TAG = "2.0.1";
 const SQUIRREL_WINDOWS_SOURCE_COMMIT = "eef37460aef77b2f9de8cd2237c1e55b344a6554";
-const ORIGINAL_VENDOR_INVENTORY_SHA256 = "07c301faf1d8b743dc6b58c53e90956286c0b604c6329b2e7d8f99840727c2b2";
-const PREPARED_VENDOR_INVENTORY_SHA256 = "cc22e295e8a6a146cd3a3b287f0579f32c52949c65239c170f5778fcb7ccb05d";
+const ORIGINAL_VENDOR_INVENTORY_SHA256 = "dfbbefe42629ae1ebac89cc31dcf5f721cc0e96a4df020b519598695daa347ca";
+const PREPARED_VENDOR_INVENTORY_SHA256 = "73b9079b4c4edaa64689d5ae261e890e9f738cbd3dda77ddf13ece9d3391bf95";
+const ORIGINAL_VENDOR_INVENTORY_SCOPE = "package-owned files excluding install-generated 7z aliases";
 const X86_MACHINE = 0x014c;
 const IMAGE_FILE_EXECUTABLE_IMAGE = 0x0002;
 const IMAGE_FILE_32BIT_MACHINE = 0x0100;
@@ -34,6 +35,11 @@ const EXPECTED_PATCHED_CHARACTERISTICS = EXPECTED_ORIGINAL_CHARACTERISTICS | IMA
 const MAXIMUM_PE_HEADER_OFFSET = 16 * 1024 * 1024;
 const VENDOR_MANIFEST_NAME = "RANGABOT-SQUIRREL-VENDOR.json";
 const WINSTALLER_LICENSE_NAME = "ELECTRON-WINSTALLER-LICENSE.txt";
+const INSTALL_GENERATED_VENDOR_FILES = new Set(["7z.dll", "7z.exe"]);
+const TARGET_SEVEN_ZIP_ALIASES = Object.freeze([
+  Object.freeze({ name: "7z.dll", source: "7z-x64.dll" }),
+  Object.freeze({ name: "7z.exe", source: "7z-x64.exe" }),
+]);
 
 const PATCHED_BINARIES = Object.freeze([
   Object.freeze({
@@ -249,9 +255,11 @@ function preparePatchedSquirrelVendor(input) {
     || lockedPackage?.integrity !== ELECTRON_WINSTALLER_LOCK_INTEGRITY) {
     throw new Error("The staged Squirrel vendor is not bound to the locked electron-winstaller package integrity.");
   }
-  const originalVendorFiles = Object.freeze(collectVendorFiles(sourceDirectory));
+  const originalVendorFiles = Object.freeze(
+    collectVendorFiles(sourceDirectory).filter((entry) => !INSTALL_GENERATED_VENDOR_FILES.has(entry.path)),
+  );
   if (inventorySha256(originalVendorFiles) !== ORIGINAL_VENDOR_INVENTORY_SHA256) {
-    throw new Error("The electron-winstaller vendor tree does not match the locked complete inventory.");
+    throw new Error("The electron-winstaller vendor tree does not match the locked package-owned inventory.");
   }
   const destinationDirectory = resolve(input.destinationDirectory);
   rmSync(destinationDirectory, { recursive: true, force: true });
@@ -261,6 +269,13 @@ function preparePatchedSquirrelVendor(input) {
     dereference: true,
     preserveTimestamps: false,
   });
+  for (const alias of TARGET_SEVEN_ZIP_ALIASES) {
+    const source = readStableRegularFile(
+      resolve(sourceDirectory, alias.source),
+      `Locked Squirrel vendor ${alias.source}`,
+    );
+    writeStableGeneratedFile(resolve(destinationDirectory, alias.name), source);
+  }
   for (const policy of PATCHED_BINARIES) {
     const sourcePath = resolve(sourceDirectory, policy.name);
     const source = readStableRegularFile(sourcePath, `Locked ${policy.name}`);
@@ -274,8 +289,10 @@ function preparePatchedSquirrelVendor(input) {
     squirrelWindowsTag: SQUIRREL_WINDOWS_TAG,
     squirrelWindowsSourceCommit: SQUIRREL_WINDOWS_SOURCE_COMMIT,
     mutation: "COFF IMAGE_FILE_LARGE_ADDRESS_AWARE bit only",
+    originalVendorInventoryScope: ORIGINAL_VENDOR_INVENTORY_SCOPE,
     originalVendorInventorySha256: ORIGINAL_VENDOR_INVENTORY_SHA256,
     preparedVendorInventorySha256: PREPARED_VENDOR_INVENTORY_SHA256,
+    normalizedSevenZipAliases: TARGET_SEVEN_ZIP_ALIASES,
     mutations: PATCHED_BINARIES.map((entry) => Object.freeze({ ...entry })),
     vendorFiles: Object.freeze(collectVendorFiles(destinationDirectory)),
   });
@@ -314,8 +331,10 @@ function assertPreparedSquirrelVendor(directoryInput) {
     || manifest.squirrelWindowsTag !== SQUIRREL_WINDOWS_TAG
     || manifest.squirrelWindowsSourceCommit !== SQUIRREL_WINDOWS_SOURCE_COMMIT
     || manifest.mutation !== "COFF IMAGE_FILE_LARGE_ADDRESS_AWARE bit only"
+    || manifest.originalVendorInventoryScope !== ORIGINAL_VENDOR_INVENTORY_SCOPE
     || manifest.originalVendorInventorySha256 !== ORIGINAL_VENDOR_INVENTORY_SHA256
     || manifest.preparedVendorInventorySha256 !== PREPARED_VENDOR_INVENTORY_SHA256
+    || JSON.stringify(manifest.normalizedSevenZipAliases) !== JSON.stringify(TARGET_SEVEN_ZIP_ALIASES)
     || JSON.stringify(manifest.mutations) !== JSON.stringify(PATCHED_BINARIES)
     || !Array.isArray(manifest.vendorFiles)
     || inventorySha256(vendorFiles) !== PREPARED_VENDOR_INVENTORY_SHA256
