@@ -499,6 +499,7 @@ console.log(JSON.stringify({
   electronZipPath,
   squirrelVendor: squirrelVendor
     ? {
+        role: "sealed-reference",
         path: relative(projectRoot, squirrelVendor.destinationDirectory).replaceAll("\\", "/"),
         manifest: squirrelVendor.manifest,
       }

@@ -1,6 +1,19 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  truncateSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -15,20 +28,40 @@ import {
 const require = createRequire(import.meta.url);
 const {
   EXPECTED_PATCHED_CHARACTERISTICS,
+  MAXIMUM_SQUIRREL_WORK_LOG_BYTES,
   PATCHED_BINARIES,
+  SQUIRREL_WORK_LOG_NAME,
   assertPreparedSquirrelVendor,
+  assertSquirrelWorkVendorAfterMake,
+  assertSquirrelWorkVendorBeforeMake,
   inspectPe32X86CharacteristicsBuffer,
   patchLargeAddressAwareBuffer,
   preparePatchedSquirrelVendor,
+  prepareSquirrelWorkVendor,
 } = require("../desktop/electron/windows-squirrel-vendor.cjs") as {
   EXPECTED_PATCHED_CHARACTERISTICS: number;
+  MAXIMUM_SQUIRREL_WORK_LOG_BYTES: number;
   PATCHED_BINARIES: ReadonlyArray<Readonly<{
     name: string;
     bytes: number;
     originalSha256: string;
     patchedSha256: string;
   }>>;
+  SQUIRREL_WORK_LOG_NAME: string;
   assertPreparedSquirrelVendor(directory: string): Readonly<Record<string, unknown>>;
+  assertSquirrelWorkVendorAfterMake(input: {
+    referenceDirectory: string;
+    workDirectory: string;
+  }): Readonly<{
+    referenceVendorInventorySha256: string;
+    baseFileCount: number;
+    baseFilesUnchanged: true;
+    permittedRuntimeSideEffect: Readonly<{ name: string; bytes: number }>;
+  }>;
+  assertSquirrelWorkVendorBeforeMake(input: {
+    referenceDirectory: string;
+    workDirectory: string;
+  }): Readonly<{ baseFilesUnchanged: true }>;
   inspectPe32X86CharacteristicsBuffer(source: Buffer, label?: string): Readonly<{
     characteristics: number;
     characteristicsOffset: number;
@@ -38,6 +71,14 @@ const {
     electronWinstallerRoot: string;
     destinationDirectory: string;
   }): Readonly<{ destinationDirectory: string }>;
+  prepareSquirrelWorkVendor(input: {
+    referenceDirectory: string;
+    workDirectory: string;
+  }): Readonly<{
+    referenceDirectory: string;
+    workDirectory: string;
+    preMakeEvidence: Readonly<{ baseFilesUnchanged: true }>;
+  }>;
 };
 
 const CRC_TABLE = Array.from({ length: 256 }, (_, index) => {
@@ -227,6 +268,179 @@ test("Squirrel vendor staging makes only the two exact locked PE32 inputs large-
       readFileSync(join(packageRoot, "vendor", "7z-x64.dll")),
     );
     assert.match(readFileSync(join(staged.destinationDirectory, "ELECTRON-WINSTALLER-LICENSE.txt"), "utf8"), /MIT License|Permission is hereby granted/);
+    const work = prepareSquirrelWorkVendor({
+      referenceDirectory: staged.destinationDirectory,
+      workDirectory: join(root, "work-vendor"),
+    });
+    assert.equal(work.referenceDirectory, staged.destinationDirectory);
+    assert.equal(work.workDirectory, join(root, "work-vendor"));
+    assert.equal(work.preMakeEvidence.baseFilesUnchanged, true);
+    assert.equal(existsSync(join(work.workDirectory, "RANGABOT-SQUIRREL-VENDOR.json")), false);
+    assert.equal(assertSquirrelWorkVendorBeforeMake({
+      referenceDirectory: staged.destinationDirectory,
+      workDirectory: work.workDirectory,
+    }).baseFilesUnchanged, true);
+    const referenceHelper = lstatSync(join(staged.destinationDirectory, "Squirrel.exe"), { bigint: true });
+    const workHelper = lstatSync(join(work.workDirectory, "Squirrel.exe"), { bigint: true });
+    assert.equal(referenceHelper.nlink, BigInt(1));
+    assert.equal(workHelper.nlink, BigInt(1));
+    assert.notDeepEqual(
+      { device: referenceHelper.dev, inode: referenceHelper.ino },
+      { device: workHelper.dev, inode: workHelper.ino },
+    );
+
+    const logPath = join(work.workDirectory, SQUIRREL_WORK_LOG_NAME);
+    const log = Buffer.from("synthetic Squirrel releasify log\n");
+    writeFileSync(logPath, log);
+    assert.throws(
+      () => assertSquirrelWorkVendorBeforeMake({
+        referenceDirectory: staged.destinationDirectory,
+        workDirectory: work.workDirectory,
+      }),
+      /exact sealed base inventory before make/,
+    );
+    const afterMake = assertSquirrelWorkVendorAfterMake({
+      referenceDirectory: staged.destinationDirectory,
+      workDirectory: work.workDirectory,
+    });
+    assert.equal(afterMake.baseFilesUnchanged, true);
+    assert.deepEqual(afterMake.permittedRuntimeSideEffect, {
+      name: SQUIRREL_WORK_LOG_NAME,
+      bytes: log.length,
+    });
+    assert.deepEqual(Object.keys(afterMake.permittedRuntimeSideEffect).sort(), ["bytes", "name"]);
+
+    const refreshedWork = prepareSquirrelWorkVendor({
+      referenceDirectory: staged.destinationDirectory,
+      workDirectory: work.workDirectory,
+    });
+    assert.equal(refreshedWork.preMakeEvidence.baseFilesUnchanged, true);
+    writeFileSync(logPath, log);
+
+    for (const name of ["nuget.exe", "Squirrel.exe", "WriteZipToSetup.exe", "Setup.exe"]) {
+      const helperPath = join(work.workDirectory, name);
+      const helper = readFileSync(helperPath);
+      writeFileSync(helperPath, Buffer.concat([helper, Buffer.from("tamper")]));
+      assert.throws(
+        () => assertSquirrelWorkVendorAfterMake({
+          referenceDirectory: staged.destinationDirectory,
+          workDirectory: work.workDirectory,
+        }),
+        /single permitted post-make log/,
+      );
+      writeFileSync(helperPath, helper);
+    }
+
+    const rolledLogPath = join(work.workDirectory, "Squirrel-Releasify.1.log");
+    writeFileSync(rolledLogPath, "unexpected second log");
+    assert.throws(
+      () => assertSquirrelWorkVendorAfterMake({
+        referenceDirectory: staged.destinationDirectory,
+        workDirectory: work.workDirectory,
+      }),
+      /single permitted post-make log/,
+    );
+    rmSync(rolledLogPath);
+
+    rmSync(logPath);
+    const wrongCaseLogPath = join(work.workDirectory, "squirrel-releasify.log");
+    writeFileSync(wrongCaseLogPath, log);
+    assert.throws(
+      () => assertSquirrelWorkVendorAfterMake({
+        referenceDirectory: staged.destinationDirectory,
+        workDirectory: work.workDirectory,
+      }),
+      /is missing Squirrel-Releasify\.log/,
+    );
+    rmSync(wrongCaseLogPath);
+    writeFileSync(logPath, log);
+
+    const unexpectedDirectory = join(work.workDirectory, "unexpected-directory");
+    mkdirSync(unexpectedDirectory);
+    assert.throws(
+      () => assertSquirrelWorkVendorAfterMake({
+        referenceDirectory: staged.destinationDirectory,
+        workDirectory: work.workDirectory,
+      }),
+      /single permitted post-make log/,
+    );
+    rmSync(unexpectedDirectory, { recursive: true });
+
+    rmSync(logPath);
+    const linkedLogTarget = join(root, "linked-log-target.txt");
+    writeFileSync(linkedLogTarget, log);
+    linkSync(linkedLogTarget, logPath);
+    assert.throws(
+      () => assertSquirrelWorkVendorAfterMake({
+        referenceDirectory: staged.destinationDirectory,
+        workDirectory: work.workDirectory,
+      }),
+      /stable, non-linked regular file/,
+    );
+    rmSync(logPath);
+    rmSync(linkedLogTarget);
+
+    const symlinkLogTarget = join(root, "symlink-log-target");
+    mkdirSync(symlinkLogTarget);
+    symlinkSync(symlinkLogTarget, logPath, process.platform === "win32" ? "junction" : "dir");
+    assert.throws(
+      () => assertSquirrelWorkVendorAfterMake({
+        referenceDirectory: staged.destinationDirectory,
+        workDirectory: work.workDirectory,
+      }),
+      /stable, non-linked regular file/,
+    );
+    unlinkSync(logPath);
+
+    writeFileSync(logPath, log);
+    truncateSync(logPath, MAXIMUM_SQUIRREL_WORK_LOG_BYTES + 1);
+    assert.throws(
+      () => assertSquirrelWorkVendorAfterMake({
+        referenceDirectory: staged.destinationDirectory,
+        workDirectory: work.workDirectory,
+      }),
+      /exceeds its permitted size/,
+    );
+    assert.doesNotThrow(() => assertPreparedSquirrelVendor(staged.destinationDirectory));
+
+    const unrecognizedWork = join(root, "unrecognized-work");
+    mkdirSync(unrecognizedWork);
+    writeFileSync(join(unrecognizedWork, "not-generated.txt"), "not generated");
+    assert.throws(
+      () => prepareSquirrelWorkVendor({
+        referenceDirectory: staged.destinationDirectory,
+        workDirectory: unrecognizedWork,
+      }),
+      /not an exact recognized generated tree/,
+    );
+    const fileWork = join(root, "file-work");
+    writeFileSync(fileWork, "not a directory");
+    assert.throws(
+      () => prepareSquirrelWorkVendor({
+        referenceDirectory: staged.destinationDirectory,
+        workDirectory: fileWork,
+      }),
+      /verified real generated directory/,
+    );
+    const linkedWorkTarget = join(root, "linked-work-target");
+    mkdirSync(linkedWorkTarget);
+    const linkedWork = join(root, "linked-work");
+    symlinkSync(linkedWorkTarget, linkedWork, process.platform === "win32" ? "junction" : "dir");
+    assert.throws(
+      () => prepareSquirrelWorkVendor({
+        referenceDirectory: staged.destinationDirectory,
+        workDirectory: linkedWork,
+      }),
+      /verified real generated directory/,
+    );
+    assert.throws(
+      () => prepareSquirrelWorkVendor({
+        referenceDirectory: staged.destinationDirectory,
+        workDirectory: join(staged.destinationDirectory, "nested-work"),
+      }),
+      /separate and non-nested/,
+    );
+
     const nugetPath = join(staged.destinationDirectory, "nuget.exe");
     writeFileSync(nugetPath, Buffer.concat([readFileSync(nugetPath), Buffer.from("tamper")]));
     assert.throws(

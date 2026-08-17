@@ -7,7 +7,10 @@ const { MakerZIP } = require("@electron-forge/maker-zip");
 const { flipFuses, FuseVersion, FuseV1Options } = require("@electron/fuses");
 const { hardenPackagedMacOSInfoPlist } = require("./desktop/electron/macos-plist-policy.cjs");
 const { assertWindowsPeCertificateTableAbsent } = require("./desktop/electron/windows-pe-certificate.cjs");
-const { assertPreparedSquirrelVendor } = require("./desktop/electron/windows-squirrel-vendor.cjs");
+const {
+  assertSquirrelWorkVendorAfterMake,
+  prepareSquirrelWorkVendor,
+} = require("./desktop/electron/windows-squirrel-vendor.cjs");
 
 const FUSE_POLICY_NAME = "electron-43-hardened-v2";
 
@@ -45,8 +48,14 @@ if (targetPlatform === "win32" && targetArch !== "x64") {
 const appName = verificationBuild ? "RangaBot Verification" : "RangaBot";
 const appBundleId = verificationBuild ? "com.rangabot.desktop.verification" : "com.rangabot.desktop";
 const stagedResourceParent = path.resolve(__dirname, "desktop", "out", verificationBuild ? "packaged-resources-verification" : "packaged-resources", targetPlatform, targetArch);
-const squirrelVendorDirectory = path.resolve(__dirname, "desktop", "out", "squirrel-vendor", "win32", "x64");
-if (targetPlatform === "win32") assertPreparedSquirrelVendor(squirrelVendorDirectory);
+const squirrelVendorReferenceDirectory = path.resolve(__dirname, "desktop", "out", "squirrel-vendor", "win32", "x64");
+const squirrelVendorWorkDirectory = path.resolve(__dirname, "desktop", "out", "squirrel-vendor-work", "win32", "x64");
+if (targetPlatform === "win32") {
+  prepareSquirrelWorkVendor({
+    referenceDirectory: squirrelVendorReferenceDirectory,
+    workDirectory: squirrelVendorWorkDirectory,
+  });
+}
 const fuseConfiguration = {
   version: FuseVersion.V1,
   strictlyRequireAllFuses: true,
@@ -125,6 +134,15 @@ module.exports = {
       }
     },
     postPackage: async (_config, packageResult) => finalizePackagedExecutables(packageResult),
+    postMake: async (_config, makeResults) => {
+      if (targetPlatform === "win32") {
+        assertSquirrelWorkVendorAfterMake({
+          referenceDirectory: squirrelVendorReferenceDirectory,
+          workDirectory: squirrelVendorWorkDirectory,
+        });
+      }
+      return makeResults;
+    },
   },
   rebuildConfig: {},
   makers: [
@@ -137,7 +155,7 @@ module.exports = {
       description: "Local-first personal intelligence on your own machine.",
       setupExe: "RangaBot-win32-x64-Setup.exe",
       setupIcon: path.resolve(__dirname, "desktop", "assets", "rangabot.ico"),
-      vendorDirectory: squirrelVendorDirectory,
+      vendorDirectory: squirrelVendorWorkDirectory,
       noMsi: true,
     }, ["win32"]),
   ],

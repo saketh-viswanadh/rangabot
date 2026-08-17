@@ -17,7 +17,7 @@ const {
   writeFileSync,
   writeSync,
 } = require("node:fs");
-const { dirname, resolve } = require("node:path");
+const { dirname, isAbsolute, relative, resolve, sep } = require("node:path");
 
 const ELECTRON_WINSTALLER_VERSION = "5.4.4";
 const ELECTRON_WINSTALLER_LOCK_INTEGRITY = "sha512-j9ETcBGJaXxAY/b6UBpR7LZfjdU4BAO+yvr4ifqHEdyuc3UNCy91PDGkWKY5UQ4coHNYfnwFggrqD6QPeFGAlg==";
@@ -35,6 +35,8 @@ const EXPECTED_PATCHED_CHARACTERISTICS = EXPECTED_ORIGINAL_CHARACTERISTICS | IMA
 const MAXIMUM_PE_HEADER_OFFSET = 16 * 1024 * 1024;
 const VENDOR_MANIFEST_NAME = "RANGABOT-SQUIRREL-VENDOR.json";
 const WINSTALLER_LICENSE_NAME = "ELECTRON-WINSTALLER-LICENSE.txt";
+const SQUIRREL_WORK_LOG_NAME = "Squirrel-Releasify.log";
+const MAXIMUM_SQUIRREL_WORK_LOG_BYTES = 4 * 1024 * 1024;
 const INSTALL_GENERATED_VENDOR_FILES = new Set(["7z.dll", "7z.exe"]);
 const TARGET_SEVEN_ZIP_ALIASES = Object.freeze([
   Object.freeze({ name: "7z.dll", source: "7z-x64.dll" }),
@@ -217,22 +219,100 @@ function assertRealDirectoryTree(directoryInput, label) {
   return directory;
 }
 
-function collectVendorFiles(directoryInput, prefix = "") {
-  const directory = requireRealDirectory(directoryInput, "Prepared Squirrel vendor directory");
+function collectVendorFiles(directoryInput, prefix = "", options = {}) {
+  const label = options.label ?? "Prepared Squirrel vendor";
+  const directory = requireRealDirectory(directoryInput, `${label} directory`);
   const files = [];
   for (const name of readdirSync(directory).sort()) {
-    if (!prefix && name === VENDOR_MANIFEST_NAME) continue;
+    if (!prefix && options.ignoreRootManifest !== false && name === VENDOR_MANIFEST_NAME) continue;
+    if (!prefix && options.ignoredRootFiles?.has(name)) continue;
     const path = resolve(directory, name);
     const relativePath = prefix ? `${prefix}/${name}` : name;
     const status = lstatSync(path, { bigint: true });
-    if (status.isSymbolicLink()) throw new Error("Prepared Squirrel vendor contains a symbolic link.");
-    if (status.isDirectory()) files.push(...collectVendorFiles(path, relativePath));
+    if (status.isSymbolicLink()) throw new Error(`${label} contains a symbolic link.`);
+    if (status.isDirectory()) files.push(...collectVendorFiles(path, relativePath, options));
     else if (status.isFile()) {
-      const source = readStableRegularFile(path, `Prepared Squirrel vendor ${relativePath}`);
+      const source = readStableRegularFile(path, `${label} ${relativePath}`);
       files.push(Object.freeze({ path: relativePath, bytes: source.length, sha256: sha256(source) }));
-    } else throw new Error("Prepared Squirrel vendor contains an unsupported filesystem entry.");
+    } else throw new Error(`${label} contains an unsupported filesystem entry.`);
   }
   return files;
+}
+
+function collectVendorDirectories(directoryInput, prefix = "", label = "Prepared Squirrel vendor") {
+  const directory = requireRealDirectory(directoryInput, `${label} directory`);
+  const directories = [];
+  for (const name of readdirSync(directory).sort()) {
+    const path = resolve(directory, name);
+    const relativePath = prefix ? `${prefix}/${name}` : name;
+    const status = lstatSync(path);
+    if (status.isSymbolicLink()) throw new Error(`${label} contains a symbolic link.`);
+    if (status.isDirectory()) {
+      directories.push(relativePath);
+      directories.push(...collectVendorDirectories(path, relativePath, label));
+    } else if (!status.isFile()) throw new Error(`${label} contains an unsupported filesystem entry.`);
+  }
+  return directories;
+}
+
+function expectedVendorDirectories(files) {
+  const directories = new Set();
+  for (const file of files) {
+    const segments = safeVendorFileSegments(file.path);
+    for (let length = 1; length < segments.length; length += 1) {
+      directories.add(segments.slice(0, length).join("/"));
+    }
+  }
+  return [...directories].sort();
+}
+
+function safeVendorFileSegments(path) {
+  if (typeof path !== "string" || path.length === 0 || path.includes("\\") || path.includes(":") || path.includes("\0")) {
+    throw new Error("Squirrel vendor manifest contains an unsafe file path.");
+  }
+  const segments = path.split("/");
+  if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
+    throw new Error("Squirrel vendor manifest contains an unsafe file path.");
+  }
+  return segments;
+}
+
+function pathIsSameOrWithin(parent, candidate) {
+  const child = relative(parent, candidate);
+  return child === "" || (child !== ".." && !child.startsWith(`..${sep}`) && !isAbsolute(child));
+}
+
+function requireSeparateVendorDirectories(referenceDirectory, workDirectory) {
+  if (pathIsSameOrWithin(referenceDirectory, workDirectory) || pathIsSameOrWithin(workDirectory, referenceDirectory)) {
+    throw new Error("Squirrel reference and work vendor directories must be separate and non-nested.");
+  }
+}
+
+function inspectStableRegularFileMetadata(pathInput, label, maximumBytes) {
+  const path = resolve(pathInput);
+  const before = lstatSync(path, { bigint: true });
+  requireStableRegularFile(path, before, label);
+  if (before.size > BigInt(maximumBytes)) throw new Error(`${label} exceeds its permitted size.`);
+  const identity = fileIdentity(before);
+  const descriptor = openSync(path, constants.O_RDONLY | (process.platform === "win32" ? 0 : constants.O_NOFOLLOW));
+  try {
+    const opened = fstatSync(descriptor, { bigint: true });
+    if (!sameIdentity(identity, fileIdentity(opened))) throw new Error(`${label} changed while it was opened.`);
+  } finally {
+    closeSync(descriptor);
+  }
+  const after = lstatSync(path, { bigint: true });
+  if (!sameIdentity(identity, fileIdentity(after))) throw new Error(`${label} changed while it was inspected.`);
+  return Number(before.size);
+}
+
+function lstatIfPresent(path) {
+  try {
+    return lstatSync(path, { bigint: true });
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 function inventorySha256(files) {
@@ -326,6 +406,7 @@ function assertPreparedSquirrelVendor(directoryInput) {
     "Prepared Squirrel vendor manifest",
   ).toString("utf8"));
   const vendorFiles = collectVendorFiles(directory);
+  const vendorDirectories = collectVendorDirectories(directory);
   if (manifest.schemaVersion !== 1 || manifest.electronWinstallerVersion !== ELECTRON_WINSTALLER_VERSION
     || manifest.electronWinstallerIntegrity !== ELECTRON_WINSTALLER_LOCK_INTEGRITY
     || manifest.squirrelWindowsTag !== SQUIRREL_WINDOWS_TAG
@@ -338,22 +419,149 @@ function assertPreparedSquirrelVendor(directoryInput) {
     || JSON.stringify(manifest.mutations) !== JSON.stringify(PATCHED_BINARIES)
     || !Array.isArray(manifest.vendorFiles)
     || inventorySha256(vendorFiles) !== PREPARED_VENDOR_INVENTORY_SHA256
-    || JSON.stringify(manifest.vendorFiles) !== JSON.stringify(vendorFiles)) {
+    || JSON.stringify(manifest.vendorFiles) !== JSON.stringify(vendorFiles)
+    || JSON.stringify(vendorDirectories) !== JSON.stringify(expectedVendorDirectories(vendorFiles))) {
     throw new Error("Prepared Squirrel vendor manifest is invalid.");
   }
   return Object.freeze({ directory, manifest });
+}
+
+function assertSquirrelWorkVendorBeforeMake(input) {
+  const reference = assertPreparedSquirrelVendor(input.referenceDirectory);
+  const workDirectory = requireRealDirectory(input.workDirectory, "Squirrel work vendor directory");
+  requireSeparateVendorDirectories(reference.directory, workDirectory);
+  const vendorFiles = collectVendorFiles(workDirectory, "", {
+    ignoreRootManifest: false,
+    label: "Squirrel work vendor",
+  });
+  const vendorDirectories = collectVendorDirectories(workDirectory, "", "Squirrel work vendor");
+  if (inventorySha256(vendorFiles) !== PREPARED_VENDOR_INVENTORY_SHA256
+    || JSON.stringify(vendorFiles) !== JSON.stringify(reference.manifest.vendorFiles)
+    || JSON.stringify(vendorDirectories) !== JSON.stringify(expectedVendorDirectories(vendorFiles))) {
+    throw new Error("Squirrel work vendor does not match the exact sealed base inventory before make.");
+  }
+  assertPreparedSquirrelVendor(reference.directory);
+  return Object.freeze({
+    referenceVendorInventorySha256: PREPARED_VENDOR_INVENTORY_SHA256,
+    baseFileCount: vendorFiles.length,
+    baseFilesUnchanged: true,
+  });
+}
+
+function prepareSquirrelWorkVendor(input) {
+  const reference = assertPreparedSquirrelVendor(input.referenceDirectory);
+  const workDirectory = resolve(input.workDirectory);
+  if (dirname(workDirectory) === workDirectory) throw new Error("Squirrel work vendor cannot be a filesystem root.");
+  requireSeparateVendorDirectories(reference.directory, workDirectory);
+  const workParent = dirname(workDirectory);
+  mkdirSync(workParent, { recursive: true, mode: 0o755 });
+  requireRealDirectory(workParent, "Squirrel work vendor parent directory");
+  const existingWork = lstatIfPresent(workDirectory);
+  if (existingWork) {
+    if (existingWork.isSymbolicLink() || !existingWork.isDirectory()) {
+      throw new Error("Existing Squirrel work vendor must be one verified real generated directory.");
+    }
+    requireRealDirectory(workDirectory, "Existing Squirrel work vendor directory");
+    let recognizedGeneratedWork = false;
+    try {
+      assertSquirrelWorkVendorBeforeMake({ referenceDirectory: reference.directory, workDirectory });
+      recognizedGeneratedWork = true;
+    } catch {
+      try {
+        assertSquirrelWorkVendorAfterMake({ referenceDirectory: reference.directory, workDirectory });
+        recognizedGeneratedWork = true;
+      } catch {
+        // Only exact pre-make or exact post-make generated trees are replaceable.
+      }
+    }
+    if (!recognizedGeneratedWork) {
+      throw new Error("Existing Squirrel work vendor is not an exact recognized generated tree.");
+    }
+    const confirmedWork = lstatSync(workDirectory, { bigint: true });
+    requireRealDirectory(workDirectory, "Existing Squirrel work vendor directory");
+    if (!sameIdentity(fileIdentity(existingWork), fileIdentity(confirmedWork))) {
+      throw new Error("Existing Squirrel work vendor changed before replacement.");
+    }
+  }
+  rmSync(workDirectory, { recursive: true, force: true });
+  mkdirSync(workDirectory, { mode: 0o755 });
+  requireRealDirectory(workDirectory, "Squirrel work vendor directory");
+  for (const file of reference.manifest.vendorFiles) {
+    const segments = safeVendorFileSegments(file.path);
+    const sourcePath = resolve(reference.directory, ...segments);
+    const destinationPath = resolve(workDirectory, ...segments);
+    const source = readStableRegularFile(sourcePath, `Sealed Squirrel reference ${file.path}`);
+    if (source.length !== file.bytes || sha256(source) !== file.sha256) {
+      throw new Error(`Sealed Squirrel reference ${file.path} changed while the work copy was created.`);
+    }
+    mkdirSync(dirname(destinationPath), { recursive: true, mode: 0o755 });
+    requireRealDirectory(dirname(destinationPath), `Squirrel work vendor parent for ${file.path}`);
+    const sourceStatus = lstatSync(sourcePath, { bigint: true });
+    const mode = Number(sourceStatus.mode & BigInt(0o777)) || 0o600;
+    writeStableGeneratedFile(destinationPath, source, mode);
+  }
+  const preMakeEvidence = assertSquirrelWorkVendorBeforeMake({
+    referenceDirectory: reference.directory,
+    workDirectory,
+  });
+  return Object.freeze({
+    referenceDirectory: reference.directory,
+    workDirectory,
+    preMakeEvidence,
+  });
+}
+
+function assertSquirrelWorkVendorAfterMake(input) {
+  const reference = assertPreparedSquirrelVendor(input.referenceDirectory);
+  const workDirectory = requireRealDirectory(input.workDirectory, "Squirrel work vendor directory");
+  requireSeparateVendorDirectories(reference.directory, workDirectory);
+  const rootNames = readdirSync(workDirectory);
+  if (!rootNames.includes(SQUIRREL_WORK_LOG_NAME)) {
+    throw new Error(`Squirrel work vendor is missing ${SQUIRREL_WORK_LOG_NAME} after make.`);
+  }
+  const logBytes = inspectStableRegularFileMetadata(
+    resolve(workDirectory, SQUIRREL_WORK_LOG_NAME),
+    `Squirrel work vendor ${SQUIRREL_WORK_LOG_NAME}`,
+    MAXIMUM_SQUIRREL_WORK_LOG_BYTES,
+  );
+  const vendorFiles = collectVendorFiles(workDirectory, "", {
+    ignoreRootManifest: false,
+    ignoredRootFiles: new Set([SQUIRREL_WORK_LOG_NAME]),
+    label: "Squirrel work vendor",
+  });
+  const vendorDirectories = collectVendorDirectories(workDirectory, "", "Squirrel work vendor");
+  if (inventorySha256(vendorFiles) !== PREPARED_VENDOR_INVENTORY_SHA256
+    || JSON.stringify(vendorFiles) !== JSON.stringify(reference.manifest.vendorFiles)
+    || JSON.stringify(vendorDirectories) !== JSON.stringify(expectedVendorDirectories(vendorFiles))) {
+    throw new Error("Squirrel work vendor changed outside its single permitted post-make log.");
+  }
+  assertPreparedSquirrelVendor(reference.directory);
+  return Object.freeze({
+    referenceVendorInventorySha256: PREPARED_VENDOR_INVENTORY_SHA256,
+    baseFileCount: vendorFiles.length,
+    baseFilesUnchanged: true,
+    permittedRuntimeSideEffect: Object.freeze({
+      name: SQUIRREL_WORK_LOG_NAME,
+      bytes: logBytes,
+    }),
+  });
 }
 
 module.exports = {
   ELECTRON_WINSTALLER_VERSION,
   EXPECTED_ORIGINAL_CHARACTERISTICS,
   EXPECTED_PATCHED_CHARACTERISTICS,
+  MAXIMUM_SQUIRREL_WORK_LOG_BYTES,
   PATCHED_BINARIES,
+  SQUIRREL_WORK_LOG_NAME,
   SQUIRREL_WINDOWS_SOURCE_COMMIT,
   SQUIRREL_WINDOWS_TAG,
   VENDOR_MANIFEST_NAME,
   assertPreparedSquirrelVendor,
+  assertSquirrelWorkVendorAfterMake,
+  assertSquirrelWorkVendorBeforeMake,
   inspectPe32X86CharacteristicsBuffer,
   patchLargeAddressAwareBuffer,
   preparePatchedSquirrelVendor,
+  prepareSquirrelWorkVendor,
 };

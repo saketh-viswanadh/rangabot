@@ -29,8 +29,8 @@ The official Windows runtime archive is about 1.36 GB before packaging because i
 Squirrel.Windows 2.0.1 embeds the complete full package into `Setup.exe`. Its
 stock `WriteZipToSetup.exe` helper and `Setup.exe` template are both 32-bit and
 not large-address-aware, while both handle the complete embedded ZIP in one
-process address space. The Windows candidate therefore stages an isolated copy
-of electron-winstaller 5.4.4's vendor directory and sets only the COFF
+process address space. The Windows candidate therefore stages a sealed reference
+copy of electron-winstaller 5.4.4's vendor directory and sets only the COFF
 `IMAGE_FILE_LARGE_ADDRESS_AWARE` bit on those two exact locked binaries. The
 build verifies the package-lock integrity, complete original and staged vendor
 inventories, both binaries' original and patched hashes, PE32/i386 shape, and
@@ -39,6 +39,17 @@ electron-winstaller's npm install script creates host-specific `7z.exe` and
 `7z.dll` aliases; those two generated alias paths are excluded from the locked
 package-owned source inventory, then deterministically regenerated from the
 exact hashed x64 vendor files and included in the complete prepared inventory.
+
+The sealed reference is never passed to or executed by Squirrel. Immediately
+before Maker runs, Forge verifies it and creates a fresh, independently copied
+work vendor containing only the exact sealed base files; the reference manifest
+is not copied. Maker receives only that work path. After make, the base files
+must still match byte-for-byte and the only permitted addition is one real,
+non-linked top-level `Squirrel-Releasify.log` no larger than 4 MiB. The verifier
+records only that fixed filename and byte count, never its content or a dynamic
+host path. Any helper mutation, extra or rolled log, link, directory, or other
+entry fails closed. Final Setup shell comparison always uses the untouched
+sealed reference `Setup.exe`, never the executed work copy.
 
 This is an explicitly bounded compatibility experiment, not a release
 architecture claim. The distributable verifier streams the final PE `DATA`

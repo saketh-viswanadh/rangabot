@@ -27,10 +27,22 @@ const { assertWindowsPeCertificateTableAbsent } = require("../desktop/electron/w
     embeddedPeCertificateTable: "absent";
   }>;
 };
-const { assertPreparedSquirrelVendor } = require("../desktop/electron/windows-squirrel-vendor.cjs") as {
+const {
+  assertPreparedSquirrelVendor,
+  assertSquirrelWorkVendorAfterMake,
+} = require("../desktop/electron/windows-squirrel-vendor.cjs") as {
   assertPreparedSquirrelVendor(directory: string): Readonly<{
     directory: string;
     manifest: Readonly<Record<string, unknown>>;
+  }>;
+  assertSquirrelWorkVendorAfterMake(input: {
+    referenceDirectory: string;
+    workDirectory: string;
+  }): Readonly<{
+    referenceVendorInventorySha256: string;
+    baseFileCount: number;
+    baseFilesUnchanged: true;
+    permittedRuntimeSideEffect: Readonly<{ name: string; bytes: number }>;
   }>;
 };
 const maximumReleaseAssetBytes = 2 * 1024 * 1024 * 1024;
@@ -176,7 +188,7 @@ export async function verifyWindowsDistributables() {
   if (!setupEvidence || !nupkgEvidence || !releasesEvidence?.content) {
     throw new Error("The exact Squirrel candidate files were not inspected.");
   }
-  const squirrelVendor = assertPreparedSquirrelVendor(resolve(
+  const squirrelVendorReference = assertPreparedSquirrelVendor(resolve(
     projectRoot,
     "desktop",
     "out",
@@ -184,9 +196,13 @@ export async function verifyWindowsDistributables() {
     "win32",
     "x64",
   ));
+  const squirrelVendorWork = assertSquirrelWorkVendorAfterMake({
+    referenceDirectory: squirrelVendorReference.directory,
+    workDirectory: resolve(projectRoot, "desktop", "out", "squirrel-vendor-work", "win32", "x64"),
+  });
   const squirrelEmbeddedPayload = await verifySquirrelSetupEmbeddedPayload({
     setupPath,
-    setupTemplatePath: resolve(squirrelVendor.directory, "Setup.exe"),
+    setupTemplatePath: resolve(squirrelVendorReference.directory, "Setup.exe"),
     nupkgPath,
     expectedNupkgBytes: nupkgEvidence.bytes,
     expectedNupkgSha256: nupkgEvidence.sha256,
@@ -243,9 +259,11 @@ export async function verifyWindowsDistributables() {
     applicationSha256: applicationEvidence.sha256,
     applicationEmbeddedPeCertificateTable,
     squirrelVendor: {
-      path: relative(projectRoot, squirrelVendor.directory).replaceAll("\\", "/"),
-      manifest: squirrelVendor.manifest,
+      role: "sealed-reference",
+      path: relative(projectRoot, squirrelVendorReference.directory).replaceAll("\\", "/"),
+      manifest: squirrelVendorReference.manifest,
     },
+    squirrelVendorWork,
     squirrelEmbeddedPayload,
     squirrelNupkgApplication,
     files: evidence,
