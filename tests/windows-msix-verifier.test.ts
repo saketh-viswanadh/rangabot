@@ -309,7 +309,10 @@ function contentTypePartName(packagePath: string) {
   return `/${packagePath.split("/").map((component) => encodeURIComponent(component)).join("/")}`;
 }
 
-function createContentTypes(packagePaths: readonly string[]) {
+function createContentTypes(
+  packagePaths: readonly string[],
+  manifestResolution: "override" | "default" = "override",
+) {
   const defaults = new Set<string>();
   const genericOverrides: string[] = [];
   for (const packagePath of packagePaths) {
@@ -321,9 +324,14 @@ function createContentTypes(packagePaths: readonly string[]) {
     else genericOverrides.push(`  <Override PartName="${xmlAttribute(contentTypePartName(packagePath))}" ContentType="application/octet-stream"/>`);
   }
   const declarations = [
-    ...[...defaults].sort().map((extension) => `  <Default Extension="${extension}" ContentType="application/octet-stream"/>`),
+    ...[...defaults].sort().map((extension) => `  <Default Extension="${extension}" ContentType="${manifestResolution === "default" && extension === "xml" ? "application/vnd.ms-appx.manifest+xml" : "application/octet-stream"}"/>`),
+    ...(manifestResolution === "default" && !defaults.has("xml")
+      ? ["  <Default Extension=\"xml\" ContentType=\"application/vnd.ms-appx.manifest+xml\"/>"]
+      : []),
     ...genericOverrides,
-    "  <Override PartName=\"/AppxManifest.xml\" ContentType=\"application/vnd.ms-appx.manifest+xml\"/>",
+    ...(manifestResolution === "override"
+      ? ["  <Override PartName=\"/AppxManifest.xml\" ContentType=\"application/vnd.ms-appx.manifest+xml\"/>"]
+      : []),
     "  <Override PartName=\"/AppxBlockMap.xml\" ContentType=\"application/vnd.ms-appx.blockmap+xml\"/>",
   ];
   return Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n${declarations.join("\n")}\n</Types>\n`, "utf8");
@@ -351,7 +359,7 @@ function writeSyntheticMsix(input: Readonly<{
   writeFileSync(path, createZip([
     ...sources,
     { name: "AppxBlockMap.xml", content: blockMap },
-    { name: "[Content_Types].xml", content: createContentTypes(packagePaths) },
+    { name: "[Content_Types].xml", content: createContentTypes(packagePaths, "default") },
   ]));
   return path;
 }
@@ -375,6 +383,27 @@ test("content types parser accepts one safe OPC inventory with exact required ov
     "application/vnd.ms-appx.blockmap+xml");
   assert.ok(parsed.defaults.some((entry) => entry.extension === "exe"));
   assert.ok(parsed.overrides.some((entry) => entry.packagePath === "LICENSE"));
+});
+
+test("content types parser accepts the exact MakeAppx manifest XML Default when no payload XML exists", () => {
+  const parsed = parseMsixContentTypes(
+    createContentTypes(contentTypeFixturePaths, "default"),
+    contentTypeFixturePaths,
+  );
+  assert.equal(parsed.defaults.find((entry) => entry.extension === "xml")?.contentType,
+    "application/vnd.ms-appx.manifest+xml");
+  assert.equal(parsed.overrides.some((entry) => entry.packagePath === "AppxManifest.xml"), false);
+  assert.equal(parsed.overrides.find((entry) => entry.packagePath === "AppxBlockMap.xml")?.contentType,
+    "application/vnd.ms-appx.blockmap+xml");
+});
+
+test("content types parser keeps the exact manifest Override profile compatible with payload XML", () => {
+  const paths = [...contentTypeFixturePaths, "resources/payload.xml"];
+  const parsed = parseMsixContentTypes(createContentTypes(paths), paths);
+  assert.equal(parsed.overrides.find((entry) => entry.packagePath === "AppxManifest.xml")?.contentType,
+    "application/vnd.ms-appx.manifest+xml");
+  assert.equal(parsed.defaults.find((entry) => entry.extension === "xml")?.contentType,
+    "application/octet-stream");
 });
 
 test("content types parser rejects malformed or non-UTF-8 XML and a wrong namespace", () => {
@@ -401,7 +430,7 @@ test("content types parser rejects signature or catalog declarations", () => {
   assert.throws(() => parseMsixContentTypes(Buffer.from(catalog), contentTypeFixturePaths), /signature or catalog/u);
 });
 
-test("content types parser requires exact manifest/blockmap overrides and rejects unknown parts", () => {
+test("content types parser requires exact manifest resolution and blockmap override and rejects unknown parts", () => {
   const valid = createContentTypes(contentTypeFixturePaths).toString("utf8");
   const missingBlockMap = valid.replace(
     "  <Override PartName=\"/AppxBlockMap.xml\" ContentType=\"application/vnd.ms-appx.blockmap+xml\"/>\n",
@@ -416,6 +445,62 @@ test("content types parser requires exact manifest/blockmap overrides and reject
   assert.throws(() => parseMsixContentTypes(Buffer.from(missingBlockMap), contentTypeFixturePaths), /AppxBlockMap\.xml Override/u);
   assert.throws(() => parseMsixContentTypes(Buffer.from(wrongManifestType), contentTypeFixturePaths), /AppxManifest\.xml Override/u);
   assert.throws(() => parseMsixContentTypes(Buffer.from(unknownPart), contentTypeFixturePaths), /exact package part/u);
+});
+
+test("content types parser rejects unsafe manifest XML Default variants", () => {
+  const exactDefault = createContentTypes(contentTypeFixturePaths, "default").toString("utf8");
+  const payloadXmlPaths = [...contentTypeFixturePaths, "resources/payload.xml"];
+  const payloadXml = createContentTypes(payloadXmlPaths, "default");
+  const explicitlyOverriddenPayloadXml = Buffer.from(payloadXml.toString("utf8").replace(
+    "</Types>",
+    "  <Override PartName=\"/resources/payload.xml\" ContentType=\"application/octet-stream\"/>\n</Types>",
+  ));
+  const missingManifestPaths = contentTypeFixturePaths.filter((entry) => entry !== "AppxManifest.xml");
+  const miscasedManifestPaths = contentTypeFixturePaths.map((entry) => entry === "AppxManifest.xml"
+    ? "AppxManifest.XML"
+    : entry);
+  const wrongCase = exactDefault.replace('Extension="xml"', 'Extension="XML"');
+  const wrongType = exactDefault.replace(
+    "application/vnd.ms-appx.manifest+xml",
+    "application/octet-stream",
+  );
+  const redundant = createContentTypes(contentTypeFixturePaths).toString("utf8").replace(
+    "</Types>",
+    "  <Default Extension=\"xml\" ContentType=\"application/vnd.ms-appx.manifest+xml\"/>\n</Types>",
+  );
+  const wrongManifestOverride = exactDefault.replace(
+    "</Types>",
+    "  <Override PartName=\"/AppxManifest.xml\" ContentType=\"application/octet-stream\"/>\n</Types>",
+  );
+  const otherManifestClaim = exactDefault.replace(
+    "</Types>",
+    "  <Default Extension=\"foo\" ContentType=\"application/vnd.ms-appx.manifest+xml\"/>\n</Types>",
+  );
+  const mixedCaseManifestClaim = exactDefault.replace(
+    "</Types>",
+    "  <Default Extension=\"foo\" ContentType=\"Application/Vnd.Ms-Appx.Manifest+Xml\"/>\n</Types>",
+  );
+  const mixedCaseBlockMapClaim = exactDefault.replace(
+    "</Types>",
+    "  <Default Extension=\"foo\" ContentType=\"Application/Vnd.Ms-Appx.BlockMap+Xml\"/>\n</Types>",
+  );
+  assert.throws(() => parseMsixContentTypes(payloadXml, payloadXmlPaths), /no payload XML/u);
+  assert.throws(() => parseMsixContentTypes(explicitlyOverriddenPayloadXml, payloadXmlPaths), /no payload XML/u);
+  assert.throws(() => parseMsixContentTypes(
+    createContentTypes(missingManifestPaths, "default"),
+    missingManifestPaths,
+  ), /no payload XML/u);
+  assert.throws(() => parseMsixContentTypes(
+    createContentTypes(miscasedManifestPaths, "default"),
+    miscasedManifestPaths,
+  ), /no payload XML/u);
+  assert.throws(() => parseMsixContentTypes(Buffer.from(wrongCase), contentTypeFixturePaths), /resolve AppxManifest/u);
+  assert.throws(() => parseMsixContentTypes(Buffer.from(wrongType), contentTypeFixturePaths), /resolve AppxManifest/u);
+  assert.throws(() => parseMsixContentTypes(Buffer.from(redundant), contentTypeFixturePaths), /ambiguous manifest/u);
+  assert.throws(() => parseMsixContentTypes(Buffer.from(wrongManifestOverride), contentTypeFixturePaths), /invalid AppxManifest/u);
+  assert.throws(() => parseMsixContentTypes(Buffer.from(otherManifestClaim), contentTypeFixturePaths), /ambiguous manifest/u);
+  assert.throws(() => parseMsixContentTypes(Buffer.from(mixedCaseManifestClaim), contentTypeFixturePaths), /ambiguous manifest/u);
+  assert.throws(() => parseMsixContentTypes(Buffer.from(mixedCaseBlockMapClaim), contentTypeFixturePaths), /ambiguous block-map/u);
 });
 
 test("content types parser rejects duplicate declarations and uncovered package parts", () => {

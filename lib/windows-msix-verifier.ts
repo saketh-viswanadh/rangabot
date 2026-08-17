@@ -854,14 +854,51 @@ export function parseMsixContentTypes(
     body = body.slice(child[0].length);
   }
 
-  for (const [packagePath, requiredContentType] of [
-    ["AppxManifest.xml", manifestContentType],
-    ["AppxBlockMap.xml", blockMapContentType],
-  ] as const) {
-    const actual = overridesByPath.get(windowsPackagePathKey(packagePath));
-    if (!actual || actual.packagePath !== packagePath || actual.partName !== `/${packagePath}`
-      || actual.contentType !== requiredContentType) {
-      throw new Error(`[Content_Types].xml is missing the exact ${packagePath} Override.`);
+  const blockMapOverride = overridesByPath.get(windowsPackagePathKey("AppxBlockMap.xml"));
+  if (!blockMapOverride || blockMapOverride.packagePath !== "AppxBlockMap.xml"
+    || blockMapOverride.partName !== "/AppxBlockMap.xml"
+    || blockMapOverride.contentType !== blockMapContentType) {
+    throw new Error("[Content_Types].xml is missing the exact AppxBlockMap.xml Override.");
+  }
+
+  const manifestOverride = overridesByPath.get(windowsPackagePathKey("AppxManifest.xml"));
+  const exactManifestOverride = manifestOverride?.packagePath === "AppxManifest.xml"
+    && manifestOverride.partName === "/AppxManifest.xml"
+    && manifestOverride.contentType === manifestContentType;
+  if (manifestOverride && !exactManifestOverride) {
+    throw new Error("[Content_Types].xml has an invalid AppxManifest.xml Override.");
+  }
+  const xmlDefault = defaultsByExtension.get("xml");
+  const exactManifestDefault = !manifestOverride
+    && xmlDefault?.extension === "xml"
+    && xmlDefault.contentType === manifestContentType;
+  if (!exactManifestOverride && !exactManifestDefault) {
+    throw new Error("[Content_Types].xml does not resolve AppxManifest.xml to the exact manifest content type.");
+  }
+
+  const manifestContentTypeDeclarations = [
+    ...defaults.filter((declaration) => declaration.contentType.toLocaleLowerCase("en-US") === manifestContentType),
+    ...overrides.filter((declaration) => declaration.contentType.toLocaleLowerCase("en-US") === manifestContentType),
+  ];
+  if (manifestContentTypeDeclarations.length !== 1) {
+    throw new Error("[Content_Types].xml has an ambiguous manifest content-type declaration.");
+  }
+  const blockMapContentTypeDeclarations = [
+    ...defaults.filter((declaration) => declaration.contentType.toLocaleLowerCase("en-US") === blockMapContentType),
+    ...overrides.filter((declaration) => declaration.contentType.toLocaleLowerCase("en-US") === blockMapContentType),
+  ];
+  if (blockMapContentTypeDeclarations.length !== 1) {
+    throw new Error("[Content_Types].xml has an ambiguous block-map content-type declaration.");
+  }
+
+  if (exactManifestDefault) {
+    const xmlPackageParts = [...packageParts.values()]
+      .filter((packagePath) => packageExtension(packagePath) === "xml")
+      .sort();
+    if (xmlPackageParts.length !== 2
+      || xmlPackageParts[0] !== "AppxBlockMap.xml"
+      || xmlPackageParts[1] !== "AppxManifest.xml") {
+      throw new Error("[Content_Types].xml may use the manifest XML Default only when no payload XML exists.");
     }
   }
 
