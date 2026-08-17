@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { handleSquirrelStartup, parseSquirrelStartupEvent } from "../desktop/electron/squirrel-lifecycle.ts";
 import { isForbiddenDesktopPrivateResourcePath } from "../lib/desktop-private-payload-policy.ts";
+import { writeSafeAtomicJsonEvidence } from "../lib/safe-atomic-json-output.ts";
 import { assertStableRegularFileUnchanged, inspectStableRegularFile } from "../scripts/verify-windows-distributables.ts";
 
 const text = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -96,6 +97,8 @@ test("Forge creates Windows ZIP and per-user Squirrel outputs with the Windows i
   assert.match(forge, /new MakerZIP\(\{\}, \["win32"\]\)/);
   assert.match(forge, /new MakerSquirrel/);
   assert.match(forge, /RangaBot-win32-x64-Setup\.exe/);
+  assert.match(forge, /vendorDirectory: squirrelVendorDirectory/);
+  assert.match(forge, /assertPreparedSquirrelVendor\(squirrelVendorDirectory\)/);
   assert.match(forge, /path\.resolve\(outputPath, "RangaBot\.exe"\)/);
   assert.match(forge, /packageAfterCopy:[\s\S]*if \(platform === "darwin"\)/);
   assert.match(forge, /postPackage:[\s\S]*finalizePackagedExecutables/);
@@ -240,8 +243,16 @@ test("Windows finalizer seals PE/native/fuse evidence but keeps unsigned candida
   assert.match(finalizer, /runtime\/ollama\/ollama\.exe/);
   assert.match(finalizer, /node\|dll\|so\|dylib\|exe/);
   assert.match(finalizer, /isForbiddenDesktopPrivateResourcePath/);
+  assert.match(finalizer, /writeSafeAtomicJsonEvidence\(evidencePath, manifest, "Windows desktop artifact evidence"\)/);
   const verifier = text("scripts/verify-windows-distributables.ts");
   assert.match(verifier, /applicationEmbeddedPeCertificateTable/);
+  assert.match(verifier, /verifySquirrelSetupEmbeddedPayload/);
+  assert.match(verifier, /verifySquirrelNupkgApplicationPayload/);
+  assert.match(verifier, /squirrel\.windows[\s\S]*RELEASES/);
+  assert.match(verifier, /expectedReleases: releasesEvidence\.content\.toString\("utf8"\)/);
+  assert.match(verifier, /squirrelEmbeddedPayload/);
+  assert.match(verifier, /squirrelNupkgApplication/);
+  assert.match(verifier, /writeSafeAtomicJsonEvidence\(output,[\s\S]*"Windows distributable evidence"\)/);
   assert.doesNotMatch(`${finalizer}\n${verifier}`, /Get-AuthenticodeSignature|powershell\.exe|applicationSignatureStatus/);
   const workflow = text(".github/workflows/windows-desktop-candidate.yml");
   assert.match(workflow, /npm audit --omit=dev/);
@@ -271,6 +282,32 @@ test("Windows distributable evidence rejects links and detects post-hash replace
       () => inspectStableRegularFile(linkedDirectory, { label: "Linked candidate" }),
       /real, non-linked regular file/,
     );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("desktop evidence publication rejects a linked destination without touching its target", () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "rangabot-safe-evidence-")));
+  const outside = join(root, "outside.json");
+  const evidencePath = join(root, "evidence.json");
+  try {
+    writeFileSync(outside, "outside remains unchanged\n");
+    symlinkSync(outside, evidencePath, "file");
+    assert.throws(
+      () => writeSafeAtomicJsonEvidence(evidencePath, { state: "known" }, "Synthetic evidence"),
+      /real, non-linked regular file/,
+    );
+    assert.equal(readFileSync(outside, "utf8"), "outside remains unchanged\n");
+    assert.equal(lstatSync(evidencePath).isSymbolicLink(), true);
+
+    rmSync(evidencePath);
+    writeFileSync(evidencePath, "stale evidence\n");
+    const result = writeSafeAtomicJsonEvidence(evidencePath, { state: "known" }, "Synthetic evidence");
+    assert.equal(result.path, evidencePath);
+    assert.deepEqual(JSON.parse(readFileSync(evidencePath, "utf8")), { state: "known" });
+    assert.equal(lstatSync(evidencePath).isFile(), true);
+    assert.equal(lstatSync(evidencePath).nlink, 1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

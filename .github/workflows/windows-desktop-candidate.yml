@@ -9,12 +9,16 @@ on:
       - "desktop/**"
       - "forge.config.cjs"
       - "lib/desktop-artifact-identity.ts"
+      - "lib/safe-atomic-json-output.ts"
+      - "lib/windows-squirrel-setup.ts"
+      - "THIRD_PARTY_NOTICES.md"
       - "package.json"
       - "package-lock.json"
       - "scripts/finalize-desktop-package.ts"
       - "scripts/prepare-desktop.ts"
       - "scripts/verify-windows-distributables.ts"
       - "tests/desktop-windows-package.test.ts"
+      - "tests/windows-squirrel-setup.test.ts"
       - "tests/model-runtime.test.ts"
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -23,12 +27,16 @@ on:
       - "desktop/**"
       - "forge.config.cjs"
       - "lib/desktop-artifact-identity.ts"
+      - "lib/safe-atomic-json-output.ts"
+      - "lib/windows-squirrel-setup.ts"
+      - "THIRD_PARTY_NOTICES.md"
       - "package.json"
       - "package-lock.json"
       - "scripts/finalize-desktop-package.ts"
       - "scripts/prepare-desktop.ts"
       - "scripts/verify-windows-distributables.ts"
       - "tests/desktop-windows-package.test.ts"
+      - "tests/windows-squirrel-setup.test.ts"
       - "tests/model-runtime.test.ts"
 
 permissions:

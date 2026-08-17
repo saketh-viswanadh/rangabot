@@ -11,6 +11,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import {
   DESKTOP_SOURCE_BASE_COMMIT,
@@ -35,6 +36,16 @@ import {
 import { collectResponseFeedbackCandidateFiles } from "../lib/response-feedback-candidate.ts";
 
 const projectRoot = resolve(import.meta.dirname, "..");
+const require = createRequire(import.meta.url);
+const { preparePatchedSquirrelVendor } = require("../desktop/electron/windows-squirrel-vendor.cjs") as {
+  preparePatchedSquirrelVendor(input: {
+    electronWinstallerRoot: string;
+    destinationDirectory: string;
+  }): Readonly<{
+    destinationDirectory: string;
+    manifest: Readonly<Record<string, unknown>>;
+  }>;
+};
 const outputRoot = resolve(projectRoot, "desktop", "out");
 const desktopSourceFiles = [".gitignore", "forge.config.cjs", "next.config.ts", "package.json", "package-lock.json"];
 const requiredResourcePaths = [
@@ -388,6 +399,12 @@ if (target.platform === "win32") {
   removeGeneratedOutput(resolve(projectRoot, "out", "make", "squirrel.windows", "x64"));
   removeGeneratedOutput(resolve(projectRoot, "out", "make", "zip", "win32", "x64"));
 }
+const squirrelVendor = target.platform === "win32"
+  ? preparePatchedSquirrelVendor({
+      electronWinstallerRoot: resolve(projectRoot, "node_modules", "electron-winstaller"),
+      destinationDirectory: resolve(outputRoot, "squirrel-vendor", "win32", "x64"),
+    })
+  : null;
 buildStandalone(stagingBuildId);
 const resourceRoot = resolve(stagedParent, "rangabot-resources");
 const manifestPath = resolve(resourceRoot, "desktop", "manifest.json");
@@ -480,4 +497,10 @@ console.log(JSON.stringify({
   natives: manifest.natives.length,
   manifestPath,
   electronZipPath,
+  squirrelVendor: squirrelVendor
+    ? {
+        path: relative(projectRoot, squirrelVendor.destinationDirectory).replaceAll("\\", "/"),
+        manifest: squirrelVendor.manifest,
+      }
+    : null,
 }, null, 2));

@@ -30,6 +30,7 @@ import {
   type DesktopArtifactTarget,
 } from "../lib/desktop-artifact-identity.ts";
 import { isForbiddenDesktopPrivateResourcePath } from "../lib/desktop-private-payload-policy.ts";
+import { writeSafeAtomicJsonEvidence } from "../lib/safe-atomic-json-output.ts";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 const require = createRequire(import.meta.url);
@@ -318,7 +319,7 @@ async function finalizeWindows(output: string, target: DesktopArtifactTarget) {
     throw new Error(`Final unsigned Windows artifact identity failed verification: ${verified.state}/${verified.reason}.`);
   }
   const evidencePath = resolve(projectRoot, "desktop", "out", "desktop-artifact-win32-x64.json");
-  writeFileSync(evidencePath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+  writeSafeAtomicJsonEvidence(evidencePath, manifest, "Windows desktop artifact evidence");
   return {
     appPath,
     evidencePath,
@@ -436,7 +437,7 @@ async function finalize(output: string, target: DesktopArtifactTarget) {
       ? `desktop-artifact-normal-refresh-20260812-darwin-${arch}.json`
       : `desktop-artifact-darwin-${arch}.json`;
   const evidencePath = resolve(projectRoot, "desktop", "out", evidenceName);
-  writeFileSync(evidencePath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+  writeSafeAtomicJsonEvidence(evidencePath, manifest, "macOS desktop artifact evidence");
   return { appPath, evidencePath, manifest, verifiedState: verified.state, verificationReason: verified.reason, browserSnapshotCompatibility };
 }
 

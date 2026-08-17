@@ -8,13 +8,17 @@ import {
   openSync,
   readSync,
   realpathSync,
-  writeFileSync,
   type BigIntStats,
 } from "node:fs";
 import { createRequire } from "node:module";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseDesktopArtifactManifest } from "../lib/desktop-artifact-identity.ts";
+import { writeSafeAtomicJsonEvidence } from "../lib/safe-atomic-json-output.ts";
+import {
+  verifySquirrelNupkgApplicationPayload,
+  verifySquirrelSetupEmbeddedPayload,
+} from "../lib/windows-squirrel-setup.ts";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 const require = createRequire(import.meta.url);
@@ -23,8 +27,15 @@ const { assertWindowsPeCertificateTableAbsent } = require("../desktop/electron/w
     embeddedPeCertificateTable: "absent";
   }>;
 };
+const { assertPreparedSquirrelVendor } = require("../desktop/electron/windows-squirrel-vendor.cjs") as {
+  assertPreparedSquirrelVendor(directory: string): Readonly<{
+    directory: string;
+    manifest: Readonly<Record<string, unknown>>;
+  }>;
+};
 const maximumReleaseAssetBytes = 2 * 1024 * 1024 * 1024;
 const maximumManifestBytes = 4 * 1024 * 1024;
+const maximumReleasesBytes = 8192;
 
 type StableRegularFileIdentity = Readonly<{
   device: bigint;
@@ -128,20 +139,27 @@ export function assertStableRegularFileUnchanged(pathInput: string, evidence: St
 }
 
 export async function verifyWindowsDistributables() {
-  const expectedPaths = [
-    "out/make/squirrel.windows/x64/RangaBot-win32-x64-Setup.exe",
-    "out/make/squirrel.windows/x64/RangaBot-0.1.0-full.nupkg",
-    "out/make/zip/win32/x64/RangaBot-win32-x64-0.1.0.zip",
+  const expectedFiles = [
+    { path: "out/make/squirrel.windows/x64/RangaBot-win32-x64-Setup.exe", maximumBytes: maximumReleaseAssetBytes, captureContent: false },
+    { path: "out/make/squirrel.windows/x64/RangaBot-0.1.0-full.nupkg", maximumBytes: maximumReleaseAssetBytes, captureContent: false },
+    { path: "out/make/squirrel.windows/x64/RELEASES", maximumBytes: maximumReleasesBytes, captureContent: true },
+    { path: "out/make/zip/win32/x64/RangaBot-win32-x64-0.1.0.zip", maximumBytes: maximumReleaseAssetBytes, captureContent: false },
   ];
-  const files = expectedPaths.map((path) => resolve(projectRoot, ...path.split("/")));
   const evidence = [];
-  for (const path of files.sort()) {
+  const evidenceByPath = new Map<string, StableRegularFileEvidence>();
+  for (const expected of expectedFiles.sort((left, right) => left.path.localeCompare(right.path))) {
+    const path = resolve(projectRoot, ...expected.path.split("/"));
     const label = `Windows distributable ${relative(projectRoot, path)}`;
-    const inspected = inspectStableRegularFile(path, { label, maximumBytes: maximumReleaseAssetBytes });
+    const inspected = inspectStableRegularFile(path, {
+      label,
+      maximumBytes: expected.maximumBytes,
+      captureContent: expected.captureContent,
+    });
     const embeddedPeCertificateTable = /\.exe$/i.test(path)
       ? assertWindowsPeCertificateTableAbsent(path, label).embeddedPeCertificateTable
       : null;
     assertStableRegularFileUnchanged(path, inspected, label);
+    evidenceByPath.set(path, inspected);
     evidence.push({
       path: relative(projectRoot, path).replaceAll("\\", "/"),
       bytes: inspected.bytes,
@@ -149,6 +167,34 @@ export async function verifyWindowsDistributables() {
       embeddedPeCertificateTable,
     });
   }
+  const setupPath = resolve(projectRoot, "out", "make", "squirrel.windows", "x64", "RangaBot-win32-x64-Setup.exe");
+  const nupkgPath = resolve(projectRoot, "out", "make", "squirrel.windows", "x64", "RangaBot-0.1.0-full.nupkg");
+  const releasesPath = resolve(projectRoot, "out", "make", "squirrel.windows", "x64", "RELEASES");
+  const setupEvidence = evidenceByPath.get(setupPath);
+  const nupkgEvidence = evidenceByPath.get(nupkgPath);
+  const releasesEvidence = evidenceByPath.get(releasesPath);
+  if (!setupEvidence || !nupkgEvidence || !releasesEvidence?.content) {
+    throw new Error("The exact Squirrel candidate files were not inspected.");
+  }
+  const squirrelVendor = assertPreparedSquirrelVendor(resolve(
+    projectRoot,
+    "desktop",
+    "out",
+    "squirrel-vendor",
+    "win32",
+    "x64",
+  ));
+  const squirrelEmbeddedPayload = await verifySquirrelSetupEmbeddedPayload({
+    setupPath,
+    setupTemplatePath: resolve(squirrelVendor.directory, "Setup.exe"),
+    nupkgPath,
+    expectedNupkgBytes: nupkgEvidence.bytes,
+    expectedNupkgSha256: nupkgEvidence.sha256,
+    expectedReleases: releasesEvidence.content.toString("utf8"),
+  });
+  assertStableRegularFileUnchanged(setupPath, setupEvidence, "Windows Squirrel Setup.exe");
+  assertStableRegularFileUnchanged(nupkgPath, nupkgEvidence, "Windows Squirrel full package");
+  assertStableRegularFileUnchanged(releasesPath, releasesEvidence, "Windows Squirrel RELEASES");
   const applicationPath = resolve(projectRoot, "out", "RangaBot-win32-x64", "RangaBot.exe");
   const applicationEvidence = inspectStableRegularFile(applicationPath, { label: "Packaged RangaBot.exe" });
   const applicationEmbeddedPeCertificateTable = assertWindowsPeCertificateTableAbsent(
@@ -172,8 +218,18 @@ export async function verifyWindowsDistributables() {
   if (manifest.sourceCommit !== checkedOutCommit || (expectedSourceSha && checkedOutCommit !== expectedSourceSha)) {
     throw new Error("The Windows artifact source commit does not match the exact checked-out source SHA.");
   }
+  const squirrelNupkgApplication = await verifySquirrelNupkgApplicationPayload({
+    nupkgPath,
+    expectedApplicationBytes: applicationEvidence.bytes,
+    expectedApplicationSha256: applicationEvidence.sha256,
+    expectedManifestBytes: manifestEvidence.bytes,
+    expectedManifestSha256: manifestEvidence.sha256,
+  });
+  assertStableRegularFileUnchanged(nupkgPath, nupkgEvidence, "Windows Squirrel full package");
+  assertStableRegularFileUnchanged(applicationPath, applicationEvidence, "Packaged RangaBot.exe");
+  assertStableRegularFileUnchanged(manifestPath, manifestEvidence, "External Windows artifact manifest");
   const output = resolve(projectRoot, "desktop", "out", "windows-distributables-win32-x64.json");
-  writeFileSync(output, `${JSON.stringify({
+  writeSafeAtomicJsonEvidence(output, {
     platform: "win32",
     arch: "x64",
     distributionTrust: "unsigned-candidate",
@@ -186,8 +242,14 @@ export async function verifyWindowsDistributables() {
     applicationBytes: applicationEvidence.bytes,
     applicationSha256: applicationEvidence.sha256,
     applicationEmbeddedPeCertificateTable,
+    squirrelVendor: {
+      path: relative(projectRoot, squirrelVendor.directory).replaceAll("\\", "/"),
+      manifest: squirrelVendor.manifest,
+    },
+    squirrelEmbeddedPayload,
+    squirrelNupkgApplication,
     files: evidence,
-  }, null, 2)}\n`);
+  }, "Windows distributable evidence");
   console.log(JSON.stringify({ evidencePath: output, files: evidence }, null, 2));
 }
 
