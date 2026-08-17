@@ -263,7 +263,8 @@ For this candidate line, `sourceBaseCommit` is the original merged source
 `8b161635f79ac6a572524ba22e3af7364fe08a5b` and
 `sourceBaselineCommit` is the completed first-run onboarding, mobile review,
 and Windows direct-MSIX, isolated MakeAppx attestation, and bounded OPC
-verification commit `152e0bbb5828bfba0cac139575d0896bfe9485a7`. The generated v3 manifest records
+and whole-file BlockMap verification commit `7241f0ae70876869ab88f41527353de9b5baef2b`.
+The generated v3 manifest records
 the exact clean packaging HEAD as `sourceCommit`; the installed verifier uses
 that value as its commit identity and does not require `.git`.
 
