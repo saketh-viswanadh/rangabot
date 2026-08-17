@@ -222,11 +222,55 @@ export function assertPinnedWindowsToolRootStrings(input: Readonly<{
 }
 
 type PowerShellToolMetadata = Readonly<{
+  attestedPath?: unknown;
   fileVersion?: unknown;
   productVersion?: unknown;
   status?: unknown;
   signerSubject?: unknown;
 }>;
+
+export function makeAppxPowerShellAttestationInvocation(makeAppxPath: string) {
+  if (!makeAppxPath || makeAppxPath.includes("\0")) {
+    throw new Error("MakeAppx attestation requires one exact filesystem path.");
+  }
+  const script = [
+    "$ErrorActionPreference='Stop'",
+    "$p=[Console]::In.ReadToEnd()",
+    "if([string]::IsNullOrWhiteSpace($p)){throw 'MakeAppx attestation path is unavailable.'}",
+    "$i=[System.Diagnostics.FileVersionInfo]::GetVersionInfo($p)",
+    "$s=Get-AuthenticodeSignature -LiteralPath $p",
+    "[pscustomobject]@{attestedPath=$p;fileVersion=$i.FileVersion;productVersion=$i.ProductVersion;status=[string]$s.Status;signerSubject=$s.SignerCertificate.Subject}|ConvertTo-Json -Compress",
+  ].join(";");
+  return Object.freeze({
+    args: Object.freeze(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script]),
+    input: makeAppxPath,
+  });
+}
+
+export function parseMakeAppxPowerShellAttestation(raw: string, expectedPath: string) {
+  if (!expectedPath || expectedPath.includes("\0")) {
+    throw new Error("MakeAppx attestation requires one exact filesystem path.");
+  }
+  const parsed = JSON.parse(raw) as unknown;
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Pinned MakeAppx.exe returned invalid attestation metadata.");
+  }
+  const metadata = parsed as PowerShellToolMetadata;
+  if (metadata.attestedPath !== expectedPath
+    || typeof metadata.fileVersion !== "string" || !metadata.fileVersion.startsWith("10.0.26100.")
+    || typeof metadata.productVersion !== "string" || !metadata.productVersion.startsWith("10.0.26100.")
+    || metadata.status !== "Valid" || typeof metadata.signerSubject !== "string"
+    || !/(?:^|,\s*)O=Microsoft Corporation(?:,|$)/u.test(metadata.signerSubject)) {
+    throw new Error("Pinned MakeAppx.exe does not have the expected path, version, and valid Microsoft signature.");
+  }
+  return Object.freeze({
+    attestedPath: metadata.attestedPath,
+    fileVersion: metadata.fileVersion,
+    productVersion: metadata.productVersion,
+    status: metadata.status,
+    signerSubject: metadata.signerSubject,
+  });
+}
 
 export function inspectPinnedMakeAppx(): MakeAppxToolEvidence {
   if (process.platform !== "win32") throw new Error("MakeAppx inspection must run on Windows.");
@@ -246,24 +290,13 @@ export function inspectPinnedMakeAppx(): MakeAppxToolEvidence {
     label: "Protected Windows PowerShell attestor",
     requireSingleLink: false,
   });
-  const script = [
-    "$ErrorActionPreference='Stop'",
-    "$p=$args[0]",
-    "$i=[System.Diagnostics.FileVersionInfo]::GetVersionInfo($p)",
-    "$s=Get-AuthenticodeSignature -LiteralPath $p",
-    "[pscustomobject]@{fileVersion=$i.FileVersion;productVersion=$i.ProductVersion;status=[string]$s.Status;signerSubject=$s.SignerCertificate.Subject}|ConvertTo-Json -Compress",
-  ].join(";");
-  const raw = execFileSync(powershell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, path], {
+  const attestation = makeAppxPowerShellAttestationInvocation(path);
+  const raw = execFileSync(powershell, [...attestation.args], {
     encoding: "utf8",
     windowsHide: true,
+    input: attestation.input,
   }).trim();
-  const metadata = JSON.parse(raw) as PowerShellToolMetadata;
-  if (typeof metadata.fileVersion !== "string" || !metadata.fileVersion.startsWith("10.0.26100.")
-    || typeof metadata.productVersion !== "string" || !metadata.productVersion.startsWith("10.0.26100.")
-    || metadata.status !== "Valid" || typeof metadata.signerSubject !== "string"
-    || !/(?:^|,\s*)O=Microsoft Corporation(?:,|$)/u.test(metadata.signerSubject)) {
-    throw new Error("Pinned MakeAppx.exe does not have the expected version and valid Microsoft signature.");
-  }
+  const metadata = parseMakeAppxPowerShellAttestation(raw, path);
   assertStableFileUnchanged(file, "Pinned MakeAppx.exe");
   assertStableFileUnchanged(powershellEvidence, "Protected Windows PowerShell attestor");
   return Object.freeze({

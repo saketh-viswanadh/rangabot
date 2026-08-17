@@ -21,7 +21,10 @@ import {
   buildUnsignedMsix,
   collectMsixSourceInventory,
   createMakeAppxMapping,
+  inspectPinnedMakeAppx,
+  makeAppxPowerShellAttestationInvocation,
   makeAppxPackArguments,
+  parseMakeAppxPowerShellAttestation,
   PINNED_WINDOWS_SDK_VERSION,
   readExpectedMsixManifestIdentity,
   resolvePinnedMakeAppxPath,
@@ -109,6 +112,67 @@ test("pinned MakeAppx discovery accepts only the exact SDK directory", () => {
     systemRoot: "D:\\Windows",
     programFilesX86: "C:\\Program Files (x86)",
   }), /exact protected/u);
+});
+
+test("Windows PowerShell 5.1 receives and returns the exact MakeAppx path through stdin", () => {
+  const makeAppxPath = "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64\\MakeAppx.exe";
+  const invocation = makeAppxPowerShellAttestationInvocation(makeAppxPath);
+  assert.deepEqual(invocation.args.slice(0, 4), [
+    "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+  ]);
+  assert.equal(invocation.args.length, 5);
+  assert.equal(invocation.args.includes(makeAppxPath), false);
+  assert.doesNotMatch(invocation.args[4], /\$args\[0\]/u);
+  assert.match(invocation.args[4], /\[Console\]::In\.ReadToEnd\(\)/u);
+  assert.match(invocation.args[4], /attestedPath=\$p/u);
+  assert.equal(invocation.input, makeAppxPath);
+  assert.throws(
+    () => makeAppxPowerShellAttestationInvocation(""),
+    /requires one exact filesystem path/u,
+  );
+});
+
+test("PowerShell MakeAppx attestation rejects path, version, signature, signer, and JSON drift", () => {
+  const expectedPath = "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64\\MakeAppx.exe";
+  const valid = {
+    attestedPath: expectedPath,
+    fileVersion: "10.0.26100.3916",
+    productVersion: "10.0.26100.3916",
+    status: "Valid",
+    signerSubject: "CN=Microsoft Windows, O=Microsoft Corporation, C=US",
+  };
+  assert.deepEqual(parseMakeAppxPowerShellAttestation(JSON.stringify(valid), expectedPath), valid);
+  for (const [label, mutation] of [
+    ["empty path", { attestedPath: "" }],
+    ["mismatched path", { attestedPath: `${expectedPath}.other` }],
+    ["wrong file version", { fileVersion: "10.0.22621.1" }],
+    ["wrong product version", { productVersion: "10.0.22621.1" }],
+    ["invalid signature", { status: "HashMismatch" }],
+    ["wrong signer", { signerSubject: "CN=Other, O=Other Corporation, C=US" }],
+  ] as const) {
+    assert.throws(
+      () => parseMakeAppxPowerShellAttestation(JSON.stringify({ ...valid, ...mutation }), expectedPath),
+      /expected path, version, and valid Microsoft signature/u,
+      label,
+    );
+  }
+  assert.throws(() => parseMakeAppxPowerShellAttestation("{", expectedPath), SyntaxError);
+});
+
+test("Windows CI exercises the protected PowerShell 5.1 MakeAppx attestor", {
+  skip: process.platform !== "win32",
+}, () => {
+  const evidence = inspectPinnedMakeAppx();
+  assert.equal(evidence.sdkVersion, PINNED_WINDOWS_SDK_VERSION);
+  assert.equal(evidence.path, resolve(
+    "C:\\Program Files (x86)", "Windows Kits", "10", "bin",
+    PINNED_WINDOWS_SDK_VERSION, "x64", "MakeAppx.exe",
+  ));
+  assert.match(evidence.fileVersion, /^10\.0\.26100\./u);
+  assert.match(evidence.productVersion, /^10\.0\.26100\./u);
+  assert.equal(evidence.authenticodeStatus, "Valid");
+  assert.match(evidence.signerSubject, /(?:^|,\s*)O=Microsoft Corporation(?:,|$)/u);
+  assert.equal(evidence.attestor.relativePath, "System32/WindowsPowerShell/v1.0/powershell.exe");
 });
 
 test("approved manifest has the exact single-app full-trust identity", () => {
