@@ -31,6 +31,7 @@ const maximumBlockMapAbsoluteBytes = 128 * 1024 * 1024;
 const appxBlockBytes = 64 * 1024;
 const blockMapHashMethod = "http://www.w3.org/2001/04/xmlenc#sha256";
 const blockMapNamespace = "http://schemas.microsoft.com/appx/2010/blockmap";
+const blockMapFileHashNamespace = "http://schemas.microsoft.com/appx/2021/blockmap";
 const contentTypesNamespace = "http://schemas.openxmlformats.org/package/2006/content-types";
 const manifestContentType = "application/vnd.ms-appx.manifest+xml";
 const blockMapContentType = "application/vnd.ms-appx.blockmap+xml";
@@ -64,6 +65,7 @@ export type AppxBlockMapFile = Readonly<{
   size: number;
   localHeaderBytes: number;
   blocks: readonly Readonly<{ hash: string; compressedBytes: number | null }>[];
+  fileHash: string | null;
 }>;
 
 export type MsixContentTypes = Readonly<{
@@ -932,10 +934,26 @@ export function parseAppxBlockMap(content: Buffer): readonly AppxBlockMapFile[] 
   const root = /^<\?xml\s+version="1\.0"\s+encoding="UTF-8"(?:\s+standalone="no")?\s*\?>\s*<BlockMap([^>]*)>([\s\S]*)<\/BlockMap>\s*$/u.exec(text);
   if (!root) throw new Error("AppxBlockMap.xml does not have one exact BlockMap root.");
   const rootAttributes = parseXmlAttributes(root[1], "AppxBlockMap.xml root");
-  if (!exactAttributeKeys(rootAttributes, ["HashMethod", "xmlns"])
+  const legacyProfile = exactAttributeKeys(rootAttributes, ["HashMethod", "xmlns"]);
+  const fileHashProfile = exactAttributeKeys(
+    rootAttributes,
+    ["HashMethod", "IgnorableNamespaces", "xmlns", "xmlns:b4"],
+  )
+    && rootAttributes.get("xmlns:b4") === blockMapFileHashNamespace
+    && rootAttributes.get("IgnorableNamespaces") === "b4";
+  if ((!legacyProfile && !fileHashProfile)
     || rootAttributes.get("HashMethod") !== blockMapHashMethod
     || rootAttributes.get("xmlns") !== blockMapNamespace) {
-    throw new Error("AppxBlockMap.xml has an unexpected hash method or namespace.");
+    const recognizedAttributeNames = new Set(["HashMethod", "IgnorableNamespaces", "xmlns", "xmlns:b4"]);
+    const publicRootEvidence = Object.freeze({
+      attributeCount: rootAttributes.size,
+      unknownAttributeCount: [...rootAttributes.keys()].filter((name) => !recognizedAttributeNames.has(name)).length,
+      hashMethodMatches: rootAttributes.get("HashMethod") === blockMapHashMethod,
+      namespaceMatches: rootAttributes.get("xmlns") === blockMapNamespace,
+      fileHashNamespaceMatches: rootAttributes.get("xmlns:b4") === blockMapFileHashNamespace,
+      ignorableNamespacesMatches: rootAttributes.get("IgnorableNamespaces") === "b4",
+    });
+    throw new Error(`AppxBlockMap.xml has an unexpected hash method or namespace: ${JSON.stringify(publicRootEvidence)}.`);
   }
   const files: AppxBlockMapFile[] = [];
   let body = root[2];
@@ -951,32 +969,59 @@ export function parseAppxBlockMap(content: Buffer): readonly AppxBlockMapFile[] 
     const size = safeIntegerAttribute(attributes.get("Size"), `AppxBlockMap.xml ${name} Size`);
     const localHeaderBytes = safeIntegerAttribute(attributes.get("LfhSize"), `AppxBlockMap.xml ${name} LfhSize`);
     const blocks: { hash: string; compressedBytes: number | null }[] = [];
+    let fileHash: string | null = null;
     let children = file[2] ?? "";
     while (children.trim()) {
       children = children.replace(/^\s+/u, "");
       const block = /^<Block([^>]*)\/>/u.exec(children);
-      if (!block) throw new Error(`AppxBlockMap.xml File ${name} contains unexpected content.`);
-      const blockAttributes = parseXmlAttributes(block[1], `AppxBlockMap.xml ${name} Block`);
-      const keys = [...blockAttributes.keys()];
-      if (!(keys.length === 1 && keys[0] === "Hash")
-        && !(keys.length === 2 && blockAttributes.has("Hash") && blockAttributes.has("Size"))) {
-        throw new Error(`AppxBlockMap.xml File ${name} Block has unexpected attributes.`);
+      if (block && fileHash === null) {
+        const blockAttributes = parseXmlAttributes(block[1], `AppxBlockMap.xml ${name} Block`);
+        const keys = [...blockAttributes.keys()];
+        if (!(keys.length === 1 && keys[0] === "Hash")
+          && !(keys.length === 2 && blockAttributes.has("Hash") && blockAttributes.has("Size"))) {
+          throw new Error(`AppxBlockMap.xml File ${name} Block has unexpected attributes.`);
+        }
+        const hash = blockAttributes.get("Hash") ?? "";
+        const decoded = Buffer.from(hash, "base64");
+        if (decoded.length !== 32 || decoded.toString("base64") !== hash) {
+          throw new Error(`AppxBlockMap.xml File ${name} has an invalid SHA-256 block hash.`);
+        }
+        const compressedBytes = blockAttributes.has("Size")
+          ? safeIntegerAttribute(blockAttributes.get("Size"), `AppxBlockMap.xml ${name} Block Size`)
+          : null;
+        blocks.push(Object.freeze({ hash, compressedBytes }));
+        children = children.slice(block[0].length);
+        continue;
       }
-      const hash = blockAttributes.get("Hash") ?? "";
-      const decoded = Buffer.from(hash, "base64");
-      if (decoded.length !== 32 || decoded.toString("base64") !== hash) {
-        throw new Error(`AppxBlockMap.xml File ${name} has an invalid SHA-256 block hash.`);
+      const wholeFileHash = /^<b4:FileHash([^>]*)\/>/u.exec(children);
+      if (!fileHashProfile || !wholeFileHash || fileHash !== null) {
+        throw new Error(`AppxBlockMap.xml File ${name} contains unexpected content.`);
       }
-      const compressedBytes = blockAttributes.has("Size")
-        ? safeIntegerAttribute(blockAttributes.get("Size"), `AppxBlockMap.xml ${name} Block Size`)
-        : null;
-      blocks.push(Object.freeze({ hash, compressedBytes }));
-      children = children.slice(block[0].length);
+      const fileHashAttributes = parseXmlAttributes(
+        wholeFileHash[1],
+        `AppxBlockMap.xml ${name} b4:FileHash`,
+      );
+      if (!exactAttributeKeys(fileHashAttributes, ["Hash"])) {
+        throw new Error(`AppxBlockMap.xml File ${name} b4:FileHash has unexpected attributes.`);
+      }
+      const candidateFileHash = fileHashAttributes.get("Hash") ?? "";
+      const decodedFileHash = Buffer.from(candidateFileHash, "base64");
+      if (decodedFileHash.length !== 32 || decodedFileHash.toString("base64") !== candidateFileHash) {
+        throw new Error(`AppxBlockMap.xml File ${name} has an invalid whole-file SHA-256 hash.`);
+      }
+      fileHash = candidateFileHash;
+      children = children.slice(wholeFileHash[0].length);
+      if (children.trim()) {
+        throw new Error(`AppxBlockMap.xml File ${name} b4:FileHash is not terminal.`);
+      }
     }
     if (blocks.length !== Math.ceil(size / appxBlockBytes)) {
       throw new Error(`AppxBlockMap.xml File ${name} has an invalid block count.`);
     }
-    files.push(Object.freeze({ name, size, localHeaderBytes, blocks: Object.freeze(blocks) }));
+    if (fileHashProfile ? (size > appxBlockBytes) !== (fileHash !== null) : fileHash !== null) {
+      throw new Error(`AppxBlockMap.xml File ${name} has invalid b4:FileHash coverage.`);
+    }
+    files.push(Object.freeze({ name, size, localHeaderBytes, blocks: Object.freeze(blocks), fileHash }));
     body = body.slice(file[0].length);
   }
   assertUniqueWindowsPackagePaths(files.map((file) => file.name), "AppxBlockMap.xml");
@@ -1011,6 +1056,10 @@ function assertBlockMapPreflight(input: Readonly<{
       || mapped.localHeaderBytes < 30 || mapped.localHeaderBytes > 65_536
       || mapped.blocks.length !== Math.ceil(source.bytes / appxBlockBytes)) {
       throw new Error(`MSIX entry ${source.packagePath} fails size, LFH, or block-count preflight.`);
+    }
+    if (mapped.fileHash !== null
+      && mapped.fileHash !== Buffer.from(source.sha256, "hex").toString("base64")) {
+      throw new Error(`MSIX entry ${source.packagePath} has invalid whole-file BlockMap SHA-256 evidence.`);
     }
     if (entry.compressionMethod === 8) {
       const sizes = mapped.blocks.map((block) => block.compressedBytes);
@@ -1177,6 +1226,10 @@ export async function verifyUnsignedMsix(input: Readonly<{
         || mapped.blocks.some((block, index) => block.hash !== inspected.blockHashes[index])) {
         throw new Error(`MSIX entry ${entry.name} does not reconcile with AppxBlockMap.xml SHA-256 evidence.`);
       }
+      if (mapped.fileHash !== null
+        && mapped.fileHash !== Buffer.from(inspected.sha256, "hex").toString("base64")) {
+        throw new Error(`MSIX entry ${entry.name} does not reconcile with its whole-file BlockMap SHA-256 evidence.`);
+      }
       if (entry.name === "AppxManifest.xml" && inspected.sha256 !== APPROVED_MSIX_MANIFEST_SHA256) {
         throw new Error("Packaged AppxManifest.xml is not the approved manifest.");
       }
@@ -1222,6 +1275,7 @@ export async function verifyUnsignedMsix(input: Readonly<{
       blockMapHashMethod: "SHA256" as const,
       blockMapFileCount: blockMap.length,
       blockMapBlockCount: blockMap.reduce((total, file) => total + file.blocks.length, 0),
+      blockMapFileHashCount: blockMap.filter((file) => file.fileHash !== null).length,
       contentTypeDefaultCount: contentTypes.defaults.length,
       contentTypeOverrideCount: contentTypes.overrides.length,
       desktopArtifactId: desktopManifest.desktopArtifactId,

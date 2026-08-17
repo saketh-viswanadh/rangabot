@@ -264,9 +264,13 @@ function blockHashes(content: Buffer) {
 }
 
 type BlockMapMutation = "none" | "bad-hash" | "stored-size" | "compressed-size-missing"
-  | "compressed-size-with-wrapper" | "compressed-boundary-redistributed";
+  | "compressed-size-with-wrapper" | "compressed-boundary-redistributed" | "bad-file-hash";
 
-function createBlockMap(sources: readonly FixtureZipEntry[], mutation: BlockMapMutation) {
+function createBlockMap(
+  sources: readonly FixtureZipEntry[],
+  mutation: BlockMapMutation,
+  profile: "legacy" | "b4" = "legacy",
+) {
   let changed = false;
   const files = sources.map((source) => {
     const blockMapName = source.name.replaceAll("/", "\\");
@@ -300,9 +304,20 @@ function createBlockMap(sources: readonly FixtureZipEntry[], mutation: BlockMapM
       }
       return `    <Block Hash="${outputHash}"${size}/>`;
     }).join("\n");
-    return `  <File Name="${xmlAttribute(blockMapName)}" Size="${source.content.length}" LfhSize="${30 + nameBytes}">\n${blocks}\n  </File>`;
+    let fileHash = createHash("sha256").update(source.content).digest("base64");
+    if (!changed && mutation === "bad-file-hash" && profile === "b4" && source.content.length > 65_536) {
+      fileHash = Buffer.alloc(32, 0xa5).toString("base64");
+      changed = true;
+    }
+    const wholeFileHash = profile === "b4" && source.content.length > 65_536
+      ? `\n    <b4:FileHash Hash="${fileHash}"/>`
+      : "";
+    return `  <File Name="${xmlAttribute(blockMapName)}" Size="${source.content.length}" LfhSize="${30 + nameBytes}">\n${blocks}${wholeFileHash}\n  </File>`;
   }).join("\n");
-  return Buffer.from(`<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n<BlockMap HashMethod="http://www.w3.org/2001/04/xmlenc#sha256" xmlns="http://schemas.microsoft.com/appx/2010/blockmap">\n${files}\n</BlockMap>\n`, "utf8");
+  const modernAttributes = profile === "b4"
+    ? ' xmlns:b4="http://schemas.microsoft.com/appx/2021/blockmap" IgnorableNamespaces="b4"'
+    : "";
+  return Buffer.from(`<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n<BlockMap HashMethod="http://www.w3.org/2001/04/xmlenc#sha256" xmlns="http://schemas.microsoft.com/appx/2010/blockmap"${modernAttributes}>\n${files}\n</BlockMap>\n`, "utf8");
 }
 
 function contentTypePartName(packagePath: string) {
@@ -353,7 +368,7 @@ function writeSyntheticMsix(input: Readonly<{
     compressed: entry.packagePath === "resources/app.asar"
       || entry.packagePath === "resources/chunks/multiblock.dat",
   }));
-  const blockMap = createBlockMap(sources, input.mutation ?? "none");
+  const blockMap = createBlockMap(sources, input.mutation ?? "none", "b4");
   const packagePaths = [...sources.map((source) => source.name), "AppxBlockMap.xml", "[Content_Types].xml"];
   const path = join(input.root, `candidate-${input.mutation ?? "none"}.msix`);
   writeFileSync(path, createZip([
@@ -529,6 +544,74 @@ test("block map parser accepts only the exact optional MakeAppx standalone decla
   )), /exact BlockMap root/u);
 });
 
+test("block map parser accepts only the exact Microsoft b4 whole-file SHA-256 profile", () => {
+  const large = { name: "large.bin", content: Buffer.alloc(65_537, 0x5a) };
+  const boundary = { name: "boundary.bin", content: Buffer.alloc(65_536, 0x4b) };
+  const small = { name: "small.bin", content: Buffer.from("small") };
+  const fixture = createBlockMap([large, boundary, small], "none", "b4");
+  const parsed = parseAppxBlockMap(fixture);
+  assert.equal(parsed.find((entry) => entry.name === "large.bin")?.fileHash,
+    createHash("sha256").update(large.content).digest("base64"));
+  assert.equal(parsed.find((entry) => entry.name === "boundary.bin")?.fileHash, null);
+  assert.equal(parsed.find((entry) => entry.name === "small.bin")?.fileHash, null);
+  const text = fixture.toString("utf8");
+  assert.throws(() => parseAppxBlockMap(Buffer.from(
+    text.replace("http://schemas.microsoft.com/appx/2021/blockmap", "urn:wrong"),
+  )), /hash method or namespace.*fileHashNamespaceMatches/u);
+  assert.throws(() => parseAppxBlockMap(Buffer.from(
+    text.replace('IgnorableNamespaces="b4"', 'IgnorableNamespaces="b5"'),
+  )), /hash method or namespace/u);
+  assert.throws(() => parseAppxBlockMap(Buffer.from(
+    text.replace(' IgnorableNamespaces="b4"', ""),
+  )), /hash method or namespace/u);
+  assert.throws(() => parseAppxBlockMap(Buffer.from(
+    text.replace('IgnorableNamespaces="b4"', 'IgnorableNamespaces="b4" Extra="x"'),
+  )), /hash method or namespace/u);
+  const longAttributeName = `Unknown${"A".repeat(4096)}`;
+  assert.throws(() => parseAppxBlockMap(Buffer.from(
+    text.replace('IgnorableNamespaces="b4"', `IgnorableNamespaces="b4" ${longAttributeName}="x"`),
+  )), (error: unknown) => error instanceof Error
+    && error.message.length < 512
+    && !error.message.includes(longAttributeName)
+    && error.message.includes('"unknownAttributeCount":1'));
+  assert.throws(() => parseAppxBlockMap(Buffer.from(
+    text.replace(/\s*<b4:FileHash[^>]*\/>/u, ""),
+  )), /FileHash coverage/u);
+  assert.throws(() => parseAppxBlockMap(Buffer.from(
+    text.replace(/<b4:FileHash Hash="[^"]+"\/>/u, '<b4:FileHash Hash="AA=="/>'),
+  )), /invalid whole-file SHA-256/u);
+  assert.throws(() => parseAppxBlockMap(Buffer.from(
+    text.replace(/<b4:FileHash Hash="([^"]+)"\/>/u, '<b4:FileHash Hash="$1" Extra="x"/>'),
+  )), /unexpected attributes/u);
+  assert.throws(() => parseAppxBlockMap(Buffer.from(
+    text.replace("</File>", "    <b4:FileHash Hash=\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"/>\n  </File>"),
+  )), /unexpected content|not terminal/u);
+  const smallBlockHash = createHash("sha256").update(small.content).digest("base64");
+  const smallFileHash = `    <b4:FileHash Hash="${smallBlockHash}"/>`;
+  assert.throws(() => parseAppxBlockMap(Buffer.from(text.replace(
+    `    <Block Hash="${smallBlockHash}"/>\n  </File>`,
+    `    <Block Hash="${smallBlockHash}"/>\n${smallFileHash}\n  </File>`,
+  ))), /FileHash coverage/u);
+  const boundaryBlockHash = createHash("sha256").update(boundary.content).digest("base64");
+  assert.throws(() => parseAppxBlockMap(Buffer.from(text.replace(
+    `    <Block Hash="${boundaryBlockHash}"/>\n  </File>`,
+    `    <Block Hash="${boundaryBlockHash}"/>\n    <b4:FileHash Hash="${boundaryBlockHash}"/>\n  </File>`,
+  ))), /FileHash coverage/u);
+  const largeFileHash = createHash("sha256").update(large.content).digest("base64");
+  assert.throws(() => parseAppxBlockMap(Buffer.from(text.replace(
+    `    <b4:FileHash Hash="${largeFileHash}"/>`,
+    "",
+  ).replace(
+    /(<File Name="large\.bin"[^>]*>)/u,
+    `$1\n    <b4:FileHash Hash="${largeFileHash}"/>`,
+  ))), /unexpected content|not terminal/u);
+  const legacyWithB4Child = createBlockMap([large], "none").toString("utf8").replace(
+    "  </File>",
+    `    <b4:FileHash Hash="${largeFileHash}"/>\n  </File>`,
+  );
+  assert.throws(() => parseAppxBlockMap(Buffer.from(legacyWithB4Child)), /unexpected content/u);
+});
+
 test("full verifier reconciles every stored/compressed/empty source with AppxBlockMap SHA-256", async () => {
   const root = temporaryDirectory();
   const application = createSyntheticFinalizedApplication(root);
@@ -547,11 +630,13 @@ test("full verifier reconciles every stored/compressed/empty source with AppxBlo
   assert.equal(result.desktopArtifactId, application.manifest.desktopArtifactId);
   assert.equal(result.verifiedFileCount, result.sourceFileCount);
   assert.ok(result.blockMapBlockCount > 0);
+  assert.ok(result.blockMapFileHashCount > 0);
 });
 
 test("full verifier rejects bad hashes and wrong compressed/stored Block Size semantics", async () => {
   for (const mutation of [
     "bad-hash",
+    "bad-file-hash",
     "stored-size",
     "compressed-size-missing",
     "compressed-size-with-wrapper",
@@ -567,6 +652,6 @@ test("full verifier rejects bad hashes and wrong compressed/stored Block Size se
       assetsRoot: join(msixRoot, "assets"),
       checkedOutCommit: sourceCommit,
       expectedSourceSha: sourceCommit,
-    }), /reconcile|Block Size/u, mutation);
+    }), /reconcile|Block Size|whole-file/u, mutation);
   }
 });
