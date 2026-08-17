@@ -262,7 +262,7 @@ runtime-compatibility policy, not a release or signing claim.
 For this candidate line, `sourceBaseCommit` is the original merged source
 `8b161635f79ac6a572524ba22e3af7364fe08a5b` and
 `sourceBaselineCommit` is the completed first-run onboarding, mobile review,
-and Windows direct-MSIX behavior commit `138bfa53cfc6258ea217f9caec83dfe70cc4fb73`. The generated v3 manifest records
+and Windows direct-MSIX plus clean-install lock commit `1367b7790e979f8353c598cf74b1c72f64bf4ee0`. The generated v3 manifest records
 the exact clean packaging HEAD as `sourceCommit`; the installed verifier uses
 that value as its commit identity and does not require `.git`.
 
