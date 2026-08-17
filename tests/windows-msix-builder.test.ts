@@ -124,6 +124,19 @@ test("Windows PowerShell 5.1 receives and returns the exact MakeAppx path throug
   assert.equal(invocation.args.includes(makeAppxPath), false);
   assert.doesNotMatch(invocation.args[4], /\$args\[0\]/u);
   assert.match(invocation.args[4], /\[Console\]::In\.ReadToEnd\(\)/u);
+  assert.match(invocation.args[4], /\$env:PSModulePath=\[IO\.Path\]::Combine\(\$PSHOME,'Modules'\)/u);
+  assert.match(invocation.args[4], /\$securityManifest=\[IO\.Path\]::Combine\(\$env:PSModulePath,'Microsoft\.PowerShell\.Security','Microsoft\.PowerShell\.Security\.psd1'\)/u);
+  assert.match(invocation.args[4], /\$loadedModule=Import-Module -Name \$securityManifest -Force -PassThru -ErrorAction Stop/u);
+  assert.match(invocation.args[4], /\$loadedModule\.Path -ne \$securityManifest/u);
+  assert.match(invocation.args[4], /Microsoft\.PowerShell\.Security\\Get-AuthenticodeSignature/u);
+  assert.doesNotMatch(invocation.args[4], /Import-Module Microsoft\.PowerShell\.Security/u);
+  assert.doesNotMatch(invocation.args[4], /\$s=Get-AuthenticodeSignature/u);
+  const sanitizeIndex = invocation.args[4].indexOf("$env:PSModulePath=");
+  const manifestIndex = invocation.args[4].indexOf("$securityManifest=");
+  const importIndex = invocation.args[4].indexOf("Import-Module -Name $securityManifest");
+  const signatureIndex = invocation.args[4].indexOf("Microsoft.PowerShell.Security\\Get-AuthenticodeSignature");
+  assert.ok(sanitizeIndex >= 0 && sanitizeIndex < manifestIndex);
+  assert.ok(manifestIndex < importIndex && importIndex < signatureIndex);
   assert.match(invocation.args[4], /attestedPath=\$p/u);
   assert.equal(invocation.input, makeAppxPath);
   assert.throws(
@@ -134,29 +147,42 @@ test("Windows PowerShell 5.1 receives and returns the exact MakeAppx path throug
 
 test("PowerShell MakeAppx attestation rejects path, version, signature, signer, and JSON drift", () => {
   const expectedPath = "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64\\MakeAppx.exe";
+  const expectedModuleHome = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules";
+  const expectedModuleManifest = `${expectedModuleHome}\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1`;
   const valid = {
     attestedPath: expectedPath,
+    moduleHome: expectedModuleHome,
+    moduleManifest: expectedModuleManifest,
     fileVersion: "10.0.26100.3916",
     productVersion: "10.0.26100.3916",
     status: "Valid",
     signerSubject: "CN=Microsoft Windows, O=Microsoft Corporation, C=US",
   };
-  assert.deepEqual(parseMakeAppxPowerShellAttestation(JSON.stringify(valid), expectedPath), valid);
+  assert.deepEqual(parseMakeAppxPowerShellAttestation(
+    JSON.stringify(valid), expectedPath, expectedModuleHome, expectedModuleManifest,
+  ), valid);
   for (const [label, mutation] of [
     ["empty path", { attestedPath: "" }],
     ["mismatched path", { attestedPath: `${expectedPath}.other` }],
+    ["wrong module home", { moduleHome: "C:\\Program Files\\PowerShell\\7\\Modules" }],
+    ["wrong module manifest", { moduleManifest: "C:\\Program Files\\PowerShell\\7\\Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1" }],
     ["wrong file version", { fileVersion: "10.0.22621.1" }],
     ["wrong product version", { productVersion: "10.0.22621.1" }],
     ["invalid signature", { status: "HashMismatch" }],
     ["wrong signer", { signerSubject: "CN=Other, O=Other Corporation, C=US" }],
   ] as const) {
     assert.throws(
-      () => parseMakeAppxPowerShellAttestation(JSON.stringify({ ...valid, ...mutation }), expectedPath),
+      () => parseMakeAppxPowerShellAttestation(
+        JSON.stringify({ ...valid, ...mutation }), expectedPath, expectedModuleHome, expectedModuleManifest,
+      ),
       /expected path, version, and valid Microsoft signature/u,
       label,
     );
   }
-  assert.throws(() => parseMakeAppxPowerShellAttestation("{", expectedPath), SyntaxError);
+  assert.throws(
+    () => parseMakeAppxPowerShellAttestation("{", expectedPath, expectedModuleHome, expectedModuleManifest),
+    SyntaxError,
+  );
 });
 
 test("Windows CI exercises the protected PowerShell 5.1 MakeAppx attestor", {

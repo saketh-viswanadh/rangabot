@@ -223,6 +223,8 @@ export function assertPinnedWindowsToolRootStrings(input: Readonly<{
 
 type PowerShellToolMetadata = Readonly<{
   attestedPath?: unknown;
+  moduleHome?: unknown;
+  moduleManifest?: unknown;
   fileVersion?: unknown;
   productVersion?: unknown;
   status?: unknown;
@@ -237,9 +239,13 @@ export function makeAppxPowerShellAttestationInvocation(makeAppxPath: string) {
     "$ErrorActionPreference='Stop'",
     "$p=[Console]::In.ReadToEnd()",
     "if([string]::IsNullOrWhiteSpace($p)){throw 'MakeAppx attestation path is unavailable.'}",
+    "$env:PSModulePath=[IO.Path]::Combine($PSHOME,'Modules')",
+    "$securityManifest=[IO.Path]::Combine($env:PSModulePath,'Microsoft.PowerShell.Security','Microsoft.PowerShell.Security.psd1')",
+    "$loadedModule=Import-Module -Name $securityManifest -Force -PassThru -ErrorAction Stop",
+    "if($loadedModule.Path -ne $securityManifest){throw 'Windows PowerShell loaded an unexpected Security module.'}",
     "$i=[System.Diagnostics.FileVersionInfo]::GetVersionInfo($p)",
-    "$s=Get-AuthenticodeSignature -LiteralPath $p",
-    "[pscustomobject]@{attestedPath=$p;fileVersion=$i.FileVersion;productVersion=$i.ProductVersion;status=[string]$s.Status;signerSubject=$s.SignerCertificate.Subject}|ConvertTo-Json -Compress",
+    "$s=Microsoft.PowerShell.Security\\Get-AuthenticodeSignature -LiteralPath $p",
+    "[pscustomobject]@{attestedPath=$p;moduleHome=$env:PSModulePath;moduleManifest=$loadedModule.Path;fileVersion=$i.FileVersion;productVersion=$i.ProductVersion;status=[string]$s.Status;signerSubject=$s.SignerCertificate.Subject}|ConvertTo-Json -Compress",
   ].join(";");
   return Object.freeze({
     args: Object.freeze(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script]),
@@ -247,8 +253,15 @@ export function makeAppxPowerShellAttestationInvocation(makeAppxPath: string) {
   });
 }
 
-export function parseMakeAppxPowerShellAttestation(raw: string, expectedPath: string) {
-  if (!expectedPath || expectedPath.includes("\0")) {
+export function parseMakeAppxPowerShellAttestation(
+  raw: string,
+  expectedPath: string,
+  expectedModuleHome: string,
+  expectedModuleManifest: string,
+) {
+  if (!expectedPath || expectedPath.includes("\0")
+    || !expectedModuleHome || expectedModuleHome.includes("\0")
+    || !expectedModuleManifest || expectedModuleManifest.includes("\0")) {
     throw new Error("MakeAppx attestation requires one exact filesystem path.");
   }
   const parsed = JSON.parse(raw) as unknown;
@@ -257,6 +270,8 @@ export function parseMakeAppxPowerShellAttestation(raw: string, expectedPath: st
   }
   const metadata = parsed as PowerShellToolMetadata;
   if (metadata.attestedPath !== expectedPath
+    || metadata.moduleHome !== expectedModuleHome
+    || metadata.moduleManifest !== expectedModuleManifest
     || typeof metadata.fileVersion !== "string" || !metadata.fileVersion.startsWith("10.0.26100.")
     || typeof metadata.productVersion !== "string" || !metadata.productVersion.startsWith("10.0.26100.")
     || metadata.status !== "Valid" || typeof metadata.signerSubject !== "string"
@@ -265,6 +280,8 @@ export function parseMakeAppxPowerShellAttestation(raw: string, expectedPath: st
   }
   return Object.freeze({
     attestedPath: metadata.attestedPath,
+    moduleHome: metadata.moduleHome,
+    moduleManifest: metadata.moduleManifest,
     fileVersion: metadata.fileVersion,
     productVersion: metadata.productVersion,
     status: metadata.status,
@@ -290,15 +307,26 @@ export function inspectPinnedMakeAppx(): MakeAppxToolEvidence {
     label: "Protected Windows PowerShell attestor",
     requireSingleLink: false,
   });
+  const moduleHome = requireRealDirectory(resolve(dirname(powershell), "Modules"), "Protected Windows PowerShell module root");
+  const securityModulePath = resolve(
+    moduleHome,
+    "Microsoft.PowerShell.Security",
+    "Microsoft.PowerShell.Security.psd1",
+  );
+  const securityModuleEvidence = inspectStableFile(
+    securityModulePath,
+    { label: "Protected Windows PowerShell Security module", requireSingleLink: false },
+  );
   const attestation = makeAppxPowerShellAttestationInvocation(path);
   const raw = execFileSync(powershell, [...attestation.args], {
     encoding: "utf8",
     windowsHide: true,
     input: attestation.input,
   }).trim();
-  const metadata = parseMakeAppxPowerShellAttestation(raw, path);
+  const metadata = parseMakeAppxPowerShellAttestation(raw, path, moduleHome, securityModulePath);
   assertStableFileUnchanged(file, "Pinned MakeAppx.exe");
   assertStableFileUnchanged(powershellEvidence, "Protected Windows PowerShell attestor");
+  assertStableFileUnchanged(securityModuleEvidence, "Protected Windows PowerShell Security module");
   return Object.freeze({
     path,
     sdkVersion: PINNED_WINDOWS_SDK_VERSION,
