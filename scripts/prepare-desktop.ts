@@ -1,5 +1,4 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   chmodSync,
   cpSync,
@@ -14,7 +13,6 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import {
-  DESKTOP_FUSE_BINARY_PATH,
   DESKTOP_SOURCE_BASE_COMMIT,
   DESKTOP_SOURCE_BASELINE_COMMIT,
   REQUIRED_DESKTOP_FUSE_NAMES,
@@ -22,12 +20,14 @@ import {
   REQUIRED_DESKTOP_FUSE_WIRE_STATES,
   collectDesktopArtifactFiles,
   createDesktopArtifactManifest,
+  desktopFuseBinaryPath,
   deriveDesktopSourceManifestSha256,
-  type DesktopArtifactArch,
   type DesktopArtifactFile,
+  type DesktopArtifactTarget,
   type DesktopNativeModuleVersion,
   type DesktopWebFeedbackIdentity,
 } from "../lib/desktop-artifact-identity.ts";
+import { isForbiddenDesktopPrivateResourcePath } from "../lib/desktop-private-payload-policy.ts";
 import {
   desktopLaunchProfileForBuild,
   DESKTOP_FINDER_VERIFICATION_BUILD_PROFILE,
@@ -49,18 +49,30 @@ const requiredResourcePaths = [
 const WEB_FEEDBACK_ARTIFACT_SHA256 = "37810169b1784d08886840fdfb454175a1255db0ce797594970c1f9cb8781525";
 const NORMAL_REFRESH_PACKAGE_VARIANT = "normal-refresh-20260812-v1";
 const OLLAMA_RUNTIME_VERSION = "0.32.9";
-const OLLAMA_RUNTIME_SHA256 = "17a5b096d4515d00a6415012db847a2b353b389ed7ab33d025e3b98c2f05b49c";
+const OLLAMA_RUNTIME_SHA256 = Object.freeze({
+  darwin: "17a5b096d4515d00a6415012db847a2b353b389ed7ab33d025e3b98c2f05b49c",
+  win32: "7b4f6ce09c1f2c3b21561b323779beaf3ca3c7012f8e4522605a13cbbb19f0b8",
+});
+const ELECTRON_WINDOWS_X64_SHA256 = "ef0709cfa719739acce73de6f9b684304baf38c6454376638a70d34a7cecffe0";
 
-function parseArch(arguments_: string[]): DesktopArtifactArch {
+function parseTarget(arguments_: string[]): DesktopArtifactTarget {
   const values = arguments_.filter((argument) => argument.startsWith("--arch=")).map((argument) => argument.slice(7));
-  if (values.length !== 1 || !["arm64", "x64"].includes(values[0]) || arguments_.length !== 1) {
-    throw new Error("Usage: npm run desktop:prepare -- --arch=arm64|x64");
+  const platforms = arguments_.filter((argument) => argument.startsWith("--platform=")).map((argument) => argument.slice(11));
+  if (values.length !== 1 || platforms.length !== 1 || !["arm64", "x64"].includes(values[0])
+    || !["darwin", "win32"].includes(platforms[0]) || arguments_.length !== 2
+    || (platforms[0] === "win32" && values[0] !== "x64")) {
+    throw new Error("Usage: npm run desktop:prepare -- --platform=darwin|win32 --arch=arm64|x64 (Windows is x64 only)");
   }
-  return values[0] as DesktopArtifactArch;
+  return { platform: platforms[0], arch: values[0] } as DesktopArtifactTarget;
 }
 
 function sha256File(path: string) {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
+  const output = process.platform === "win32"
+    ? execFileSync("certutil.exe", ["-hashfile", path, "SHA256"], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 })
+    : execFileSync("/usr/bin/shasum", ["-a", "256", path], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
+  const digest = output.match(/\b[0-9a-fA-F]{64}\b/)?.[0]?.toLowerCase();
+  if (!digest) throw new Error(`Could not compute SHA-256 for ${relative(projectRoot, path)}.`);
+  return digest;
 }
 
 function sourceDirty() {
@@ -110,34 +122,51 @@ function copyFile(source: string, destination: string) {
   cpSync(source, destination, { dereference: true, preserveTimestamps: false });
 }
 
-function stageManagedModelRuntime(arch: DesktopArtifactArch, resourceRoot: string) {
+function stageManagedModelRuntime(target: DesktopArtifactTarget, resourceRoot: string) {
   const cacheRoot = resolve(outputRoot, "runtime-cache");
-  const archive = resolve(cacheRoot, `ollama-darwin-v${OLLAMA_RUNTIME_VERSION}.tgz`);
+  const archiveName = target.platform === "darwin"
+    ? `ollama-darwin-v${OLLAMA_RUNTIME_VERSION}.tgz`
+    : `ollama-windows-amd64-v${OLLAMA_RUNTIME_VERSION}.zip`;
+  const archive = resolve(cacheRoot, archiveName);
   mkdirSync(cacheRoot, { recursive: true, mode: 0o755 });
-  if (!existsSync(archive) || sha256File(archive) !== OLLAMA_RUNTIME_SHA256) {
+  if (!existsSync(archive) || sha256File(archive) !== OLLAMA_RUNTIME_SHA256[target.platform]) {
     rmSync(archive, { force: true });
-    execFileSync("/usr/bin/curl", ["--fail", "--location", "--show-error", "--output", archive,
-      `https://github.com/ollama/ollama/releases/download/v${OLLAMA_RUNTIME_VERSION}/ollama-darwin.tgz`], { stdio: "inherit" });
+    const asset = target.platform === "darwin" ? "ollama-darwin.tgz" : "ollama-windows-amd64.zip";
+    execFileSync(target.platform === "darwin" ? "/usr/bin/curl" : "curl.exe", [
+      "--fail", "--location", "--show-error", "--output", archive,
+      `https://github.com/ollama/ollama/releases/download/v${OLLAMA_RUNTIME_VERSION}/${asset}`,
+    ], { stdio: "inherit" });
   }
-  if (sha256File(archive) !== OLLAMA_RUNTIME_SHA256) throw new Error("The managed Ollama runtime checksum is invalid.");
+  if (sha256File(archive) !== OLLAMA_RUNTIME_SHA256[target.platform]) throw new Error("The managed Ollama runtime checksum is invalid.");
   const destination = resolve(resourceRoot, "runtime", "ollama");
   mkdirSync(destination, { recursive: true, mode: 0o755 });
-  execFileSync("/usr/bin/tar", ["-xzf", archive, "-C", destination], { stdio: "inherit" });
+  execFileSync(target.platform === "darwin" ? "/usr/bin/tar" : "tar.exe", [
+    target.platform === "darwin" ? "-xzf" : "-xf", archive, "-C", destination,
+  ], { stdio: "inherit" });
+  if (target.platform === "win32") {
+    const executable = resolve(destination, "ollama.exe");
+    if (!existsSync(executable) || !lstatSync(executable).isFile()) throw new Error("The Windows Ollama runtime has no ollama.exe.");
+    for (const forbidden of [resolve(destination, "models"), resolve(destination, ".ollama")]) {
+      if (existsSync(forbidden)) throw new Error("The managed runtime archive unexpectedly contains model storage.");
+    }
+    copyFile(resolve(projectRoot, "THIRD_PARTY_NOTICES.md"), resolve(resourceRoot, "THIRD_PARTY_NOTICES.md"));
+    return;
+  }
   const thinMachO = (directory: string) => {
     for (const name of readdirSync(directory)) {
       const path = resolve(directory, name);
       const status = lstatSync(path);
       if (status.isDirectory()) thinMachO(path);
       else if (status.isFile()) {
-        const probe = spawnSync("/usr/bin/lipo", [path, "-verify_arch", arch]);
+        const probe = spawnSync("/usr/bin/lipo", [path, "-verify_arch", target.arch]);
         if (probe.status !== 0) {
           if (/\.(?:dylib|so)$/i.test(path)) rmSync(path);
           continue;
         }
         const architectures = execFileSync("/usr/bin/lipo", ["-archs", path], { encoding: "utf8" }).trim().split(/\s+/);
-        if (architectures.length === 1 && architectures[0] === arch) continue;
+        if (architectures.length === 1 && architectures[0] === target.arch) continue;
         const thinned = `${path}.thin`;
-        execFileSync("/usr/bin/lipo", [path, "-thin", arch, "-output", thinned]);
+        execFileSync("/usr/bin/lipo", [path, "-thin", target.arch, "-output", thinned]);
         rmSync(path);
         execFileSync("/bin/mv", [thinned, path]);
       }
@@ -173,13 +202,13 @@ function removeGeneratedOutput(path: string) {
   rmSync(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 }
 
-function nativeModules(arch: DesktopArtifactArch): DesktopNativeModuleVersion[] {
+function nativeModules(target: DesktopArtifactTarget): DesktopNativeModuleVersion[] {
   return [
     "@duckdb/node-api",
     "@duckdb/node-bindings",
-    `@duckdb/node-bindings-darwin-${arch}`,
+    `@duckdb/node-bindings-${target.platform}-${target.arch}`,
     "sqlite-vec",
-    `sqlite-vec-darwin-${arch}`,
+    target.platform === "darwin" ? `sqlite-vec-darwin-${target.arch}` : `sqlite-vec-windows-${target.arch}`,
   ].map((name) => ({ name, version: packageVersion(name) }));
 }
 
@@ -214,7 +243,10 @@ function buildStandalone(stagingBuildId: string) {
     NEXT_TELEMETRY_DISABLED: "1",
     RANGABOT_DESKTOP_STAGING_BUILD_ID: stagingBuildId,
   };
-  for (const key of ["HOME", "LANG", "LC_ALL", "LC_CTYPE", "PATH", "TZ"]) {
+  for (const key of [
+    "HOME", "LANG", "LC_ALL", "LC_CTYPE", "PATH", "TZ",
+    "SystemRoot", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "ComSpec", "PATHEXT",
+  ]) {
     const value = process.env[key];
     if (value) environment[key] = value;
   }
@@ -229,26 +261,36 @@ function buildStandalone(stagingBuildId: string) {
   if (buildId !== stagingBuildId) throw new Error("The desktop standalone build is not bound to the source staging identity.");
 }
 
-function prepareOfflineElectronZip(arch: DesktopArtifactArch) {
+function prepareOfflineElectronZip(target: DesktopArtifactTarget) {
   const electronVersion = packageVersion("electron");
+  const zipRoot = resolve(outputRoot, "electron-zips");
+  mkdirSync(zipRoot, { recursive: true, mode: 0o755 });
+  if (target.platform === "win32") {
+    const zipPath = resolve(zipRoot, `electron-v${electronVersion}-win32-x64.zip`);
+    if (!existsSync(zipPath) || sha256File(zipPath) !== ELECTRON_WINDOWS_X64_SHA256) {
+      rmSync(zipPath, { force: true });
+      execFileSync("curl.exe", ["--fail", "--location", "--show-error", "--output", zipPath,
+        `https://github.com/electron/electron/releases/download/v${electronVersion}/electron-v${electronVersion}-win32-x64.zip`], { stdio: "inherit" });
+    }
+    if (sha256File(zipPath) !== ELECTRON_WINDOWS_X64_SHA256) throw new Error("The pinned Windows Electron archive checksum is invalid.");
+    return zipPath;
+  }
   const appPath = resolve(projectRoot, "node_modules", "electron", "dist", "Electron.app");
   const executable = resolve(appPath, "Contents", "MacOS", "Electron");
   if (!existsSync(executable)) throw new Error("The exact installed Electron app is unavailable for offline packaging.");
   const reported = execFileSync("/usr/bin/lipo", ["-archs", executable], { encoding: "utf8" }).trim().split(/\s+/);
-  const expected = arch === "arm64" ? "arm64" : "x86_64";
+  const expected = target.arch === "arm64" ? "arm64" : "x86_64";
   if (reported.length !== 1 || reported[0] !== expected) {
-    throw new Error(`The installed Electron app does not provide an exact ${arch} payload.`);
+    throw new Error(`The installed Electron app does not provide an exact ${target.arch} payload.`);
   }
-  const zipRoot = resolve(outputRoot, "electron-zips");
-  const zipPath = resolve(zipRoot, `electron-v${electronVersion}-darwin-${arch}.zip`);
-  mkdirSync(zipRoot, { recursive: true, mode: 0o755 });
+  const zipPath = resolve(zipRoot, `electron-v${electronVersion}-darwin-${target.arch}.zip`);
   rmSync(zipPath, { force: true });
   execFileSync("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appPath, zipPath], { stdio: "inherit" });
   if (!existsSync(zipPath) || !lstatSync(zipPath).isFile()) throw new Error("The offline Electron package input was not created.");
   return zipPath;
 }
 
-function stageStandalone(arch: DesktopArtifactArch, resourceRoot: string) {
+function stageStandalone(target: DesktopArtifactTarget, resourceRoot: string) {
   const standalone = resolve(projectRoot, ".next", "standalone");
   copyDirectory(standalone, resourceRoot);
   // Next file tracing is not a private-data packaging policy. Remove any
@@ -270,7 +312,7 @@ function stageStandalone(arch: DesktopArtifactArch, resourceRoot: string) {
     copyFile(resolve(projectRoot, "data", "knowledge", path), resolve(resourceRoot, "data", "knowledge", path));
   }
   copyDirectory(resolve(projectRoot, "data", "knowledge", "evaluations"), resolve(resourceRoot, "data", "knowledge", "evaluations"));
-  for (const name of nativeModules(arch).map((entry) => entry.name)) {
+  for (const name of nativeModules(target).map((entry) => entry.name)) {
     copyDirectory(resolve(projectRoot, "node_modules", ...name.split("/")), resolve(resourceRoot, "node_modules", ...name.split("/")));
   }
   for (const path of requiredResourcePaths) {
@@ -302,28 +344,21 @@ function materializeSafeStagedSymlinks(directory: string, resourceRoot: string) 
 }
 
 function assertNoPrivatePayload(files: readonly DesktopArtifactFile[]) {
-  const allowedDataFiles = new Set([
-    "data/knowledge/NEW_THIS_WEEK.md",
-    "data/knowledge/NEW_THIS_MONTH.md",
-    "data/knowledge/SOURCE_MANIFEST.json",
-    "data/knowledge/evaluations/starter.json",
-  ]);
   const forbidden = files.find((file) => {
     const lower = file.path.toLowerCase();
     return /(^|\/)(?:\.git|\.env(?:\.|$)|tests?)(?:\/|$)/.test(lower)
       || /^(?:out|desktop)(?:\/|$)/.test(lower)
       || lower === "tsconfig.json"
-      || (/^data\//.test(lower) && !allowedDataFiles.has(file.path))
-      || /(?:^|\/)(?:rangabot(?:-memory)?\.db|datasets\.json|repositories\.json|sql-confirmations\.json)(?:$|\/)/.test(lower)
-      || /(?:\.sqlite3?|\.duckdb|-wal|-shm|\.journal)$/.test(lower)
-      || /^(?:artifacts|inbox|processed|indexes|backups|results)(?:\/|$)/.test(lower);
+      || isForbiddenDesktopPrivateResourcePath(file.path);
   });
   if (forbidden) throw new Error(`Desktop resource payload contains a forbidden private/developer path: ${forbidden.path}.`);
 }
 
-const arch = parseArch(process.argv.slice(2));
-if (process.platform !== "darwin") throw new Error("Desktop packaging is currently authorized for macOS only.");
-if (process.env.RANGABOT_DESKTOP_TARGET_ARCH !== arch) throw new Error("The prepared desktop architecture does not match the Forge target.");
+const target = parseTarget(process.argv.slice(2));
+const { arch } = target;
+if (process.platform !== target.platform) throw new Error("Desktop packaging must run on the same operating system as its target.");
+if (process.env.RANGABOT_DESKTOP_TARGET_PLATFORM !== target.platform
+  || process.env.RANGABOT_DESKTOP_TARGET_ARCH !== arch) throw new Error("The prepared desktop target does not match the Forge target.");
 const launchProfile = desktopLaunchProfileForBuild(process.env.RANGABOT_DESKTOP_BUILD_PROFILE);
 const packageVariant = process.env.RANGABOT_DESKTOP_PACKAGE_VARIANT;
 if (packageVariant !== undefined && packageVariant !== NORMAL_REFRESH_PACKAGE_VARIANT) {
@@ -332,7 +367,7 @@ if (packageVariant !== undefined && packageVariant !== NORMAL_REFRESH_PACKAGE_VA
 if (launchProfile.kind === DESKTOP_FINDER_VERIFICATION_BUILD_PROFILE && packageVariant !== undefined) {
   throw new Error("The normal package output variant cannot be combined with a verification profile.");
 }
-if (launchProfile.kind === DESKTOP_FINDER_VERIFICATION_BUILD_PROFILE && arch !== "arm64") {
+if (launchProfile.kind === DESKTOP_FINDER_VERIFICATION_BUILD_PROFILE && (target.platform !== "darwin" || arch !== "arm64")) {
   throw new Error("The Finder verification artifact is currently bound to arm64 only.");
 }
 assertBaseline();
@@ -340,15 +375,19 @@ const commits = sourceCommits();
 if (sourceDirty()) throw new Error("Desktop packaging requires an exact clean source commit.");
 const source = sourceManifest();
 const stagingBuildId = `desktop-stage-${source.sha256.slice(0, 16)}`;
-const electronZipPath = prepareOfflineElectronZip(arch);
+const electronZipPath = prepareOfflineElectronZip(target);
 const verification = launchProfile.kind === DESKTOP_FINDER_VERIFICATION_BUILD_PROFILE;
-const stagedParent = resolve(outputRoot, verification ? "packaged-resources-verification" : "packaged-resources", arch);
+const stagedParent = resolve(outputRoot, verification ? "packaged-resources-verification" : "packaged-resources", target.platform, arch);
 // Never let a prior generated staging tree influence Next's file tracer.
 removeGeneratedOutput(stagedParent);
 const packageOutputRoot = packageVariant === NORMAL_REFRESH_PACKAGE_VARIANT
   ? resolve(outputRoot, "normal-candidate-20260812")
   : resolve(projectRoot, "out");
-removeGeneratedOutput(resolve(packageOutputRoot, `${verification ? "RangaBot Verification" : "RangaBot"}-darwin-${arch}`));
+removeGeneratedOutput(resolve(packageOutputRoot, `${verification ? "RangaBot Verification" : "RangaBot"}-${target.platform}-${arch}`));
+if (target.platform === "win32") {
+  removeGeneratedOutput(resolve(projectRoot, "out", "make", "msix", "win32", "x64"));
+  removeGeneratedOutput(resolve(projectRoot, "out", "make", "zip", "win32", "x64"));
+}
 buildStandalone(stagingBuildId);
 const resourceRoot = resolve(stagedParent, "rangabot-resources");
 const manifestPath = resolve(resourceRoot, "desktop", "manifest.json");
@@ -361,12 +400,12 @@ if (compilation.error) throw compilation.error;
 if (compilation.status !== 0 || compilation.signal) throw new Error("Electron shell compilation failed.");
 
 mkdirSync(resourceRoot, { recursive: true, mode: 0o755 });
-stageStandalone(arch, resourceRoot);
-if (!verification) stageManagedModelRuntime(arch, resourceRoot);
+stageStandalone(target, resourceRoot);
+if (!verification) stageManagedModelRuntime(target, resourceRoot);
 materializeSafeStagedSymlinks(resourceRoot, resourceRoot);
 const resources = collectDesktopArtifactFiles(resourceRoot);
 assertNoPrivatePayload(resources);
-const natives = resources.filter((file) => /\.(?:node|dylib|so|dll)$/i.test(file.path));
+const natives = resources.filter((file) => /\.(?:node|dylib|so|dll|exe)$/i.test(file.path));
 const confirmedCommits = sourceCommits();
 const confirmedSource = sourceManifest();
 if (sourceDirty()
@@ -391,9 +430,9 @@ const manifest = createDesktopArtifactManifest({
     electron: packageVersion("electron"),
     embeddedNode: "24.18.1",
     next: packageVersion("next"),
-    nativeModules: nativeModules(arch),
+    nativeModules: nativeModules(target),
   },
-  target: { platform: "darwin", arch },
+  target,
   fuses: REQUIRED_DESKTOP_FUSE_POLICY,
   packagingTooling: {
     electronForge: packageVersion("@electron-forge/cli"),
@@ -401,7 +440,7 @@ const manifest = createDesktopArtifactManifest({
     fuseWireVersion: "1",
     fuseWireStates: [...REQUIRED_DESKTOP_FUSE_WIRE_STATES],
     fuseInspection: {
-      inspectedPath: DESKTOP_FUSE_BINARY_PATH,
+      inspectedPath: desktopFuseBinaryPath(target.platform),
       wireVersion: "1",
       wireLength: 9,
       entries: REQUIRED_DESKTOP_FUSE_WIRE_STATES.map((state, index) => ({
@@ -412,7 +451,7 @@ const manifest = createDesktopArtifactManifest({
       })),
     },
     signature: {
-      mode: "adhoc",
+      mode: target.platform === "darwin" ? "adhoc" : "unsigned-candidate",
       postFuseMutation: false,
       deepStrictVerified: false,
     },
@@ -423,7 +462,7 @@ const manifest = createDesktopArtifactManifest({
   generatedAt,
 });
 mkdirSync(dirname(manifestPath), { recursive: true });
-writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o444 });
+writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: target.platform === "win32" ? 0o600 : 0o444 });
 console.log(JSON.stringify({
   desktopArtifactId: manifest.desktopArtifactId,
   sourceBaseCommit: manifest.sourceBaseCommit,

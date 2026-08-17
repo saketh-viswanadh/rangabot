@@ -274,6 +274,11 @@ try {
   initialProfile = prepareDesktopStartupProfileBeforeLock({
     electronApp: app,
     launchProfile,
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    windowsStore: Boolean((process as NodeJS.Process & { windowsStore?: boolean }).windowsStore),
+    localAppDataPath: process.env.LOCALAPPDATA,
+    execPath: process.execPath,
   });
 } catch {
   emitStartupStage(startupPreludeStage, true);

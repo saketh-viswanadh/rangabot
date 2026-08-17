@@ -55,7 +55,7 @@ The Guardian/Sentinel verification artifact is deliberately a different app:
 - bundle identifier: `com.rangabot.desktop.verification`
 - build command: `npm run desktop:package:verification:arm64`
 - output: `out/RangaBot Verification-darwin-arm64/RangaBot Verification.app`
-- evidence: `desktop/out/desktop-artifact-verification-arm64.json`
+- evidence: `desktop/out/desktop-artifact-verification-darwin-arm64.json`
 
 Its exact manifest-bound launch profile is:
 

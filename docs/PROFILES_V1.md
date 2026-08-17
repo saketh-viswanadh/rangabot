@@ -248,7 +248,7 @@ untouched, and the shared synthetic model marker hash does not change.
 ## Candidate limits and release gate
 
 The unsigned arm64 development package uses the explicitly named
-`electron-43-arm64-launchable-v1` fuse policy. Its required V1 wire is
+`electron-43-hardened-v2` fuse policy. Its required V1 wire is
 `010011001`: index 6, `LoadBrowserProcessSpecificV8Snapshot`, remains disabled.
 The Electron 43 arm64 payload does not include
 `browser_v8_context_snapshot.bin`, and prior native launch testing found that
@@ -261,8 +261,10 @@ runtime-compatibility policy, not a release or signing claim.
 
 For this candidate line, `sourceBaseCommit` is the original merged source
 `8b161635f79ac6a572524ba22e3af7364fe08a5b` and
-`sourceBaselineCommit` is the completed first-run onboarding and mobile review
-behavior commit `ebc7bb6257da70cdc506d27e111b49d98a34dc31`. The generated v2 manifest records
+`sourceBaselineCommit` is the completed first-run onboarding, mobile review,
+and Windows direct-MSIX, isolated MakeAppx attestation, and bounded OPC
+and whole-file BlockMap verification commit `7241f0ae70876869ab88f41527353de9b5baef2b`.
+The generated v3 manifest records
 the exact clean packaging HEAD as `sourceCommit`; the installed verifier uses
 that value as its commit identity and does not require `.git`.
 

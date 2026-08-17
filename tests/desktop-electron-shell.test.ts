@@ -8,7 +8,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { FuseState, FuseV1Options } from "@electron/fuses";
 import {
-  ELECTRON_FUSE_OPTIONS,
+  electronFuseOptions,
   ELECTRON_FUSE_POLICY,
   ELECTRON_FUSE_POLICY_NAME,
   ELECTRON_MAJOR_VERSION,
@@ -70,7 +70,7 @@ test("Electron 43 fuse policy disables Node escape hatches and requires ASAR int
   assert.equal(ELECTRON_MAJOR_VERSION, 43);
   assert.equal(ELECTRON_FUSE_POLICY_NAME, DESKTOP_FUSE_POLICY_NAME);
   assert.deepEqual(ELECTRON_FUSE_POLICY, {
-    policyName: "electron-43-arm64-launchable-v1",
+    policyName: "electron-43-hardened-v2",
     RunAsNode: false,
     EnableCookieEncryption: true,
     EnableNodeOptionsEnvironmentVariable: false,
@@ -81,7 +81,9 @@ test("Electron 43 fuse policy disables Node escape hatches and requires ASAR int
     GrantFileProtocolExtraPrivileges: false,
     WasmTrapHandlers: true,
   });
-  assert.deepEqual(ELECTRON_FUSE_OPTIONS, { resetAdHocDarwinSignature: true });
+  assert.deepEqual(electronFuseOptions("darwin", "arm64"), { resetAdHocDarwinSignature: true });
+  assert.deepEqual(electronFuseOptions("darwin", "x64"), { resetAdHocDarwinSignature: false });
+  assert.deepEqual(electronFuseOptions("win32", "x64"), { resetAdHocDarwinSignature: false });
   const namedStates = new Map<number, FuseState>([
     [FuseV1Options.RunAsNode, FuseState.DISABLE],
     [FuseV1Options.EnableCookieEncryption, FuseState.ENABLE],
@@ -101,7 +103,7 @@ test("Electron 43 fuse policy disables Node escape hatches and requires ASAR int
   };
   assert.equal(packageRecord.devDependencies?.["@electron/fuses"], "2.1.3");
   const forgeSource = readFileSync(join(projectRoot, "forge.config.cjs"), "utf8");
-  assert.match(forgeSource, /FUSE_POLICY_NAME\s*=\s*"electron-43-arm64-launchable-v1"/);
+  assert.match(forgeSource, /FUSE_POLICY_NAME\s*=\s*"electron-43-hardened-v2"/);
   assert.match(forgeSource, /strictlyRequireAllFuses:\s*true/);
   assert.match(forgeSource, /\[FuseV1Options\.LoadBrowserProcessSpecificV8Snapshot\]:\s*false/);
   assert.match(forgeSource, /\[FuseV1Options\.WasmTrapHandlers\]:\s*true/);
@@ -548,6 +550,7 @@ test("desktop lease waits for Electron's asynchronous utility-process spawn iden
       return child;
     },
     listDescendants: async () => [],
+    platform: "darwin",
   });
   assert.deepEqual(events, ["fork"]);
   const leased = await leasedPromise;
@@ -584,6 +587,7 @@ test("desktop lease releases when a utility process exits before spawn", async (
       return child;
     },
     listDescendants: async () => [],
+    platform: "darwin",
     spawnTimeoutMs: 10,
   }), /exited before spawning \(exit 17\)/);
   assert.deepEqual(events, ["release"]);
@@ -613,6 +617,7 @@ test("utility-process supervisor uses explicit resources and terminates the proc
       signals.push([pid, signal as NodeJS.Signals]);
       return true;
     },
+    platform: "darwin",
   });
   assert.equal(forkInput?.[0], boundary.serverEntrypoint);
   assert.deepEqual(forkInput?.[1], []);
@@ -654,12 +659,53 @@ test("utility-process supervisor force-kills a process tree that ignores gracefu
       return true;
     },
     inspectProcess: (pid) => pid === 701 && descendantAlive ? "alive" : "dead",
+    platform: "darwin",
     gracefulTimeoutMs: 1,
     forceTimeoutMs: 10,
   });
   await supervised.stop();
   assert.deepEqual(signals, [[701, "SIGTERM"], [701, "SIGKILL"], [501, "SIGKILL"]]);
   assert.deepEqual(await supervised.exit, { code: 137 });
+});
+
+test("Windows utility-process supervisor terminates the complete tree and force-falls back", async () => {
+  const testFixture = fixture();
+  const boundary = createDesktopRuntimeBoundary({
+    resourcesPath: testFixture.resourcesPath,
+    userDataPath: testFixture.userDataPath,
+    isPackaged: true,
+  });
+  const child = new SyntheticUtilityProcess();
+  child.exitOnKill = false;
+  const calls: boolean[] = [];
+  const supervised = startSupervisedDesktopServer({
+    fork: () => child,
+    boundary,
+    launch: createDesktopLaunch({ boundary, port: 43114, baseEnvironment: {} }),
+    platform: "win32",
+    terminateWindowsTree: async (_pid, force) => {
+      calls.push(force);
+      if (force) queueMicrotask(() => child.emit("exit", 1));
+    },
+    gracefulTimeoutMs: 1,
+    forceTimeoutMs: 20,
+  });
+  await supervised.stop();
+  assert.deepEqual(calls, [false, true]);
+  assert.deepEqual(await supervised.exit, { code: 1 });
+
+  const stuck = new SyntheticUtilityProcess();
+  stuck.exitOnKill = false;
+  const stuckSupervisor = startSupervisedDesktopServer({
+    fork: () => stuck,
+    boundary,
+    launch: createDesktopLaunch({ boundary, port: 43115, baseEnvironment: {} }),
+    platform: "win32",
+    terminateWindowsTree: async () => undefined,
+    gracefulTimeoutMs: 1,
+    forceTimeoutMs: 1,
+  });
+  await assert.rejects(stuckSupervisor.stop(), /process tree did not terminate/);
 });
 
 test("desktop lease is acquired before fork, binds the utility PID and releases after confirmed stop", async () => {
@@ -700,6 +746,7 @@ test("desktop lease is acquired before fork, binds the utility PID and releases 
       return child;
     },
     listDescendants: async () => [],
+    platform: "darwin",
   });
   assert.equal(leased.leasePath, join(boundary.dataRoot, "rangabot.db-runtime.lock"));
   assert.deepEqual(events, ["acquire", "fork", "register"]);
@@ -723,6 +770,7 @@ test("an active desktop runtime lease prevents a second database writer before f
     launch: createDesktopLaunch({ boundary, port: 43106, baseEnvironment: {} }),
     fork: () => new SyntheticUtilityProcess(),
     listDescendants: async () => [],
+    platform: "darwin",
   });
   assert.equal(existsSync(first.leasePath), true);
   let forked = false;
@@ -767,6 +815,7 @@ test("lease registration failure stops the utility process before releasing the 
     },
     fork: () => child,
     listDescendants: async () => [],
+    platform: "darwin",
   }), /synthetic lease registration failure/);
   assert.deepEqual(events, ["register-failed", "exit", "release"]);
 });
@@ -794,6 +843,7 @@ test("failed process-tree termination retains the desktop runtime lease", async 
     fork: () => child,
     listDescendants: async () => [],
     sendSignal: () => true,
+    platform: "darwin",
     gracefulTimeoutMs: 1,
     forceTimeoutMs: 1,
   });

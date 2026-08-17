@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -11,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import test from "node:test";
 import {
   desktopLaunchProfileForBuild,
@@ -23,6 +24,16 @@ import {
   validateFinderVerificationCapsuleReadOnly,
 } from "../lib/desktop-launch-profile.ts";
 import { prepareDesktopStartupProfileBeforeLock } from "../desktop/electron/verification-profile.ts";
+import { ensurePrivateDesktopDataRoot } from "../desktop/electron/resource-boundary.ts";
+import { selectManagedModelStore } from "../desktop/electron/model-runtime.ts";
+import {
+  prepareWindowsInternalMsixDataPaths,
+  WINDOWS_INTERNAL_MSIX_PACKAGE_FAMILY_NAME,
+  WINDOWS_INTERNAL_MSIX_PACKAGE_FULL_NAME,
+  WINDOWS_INTERNAL_MSIX_PACKAGE_NAME,
+  WINDOWS_INTERNAL_MSIX_PACKAGE_VERSION,
+  WINDOWS_INTERNAL_MSIX_PUBLISHER_ID,
+} from "../desktop/electron/windows-packaged-data-root.ts";
 
 function createCapsule() {
   const appDataPath = realpathSync(mkdtempSync(join(tmpdir(), "rangabot-verification-appdata-")));
@@ -70,6 +81,9 @@ test("pre-created capsule validates read-only and binds all Electron writable pa
         setPath(name: string, path: string) { setPaths.push([name, path]); },
       } as never,
       launchProfile: FINDER_VERIFICATION_DESKTOP_LAUNCH_PROFILE,
+      isPackaged: true,
+      platform: "darwin",
+      windowsStore: false,
     });
     assert.equal(prepared.kind, DESKTOP_FINDER_VERIFICATION_BUILD_PROFILE);
     assert.equal(prepared.windowTitle, "Rangabot Verification");
@@ -116,7 +130,7 @@ test("capsule validation rejects missing, unexpected, unsafe-mode, marker, and s
   }
 });
 
-test("normal profile keeps its existing userData behavior and never applies verification policy", () => {
+test("unpackaged normal profile keeps its existing userData behavior and never applies verification policy", () => {
   const userDataPath = realpathSync(mkdtempSync(join(tmpdir(), "rangabot-normal-userdata-")));
   const calls: string[] = [];
   try {
@@ -126,11 +140,228 @@ test("normal profile keeps its existing userData behavior and never applies veri
         setPath() { throw new Error("normal profile must not override Electron paths"); },
       } as never,
       launchProfile: NORMAL_DESKTOP_LAUNCH_PROFILE,
+      isPackaged: false,
+      platform: "win32",
+      windowsStore: false,
     });
     assert.deepEqual(calls, ["userData"]);
     assert.equal(prepared.kind, "normal");
     assert.equal(prepared.verificationPolicy, undefined);
   } finally { rmSync(userDataPath, { recursive: true, force: true }); }
+});
+
+function createInternalMsixDataFixture() {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "rangabot-msix-data-")));
+  const appDataRoot = join(root, "User", "AppData");
+  const appDataPath = join(appDataRoot, "Roaming");
+  const localAppDataPath = join(appDataRoot, "Local");
+  const packageFamilyRoot = join(localAppDataPath, "Packages", WINDOWS_INTERNAL_MSIX_PACKAGE_FAMILY_NAME);
+  const localState = join(packageFamilyRoot, "LocalState");
+  const localCache = join(packageFamilyRoot, "LocalCache");
+  const packageInstallRoot = join(root, "WindowsApps", WINDOWS_INTERNAL_MSIX_PACKAGE_FULL_NAME);
+  const execPath = join(packageInstallRoot, "RangaBot.exe");
+  mkdirSync(appDataPath, { recursive: true, mode: 0o700 });
+  mkdirSync(localState, { recursive: true, mode: 0o700 });
+  mkdirSync(localCache, { mode: 0o700 });
+  mkdirSync(packageInstallRoot, { recursive: true, mode: 0o700 });
+  writeFileSync(execPath, "synthetic internal MSIX executable\n", { mode: 0o700 });
+  return { root, appDataPath, localAppDataPath, packageFamilyRoot, localState, localCache, packageInstallRoot, execPath };
+}
+
+test("internal MSIX binds exact LocalState without resolving or reading legacy unpackaged userData", () => {
+  const fixture = createInternalMsixDataFixture();
+  const legacyUserData = join(fixture.appDataPath, "Rangabot");
+  const legacySentinel = join(legacyUserData, "legacy-sentinel.txt");
+  const setPaths: Array<[string, string]> = [];
+  try {
+    mkdirSync(legacyUserData, { recursive: true, mode: 0o700 });
+    writeFileSync(legacySentinel, "legacy data must remain isolated\n", { mode: 0o600 });
+    const prepared = prepareDesktopStartupProfileBeforeLock({
+      electronApp: {
+        getPath(name: string) {
+          assert.equal(name, "appData");
+          return fixture.appDataPath;
+        },
+        setPath(name: string, path: string) { setPaths.push([name, path]); },
+      } as never,
+      launchProfile: NORMAL_DESKTOP_LAUNCH_PROFILE,
+      isPackaged: true,
+      platform: "win32",
+      windowsStore: true,
+      localAppDataPath: fixture.localAppDataPath,
+      execPath: fixture.execPath,
+    });
+    const expectedUserData = join(fixture.localState, "RangaBot");
+    const expectedSessionData = join(fixture.localCache, "RangaBot", "sessionData");
+    assert.equal(prepared.userDataPath, expectedUserData);
+    assert.deepEqual(setPaths, [
+      ["userData", expectedUserData],
+      ["sessionData", expectedSessionData],
+      ["logs", join(expectedUserData, "logs")],
+      ["crashDumps", join(expectedUserData, "crashDumps")],
+    ]);
+    for (const [, path] of setPaths) assert.equal(realpathSync(path), path);
+    assert.equal(readFileSync(legacySentinel, "utf8"), "legacy data must remain isolated\n");
+
+    const dataRoot = ensurePrivateDesktopDataRoot(prepared.userDataPath);
+    const fallbackModels = join(dataRoot, "models");
+    assert.equal(selectManagedModelStore({ privateModelsRoot: fallbackModels, platform: "win32" }), fallbackModels);
+    assert.equal(realpathSync(fallbackModels), fallbackModels);
+    assert.equal(readFileSync(legacySentinel, "utf8"), "legacy data must remain isolated\n");
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test("internal MSIX identity and LocalState binding are exact and fail closed on unsafe paths", () => {
+  const manifest = readFileSync(new URL("../desktop/msix/AppxManifest.xml", import.meta.url), "utf8");
+  const identity = manifest.match(/<Identity\b[\s\S]*?\/>/)?.[0] ?? "";
+  assert.match(identity, new RegExp(`Name="${WINDOWS_INTERNAL_MSIX_PACKAGE_NAME.replaceAll(".", "\\.")}"`));
+  assert.match(identity, /Publisher="CN=RangaBot Internal Candidate, OID\.2\.25\.311729368913984317654407730594956997722=1"/);
+  assert.equal(WINDOWS_INTERNAL_MSIX_PUBLISHER_ID, "d8tfa9dph86fg");
+  assert.equal(WINDOWS_INTERNAL_MSIX_PACKAGE_FAMILY_NAME, "RangaBot.InternalCandidate_d8tfa9dph86fg");
+  assert.equal(WINDOWS_INTERNAL_MSIX_PACKAGE_VERSION, "0.1.0.0");
+  assert.equal(
+    WINDOWS_INTERNAL_MSIX_PACKAGE_FULL_NAME,
+    "RangaBot.InternalCandidate_0.1.0.0_x64__d8tfa9dph86fg",
+  );
+  assert.match(identity, new RegExp(`Version="${WINDOWS_INTERNAL_MSIX_PACKAGE_VERSION.replaceAll(".", "\\.")}"`));
+
+  const fixture = createInternalMsixDataFixture();
+  try {
+    assert.deepEqual(prepareWindowsInternalMsixDataPaths({
+      platform: "win32",
+      windowsStore: true,
+      isPackaged: true,
+      appDataPath: fixture.appDataPath,
+      localAppDataPath: fixture.localAppDataPath,
+      execPath: fixture.execPath,
+    }), {
+      userDataPath: join(fixture.localState, "RangaBot"),
+      sessionDataPath: join(fixture.localCache, "RangaBot", "sessionData"),
+      logsPath: join(fixture.localState, "RangaBot", "logs"),
+      crashDumpsPath: join(fixture.localState, "RangaBot", "crashDumps"),
+    });
+    assert.equal(prepareWindowsInternalMsixDataPaths({
+      platform: "win32",
+      windowsStore: false,
+      isPackaged: true,
+    }), null);
+    assert.throws(() => prepareWindowsInternalMsixDataPaths({
+      platform: "win32",
+      windowsStore: true,
+      isPackaged: false,
+      appDataPath: fixture.appDataPath,
+      localAppDataPath: fixture.localAppDataPath,
+      execPath: fixture.execPath,
+    }), /inconsistent Windows MSIX runtime identity/);
+    assert.throws(() => prepareWindowsInternalMsixDataPaths({
+      platform: "win32",
+      windowsStore: true,
+      isPackaged: true,
+      localAppDataPath: fixture.localAppDataPath,
+      execPath: fixture.execPath,
+    }), /Electron appData is unavailable/);
+    assert.throws(() => prepareWindowsInternalMsixDataPaths({
+      platform: "win32",
+      windowsStore: true,
+      isPackaged: true,
+      appDataPath: fixture.appDataPath,
+      execPath: fixture.execPath,
+    }), /LOCALAPPDATA is unavailable/);
+    assert.throws(() => prepareWindowsInternalMsixDataPaths({
+      platform: "win32",
+      windowsStore: true,
+      isPackaged: true,
+      appDataPath: fixture.appDataPath,
+      localAppDataPath: `${fixture.localAppDataPath}${sep}.`,
+      execPath: fixture.execPath,
+    }), /absolute normalized path/);
+    assert.throws(() => prepareWindowsInternalMsixDataPaths({
+      platform: "win32",
+      windowsStore: true,
+      isPackaged: true,
+      appDataPath: fixture.appDataPath,
+      localAppDataPath: fixture.localAppDataPath,
+    }), /executable path is unavailable/);
+
+    const wrongInstallRoot = join(fixture.root, "WindowsApps", "Wrong.Package_0.1.0.0_x64__d8tfa9dph86fg");
+    const wrongExecPath = join(wrongInstallRoot, "RangaBot.exe");
+    mkdirSync(wrongInstallRoot, { recursive: true });
+    writeFileSync(wrongExecPath, "wrong package identity\n");
+    rmSync(join(fixture.localState, "RangaBot"), { recursive: true, force: true });
+    rmSync(join(fixture.localCache, "RangaBot"), { recursive: true, force: true });
+    const redirectedLocalAppData = join(fixture.root, "redirected-local-app-data");
+    mkdirSync(redirectedLocalAppData);
+    assert.throws(() => prepareWindowsInternalMsixDataPaths({
+      platform: "win32",
+      windowsStore: true,
+      isPackaged: true,
+      appDataPath: fixture.appDataPath,
+      localAppDataPath: redirectedLocalAppData,
+      execPath: fixture.execPath,
+    }), /does not match Electron's OS-derived local AppData path/);
+    assert.equal(existsSync(join(fixture.localState, "RangaBot")), false);
+    assert.equal(existsSync(join(fixture.localCache, "RangaBot")), false);
+    assert.throws(() => prepareWindowsInternalMsixDataPaths({
+      platform: "win32",
+      windowsStore: true,
+      isPackaged: true,
+      appDataPath: fixture.appDataPath,
+      localAppDataPath: fixture.localAppDataPath,
+      execPath: wrongExecPath,
+    }), /package full name does not match/);
+    assert.equal(existsSync(join(fixture.localState, "RangaBot")), false);
+    assert.equal(existsSync(join(fixture.localCache, "RangaBot")), false);
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+
+  const linkedRoot = realpathSync(mkdtempSync(join(tmpdir(), "rangabot-msix-linked-data-")));
+  try {
+    const appDataRoot = join(linkedRoot, "User", "AppData");
+    const appDataPath = join(appDataRoot, "Roaming");
+    const localAppDataPath = join(appDataRoot, "Local");
+    const actualPackages = join(linkedRoot, "actual-packages");
+    const installRoot = join(linkedRoot, "WindowsApps", WINDOWS_INTERNAL_MSIX_PACKAGE_FULL_NAME);
+    const execPath = join(installRoot, "RangaBot.exe");
+    mkdirSync(join(actualPackages, WINDOWS_INTERNAL_MSIX_PACKAGE_FAMILY_NAME, "LocalState"), { recursive: true });
+    mkdirSync(join(actualPackages, WINDOWS_INTERNAL_MSIX_PACKAGE_FAMILY_NAME, "LocalCache"));
+    mkdirSync(installRoot, { recursive: true });
+    writeFileSync(execPath, "synthetic executable\n");
+    mkdirSync(appDataPath, { recursive: true });
+    mkdirSync(localAppDataPath);
+    symlinkSync(actualPackages, join(localAppDataPath, "Packages"), process.platform === "win32" ? "junction" : "dir");
+    assert.throws(() => prepareWindowsInternalMsixDataPaths({
+      platform: "win32",
+      windowsStore: true,
+      isPackaged: true,
+      appDataPath,
+      localAppDataPath,
+      execPath,
+    }), /symbolic-link or junction components/);
+  } finally { rmSync(linkedRoot, { recursive: true, force: true }); }
+
+  const fileRoot = realpathSync(mkdtempSync(join(tmpdir(), "rangabot-msix-file-data-")));
+  try {
+    const appDataRoot = join(fileRoot, "User", "AppData");
+    const appDataPath = join(appDataRoot, "Roaming");
+    const localAppDataPath = join(appDataRoot, "Local");
+    const family = join(localAppDataPath, "Packages", WINDOWS_INTERNAL_MSIX_PACKAGE_FAMILY_NAME);
+    const installRoot = join(fileRoot, "WindowsApps", WINDOWS_INTERNAL_MSIX_PACKAGE_FULL_NAME);
+    const execPath = join(installRoot, "RangaBot.exe");
+    mkdirSync(appDataPath, { recursive: true });
+    mkdirSync(family, { recursive: true });
+    mkdirSync(join(family, "LocalCache"));
+    mkdirSync(installRoot, { recursive: true });
+    writeFileSync(execPath, "synthetic executable\n");
+    writeFileSync(join(family, "LocalState"), "not a directory\n");
+    assert.throws(() => prepareWindowsInternalMsixDataPaths({
+      platform: "win32",
+      windowsStore: true,
+      isPackaged: true,
+      appDataPath,
+      localAppDataPath,
+      execPath,
+    }), /must be a real directory/);
+    assert.equal(existsSync(join(appDataPath, "Rangabot")), false);
+  } finally { rmSync(fileRoot, { recursive: true, force: true }); }
 });
 
 test("source and packaging preserve fail-before-write ordering and distinct verification outputs", () => {
