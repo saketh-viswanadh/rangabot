@@ -4,10 +4,9 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { handleSquirrelStartup, parseSquirrelStartupEvent } from "../desktop/electron/squirrel-lifecycle.ts";
 import { isForbiddenDesktopPrivateResourcePath } from "../lib/desktop-private-payload-policy.ts";
 import { writeSafeAtomicJsonEvidence } from "../lib/safe-atomic-json-output.ts";
-import { assertStableRegularFileUnchanged, inspectStableRegularFile } from "../scripts/verify-windows-distributables.ts";
+import { assertStableFileUnchanged, inspectStableFile } from "../lib/windows-msix-path-policy.ts";
 
 const text = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const require = createRequire(import.meta.url);
@@ -53,8 +52,10 @@ function syntheticWindowsPe(input: {
 
 test("Windows package inputs are exact, platform-typed, and contain no model weights", () => {
   const packageRecord = JSON.parse(text("package.json")) as { devDependencies: Record<string, string>; scripts: Record<string, string> };
-  assert.equal(packageRecord.devDependencies["@electron-forge/maker-squirrel"], "7.11.2");
-  assert.match(packageRecord.scripts["desktop:make:windows:x64"], /--platform=win32 --arch=x64/);
+  assert.equal(packageRecord.devDependencies["@electron-forge/maker-squirrel"], undefined);
+  assert.match(packageRecord.scripts["desktop:make:windows:x64"], /--platform=win32 --arch=x64[\s\S]*desktop:msix:build/);
+  assert.equal(packageRecord.scripts["desktop:msix:build"], "node --experimental-strip-types scripts/build-windows-msix.ts");
+  assert.equal(packageRecord.scripts["desktop:msix:verify"], "node --experimental-strip-types scripts/verify-windows-msix.ts");
   const prepare = text("scripts/prepare-desktop.ts");
   assert.match(prepare, /7b4f6ce09c1f2c3b21561b323779beaf3ca3c7012f8e4522605a13cbbb19f0b8/);
   assert.match(prepare, /ef0709cfa719739acce73de6f9b684304baf38c6454376638a70d34a7cecffe0/);
@@ -92,87 +93,27 @@ test("desktop private-payload policy rejects storage roots without mistaking com
   assert.match(finalizer, /isForbiddenDesktopPrivateResourcePath\(path\.slice\(resourcePrefix\.length\)\)/);
 });
 
-test("Forge creates Windows ZIP and per-user Squirrel outputs with the Windows icon and PE fuse target", () => {
+test("Forge creates a Windows diagnostic ZIP and finalizes the PE fuse target without Squirrel", () => {
   const forge = text("forge.config.cjs");
   assert.match(forge, /new MakerZIP\(\{\}, \["win32"\]\)/);
-  assert.match(forge, /new MakerSquirrel/);
-  assert.match(forge, /RangaBot-win32-x64-Setup\.exe/);
-  assert.match(forge, /const squirrelVendorReferenceDirectory = [^;]+"squirrel-vendor"/);
-  assert.match(forge, /const squirrelVendorWorkDirectory = [^;]+"squirrel-vendor-work"/);
-  assert.match(forge, /prepareSquirrelWorkVendor\(\{[\s\S]*referenceDirectory: squirrelVendorReferenceDirectory,[\s\S]*workDirectory: squirrelVendorWorkDirectory/);
-  assert.match(forge, /vendorDirectory: squirrelVendorWorkDirectory/);
-  assert.doesNotMatch(forge, /vendorDirectory: squirrelVendorReferenceDirectory/);
-  assert.match(forge, /postMake:[\s\S]*assertSquirrelWorkVendorAfterMake\(\{[\s\S]*referenceDirectory: squirrelVendorReferenceDirectory,[\s\S]*workDirectory: squirrelVendorWorkDirectory/);
+  assert.doesNotMatch(forge, /MakerSquirrel|squirrelVendor|windows-squirrel-vendor|RangaBot-win32-x64-Setup\.exe/);
   assert.match(forge, /path\.resolve\(outputPath, "RangaBot\.exe"\)/);
   assert.match(forge, /packageAfterCopy:[\s\S]*if \(platform === "darwin"\)/);
   assert.match(forge, /postPackage:[\s\S]*finalizePackagedExecutables/);
   assert.match(forge, /assertWindowsPeCertificateTableAbsent\(executable, "Fuse-mutated RangaBot\.exe"\)/);
   assert.doesNotMatch(forge, /Get-AuthenticodeSignature|powershell\.exe|signtool|HashMismatch/);
-  const verifier = text("scripts/verify-windows-distributables.ts");
-  assert.match(verifier, /setupTemplatePath: resolve\(squirrelVendorReference\.directory, "Setup\.exe"\)/);
-  assert.match(verifier, /assertSquirrelWorkVendorAfterMake\(\{/);
-  assert.match(verifier, /role: "sealed-reference"/);
-  assert.doesNotMatch(verifier, /setupTemplatePath: resolve\([^,]*Work/);
   const icon = readFileSync(new URL("../desktop/assets/rangabot.ico", import.meta.url));
   assert.equal(icon.readUInt16LE(0), 0);
   assert.equal(icon.readUInt16LE(2), 1);
   assert.ok(icon.readUInt16LE(4) >= 7);
 });
 
-test("Squirrel actions run only after immutable verification and before profile binding", () => {
-  assert.equal(parseSquirrelStartupEvent(["RangaBot.exe", "--squirrel-install"]), "--squirrel-install");
-  assert.equal(parseSquirrelStartupEvent(["RangaBot.exe", "--not-squirrel"]), null);
-  let exitCode: number | undefined;
-  assert.equal(handleSquirrelStartup({ platform: "win32", event: "--squirrel-obsolete", exit: (code) => { exitCode = code; } }), true);
-  assert.equal(exitCode, 0);
+test("Windows startup verifies immutable resources before profile binding without installer event hooks", () => {
   const main = text("desktop/electron/main.ts");
   const verify = main.lastIndexOf("verifyDesktopResourcesBeforeMutation({");
-  const squirrel = main.lastIndexOf("handleSquirrelStartup({");
   const profile = main.lastIndexOf("prepareDesktopStartupProfileBeforeLock({");
-  assert.ok(verify >= 0 && verify < squirrel && squirrel < profile);
-  assert.match(main, /com\.squirrel\.RangaBot\.RangaBot/);
-});
-
-test("Squirrel shortcut lifecycle handles install, update, uninstall, and failures deterministically", () => {
-  const executablePath = "C:\\Users\\Synthetic\\AppData\\Local\\RangaBot\\app-0.1.0\\RangaBot.exe";
-  const calls: Array<{ path: string; arguments_: readonly string[]; cwd: string }> = [];
-  const inspectUpdateExecutable = () => ({ isSymbolicLink: () => false, isFile: () => true });
-  const runUpdateExecutable = (path: string, arguments_: readonly string[], options: { cwd: string }) => {
-    calls.push({ path, arguments_, cwd: options.cwd });
-    return { status: 0, signal: null };
-  };
-  for (const [event, expected] of [
-    ["--squirrel-install", "--createShortcut"],
-    ["--squirrel-updated", "--createShortcut"],
-    ["--squirrel-uninstall", "--removeShortcut"],
-  ] as const) {
-    let exitCode: number | undefined;
-    assert.equal(handleSquirrelStartup({
-      platform: "win32",
-      event,
-      executablePath,
-      inspectUpdateExecutable,
-      runUpdateExecutable,
-      exit: (code) => { exitCode = code; },
-    }), true);
-    assert.equal(exitCode, 0);
-    assert.deepEqual(calls.at(-1)?.arguments_, [expected, "RangaBot.exe"]);
-  }
-  assert.ok(calls.every((call) => (
-    call.path === "C:\\Users\\Synthetic\\AppData\\Local\\RangaBot\\Update.exe"
-      && call.cwd === "C:\\Users\\Synthetic\\AppData\\Local\\RangaBot"
-  )));
-
-  let exitCode: number | undefined;
-  handleSquirrelStartup({
-    platform: "win32",
-    event: "--squirrel-install",
-    executablePath,
-    inspectUpdateExecutable,
-    runUpdateExecutable: () => ({ status: 1, signal: null }),
-    exit: (code) => { exitCode = code; },
-  });
-  assert.equal(exitCode, 1);
+  assert.ok(verify >= 0 && verify < profile);
+  assert.doesNotMatch(main, /Squirrel|squirrel|setAppUserModelId/);
 });
 
 test("Windows unsigned policy directly rejects embedded PE certificate tables", () => {
@@ -253,18 +194,26 @@ test("Windows finalizer seals PE/native/fuse evidence but keeps unsigned candida
   assert.match(finalizer, /node\|dll\|so\|dylib\|exe/);
   assert.match(finalizer, /isForbiddenDesktopPrivateResourcePath/);
   assert.match(finalizer, /writeSafeAtomicJsonEvidence\(evidencePath, manifest, "Windows desktop artifact evidence"\)/);
-  const verifier = text("scripts/verify-windows-distributables.ts");
-  assert.match(verifier, /applicationEmbeddedPeCertificateTable/);
-  assert.match(verifier, /verifySquirrelSetupEmbeddedPayload/);
-  assert.match(verifier, /verifySquirrelNupkgApplicationPayload/);
-  assert.match(verifier, /squirrel\.windows[\s\S]*RELEASES/);
-  assert.match(verifier, /expectedReleases: releasesEvidence\.content\.toString\("utf8"\)/);
-  assert.match(verifier, /squirrelEmbeddedPayload/);
-  assert.match(verifier, /squirrelNupkgApplication/);
-  assert.match(verifier, /writeSafeAtomicJsonEvidence\(output,[\s\S]*"Windows distributable evidence"\)/);
-  assert.doesNotMatch(`${finalizer}\n${verifier}`, /Get-AuthenticodeSignature|powershell\.exe|applicationSignatureStatus/);
+  const builder = text("scripts/build-windows-msix.ts");
+  const verifier = text("scripts/verify-windows-msix.ts");
+  const msix = text("lib/windows-msix.ts");
+  const msixVerifier = text("lib/windows-msix-verifier.ts");
+  assert.match(builder, /inspectPinnedMakeAppx/);
+  assert.match(builder, /buildUnsignedMsix/);
+  assert.match(builder, /windows-msix-build-win32-x64\.json/);
+  assert.match(verifier, /verifyUnsignedMsix/);
+  assert.match(verifier, /windows-msix-win32-x64\.json/);
+  assert.match(msixVerifier, /AppxSignature\.p7x/);
+  assert.match(msixVerifier, /parseAppxBlockMap/);
+  assert.match(msixVerifier, /inspectDesktopArtifact/);
+  assert.match(msix, /C:\\\\Windows[\s\S]*C:\\\\Program Files \(x86\)/);
+  assert.match(msix, /System32[\s\S]*WindowsPowerShell[\s\S]*powershell\.exe/);
+  assert.doesNotMatch(`${finalizer}\n${builder}\n${verifier}`, /signtool|applicationSignatureStatus/);
   const workflow = text(".github/workflows/windows-desktop-candidate.yml");
   assert.match(workflow, /npm audit --omit=dev/);
+  assert.match(workflow, /desktop:msix:verify/);
+  assert.match(workflow, /windows-msix-win32-x64\.json/);
+  assert.doesNotMatch(workflow, /\.msix\s*$/m);
   assert.doesNotMatch(workflow, /release create|upload-release-asset/i);
 });
 
@@ -275,21 +224,21 @@ test("Windows distributable evidence rejects links and detects post-hash replace
   const targetDirectory = join(root, "target");
   try {
     writeFileSync(artifact, "sealed candidate bytes\n");
-    const evidence = inspectStableRegularFile(artifact, { label: "Synthetic candidate", captureContent: true });
+    const evidence = inspectStableFile(artifact, { label: "Synthetic candidate", captureContent: true });
     assert.equal(evidence.content?.toString("utf8"), "sealed candidate bytes\n");
-    assertStableRegularFileUnchanged(artifact, evidence, "Synthetic candidate");
+    assertStableFileUnchanged(evidence, "Synthetic candidate");
 
     writeFileSync(artifact, "changed candidate bytes\n");
     assert.throws(
-      () => assertStableRegularFileUnchanged(artifact, evidence, "Synthetic candidate"),
-      /changed after it was inspected/,
+      () => assertStableFileUnchanged(evidence, "Synthetic candidate"),
+      /changed after inspection/,
     );
 
     mkdirSync(targetDirectory);
     symlinkSync(targetDirectory, linkedDirectory, process.platform === "win32" ? "junction" : "dir");
     assert.throws(
-      () => inspectStableRegularFile(linkedDirectory, { label: "Linked candidate" }),
-      /real, non-linked regular file/,
+      () => inspectStableFile(linkedDirectory, { label: "Linked candidate" }),
+      /real, non-linked, single-link regular file/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

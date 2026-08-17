@@ -11,6 +11,7 @@ import {
   VERIFICATION_LOCAL_MODEL_POLICY,
 } from "../../lib/desktop-external-filesystem-policy.ts";
 import type { DesktopVerificationLaunchPolicy } from "./launch-environment.ts";
+import { prepareWindowsInternalMsixDataPaths } from "./windows-packaged-data-root.ts";
 
 export type PreparedDesktopStartupProfile = Readonly<{
   kind: DesktopLaunchProfile["kind"];
@@ -21,18 +22,38 @@ export type PreparedDesktopStartupProfile = Readonly<{
 
 /**
  * Runs only after immutable artifact verification and before the
- * single-instance lock. The verification branch validates its capsule, binds
- * only pre-existing paths, and preflights registries without filesystem writes.
+ * single-instance lock. The MSIX branch validates its exact package identity
+ * before provisioning package-owned paths; the verification branch binds only
+ * pre-existing paths and preflights registries without filesystem writes.
  */
 export function prepareDesktopStartupProfileBeforeLock(input: {
   electronApp: Pick<App, "getPath" | "setPath">;
   launchProfile: DesktopLaunchProfile;
+  isPackaged: boolean;
+  platform: NodeJS.Platform;
+  windowsStore: boolean;
+  localAppDataPath?: string;
+  execPath?: string;
 }): PreparedDesktopStartupProfile {
   if (input.launchProfile.kind !== DESKTOP_FINDER_VERIFICATION_BUILD_PROFILE) {
+    const packagedPaths = prepareWindowsInternalMsixDataPaths({
+      platform: input.platform,
+      windowsStore: input.windowsStore,
+      isPackaged: input.isPackaged,
+      appDataPath: input.windowsStore ? input.electronApp.getPath("appData") : undefined,
+      localAppDataPath: input.localAppDataPath,
+      execPath: input.execPath,
+    });
+    if (packagedPaths) {
+      input.electronApp.setPath("userData", packagedPaths.userDataPath);
+      input.electronApp.setPath("sessionData", packagedPaths.sessionDataPath);
+      input.electronApp.setPath("logs", packagedPaths.logsPath);
+      input.electronApp.setPath("crashDumps", packagedPaths.crashDumpsPath);
+    }
     return Object.freeze({
       kind: "normal" as const,
       windowTitle: "Rangabot" as const,
-      userDataPath: input.electronApp.getPath("userData"),
+      userDataPath: packagedPaths?.userDataPath ?? input.electronApp.getPath("userData"),
     });
   }
 

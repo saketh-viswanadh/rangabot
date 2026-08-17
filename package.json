@@ -25,7 +25,9 @@
     "desktop:make:arm64": "RANGABOT_DESKTOP_TARGET_PLATFORM=darwin RANGABOT_DESKTOP_TARGET_ARCH=arm64 npm run desktop:prepare -- --platform=darwin --arch=arm64 && RANGABOT_DESKTOP_TARGET_PLATFORM=darwin RANGABOT_DESKTOP_TARGET_ARCH=arm64 electron-forge make --platform=darwin --arch=arm64",
     "desktop:make:x64": "RANGABOT_DESKTOP_TARGET_PLATFORM=darwin RANGABOT_DESKTOP_TARGET_ARCH=x64 npm run desktop:prepare -- --platform=darwin --arch=x64 && RANGABOT_DESKTOP_TARGET_PLATFORM=darwin RANGABOT_DESKTOP_TARGET_ARCH=x64 electron-forge make --platform=darwin --arch=x64",
     "desktop:package:windows:x64": "set RANGABOT_DESKTOP_TARGET_PLATFORM=win32&& set RANGABOT_DESKTOP_TARGET_ARCH=x64&& npm run desktop:prepare -- --platform=win32 --arch=x64&& electron-forge package --platform=win32 --arch=x64",
-    "desktop:make:windows:x64": "set RANGABOT_DESKTOP_TARGET_PLATFORM=win32&& set RANGABOT_DESKTOP_TARGET_ARCH=x64&& npm run desktop:prepare -- --platform=win32 --arch=x64&& electron-forge make --platform=win32 --arch=x64",
+    "desktop:make:windows:x64": "set RANGABOT_DESKTOP_TARGET_PLATFORM=win32&& set RANGABOT_DESKTOP_TARGET_ARCH=x64&& npm run desktop:prepare -- --platform=win32 --arch=x64&& electron-forge make --platform=win32 --arch=x64&& npm run desktop:msix:build",
+    "desktop:msix:build": "node --experimental-strip-types scripts/build-windows-msix.ts",
+    "desktop:msix:verify": "node --experimental-strip-types scripts/verify-windows-msix.ts",
     "test": "node --test --experimental-strip-types tests/*.test.ts",
     "clean:generated": "node --experimental-strip-types scripts/clean-generated.ts",
     "check": "npm run clean:generated && npm run charter:check && npm run mastery:evidence && npm run mastery:check && npm run conversation:evaluate:validate && npm run conversation:evaluate:memory && npm test && npm run lint && npm run typecheck && npm run build && npm run privacy:check",
@@ -90,7 +92,6 @@
   "devDependencies": {
     "@electron-forge/cli": "7.11.2",
     "@electron-forge/maker-dmg": "7.11.2",
-    "@electron-forge/maker-squirrel": "7.11.2",
     "@electron-forge/maker-zip": "7.11.2",
     "@electron/fuses": "2.1.3",
     "@types/node": "^24.0.0",

@@ -16,5 +16,6 @@ official product use; see `public/brand/README.md` for the rights boundary.
 approved source. It contains PNG-encoded 16, 24, 32, 48, 64, 128, and 256 px
 RGBA frames. Its checked-in SHA-256 is
 `5c3cd996b2a067f454af7df8e31ee72607fbde0e83dfc82d1afa4ec3546feb3b`.
-Windows Forge and Squirrel packaging consume it directly for the executable,
-installer, Start-menu shortcut, and uninstall identity.
+Windows Forge consumes it directly for `RangaBot.exe`. The MSIX manifest uses
+the separately checked-in PNG derivatives in `desktop/msix/assets/`, all made
+from the same approved primary source.

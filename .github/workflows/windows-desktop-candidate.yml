@@ -10,15 +10,21 @@ on:
       - "forge.config.cjs"
       - "lib/desktop-artifact-identity.ts"
       - "lib/safe-atomic-json-output.ts"
-      - "lib/windows-squirrel-setup.ts"
+      - "lib/windows-msix-path-policy.ts"
+      - "lib/windows-msix-verifier.ts"
+      - "lib/windows-msix.ts"
       - "THIRD_PARTY_NOTICES.md"
       - "package.json"
       - "package-lock.json"
       - "scripts/finalize-desktop-package.ts"
       - "scripts/prepare-desktop.ts"
-      - "scripts/verify-windows-distributables.ts"
+      - "scripts/build-windows-msix.ts"
+      - "scripts/verify-windows-msix.ts"
       - "tests/desktop-windows-package.test.ts"
-      - "tests/windows-squirrel-setup.test.ts"
+      - "tests/helpers/windows-finalized-app-fixture.ts"
+      - "tests/windows-msix-builder.test.ts"
+      - "tests/windows-msix-verifier.test.ts"
+      - "tests/windows-msix-zip.test.ts"
       - "tests/model-runtime.test.ts"
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -28,15 +34,21 @@ on:
       - "forge.config.cjs"
       - "lib/desktop-artifact-identity.ts"
       - "lib/safe-atomic-json-output.ts"
-      - "lib/windows-squirrel-setup.ts"
+      - "lib/windows-msix-path-policy.ts"
+      - "lib/windows-msix-verifier.ts"
+      - "lib/windows-msix.ts"
       - "THIRD_PARTY_NOTICES.md"
       - "package.json"
       - "package-lock.json"
       - "scripts/finalize-desktop-package.ts"
       - "scripts/prepare-desktop.ts"
-      - "scripts/verify-windows-distributables.ts"
+      - "scripts/build-windows-msix.ts"
+      - "scripts/verify-windows-msix.ts"
       - "tests/desktop-windows-package.test.ts"
-      - "tests/windows-squirrel-setup.test.ts"
+      - "tests/helpers/windows-finalized-app-fixture.ts"
+      - "tests/windows-msix-builder.test.ts"
+      - "tests/windows-msix-verifier.test.ts"
+      - "tests/windows-msix-zip.test.ts"
       - "tests/model-runtime.test.ts"
 
 permissions:
@@ -66,20 +78,22 @@ jobs:
       - run: npm run check
       - run: npm audit --omit=dev
       - run: npm run desktop:make:windows:x64
-      - run: node --experimental-strip-types scripts/verify-windows-distributables.ts
+        env:
+          RANGABOT_EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      - run: npm run desktop:msix:verify
         env:
           RANGABOT_EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Print candidate evidence summary
         shell: pwsh
         run: |
           Get-Content desktop/out/desktop-artifact-win32-x64.json | ConvertFrom-Json | Select-Object desktopArtifactId,target,packagingTooling | ConvertTo-Json -Depth 8
-          Get-Content desktop/out/windows-distributables-win32-x64.json
+          Get-Content desktop/out/windows-msix-win32-x64.json
       - name: Retain exact public-safe candidate evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: RangaBot-windows-x64-unsigned-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          name: RangaBot-windows-x64-unsigned-msix-evidence-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             desktop/out/desktop-artifact-win32-x64.json
-            desktop/out/windows-distributables-win32-x64.json
+            desktop/out/windows-msix-win32-x64.json
           if-no-files-found: error
           retention-days: 7

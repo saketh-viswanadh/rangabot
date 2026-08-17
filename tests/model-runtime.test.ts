@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -20,6 +20,7 @@ test("uses an existing owner-controlled standard model store in place without co
     assert.equal(selectManagedModelStore({ privateModelsRoot: privateRoot, standardModelsRoot: standard }), standard);
     assert.equal(selectManagedModelStore({ privateModelsRoot: privateRoot, standardModelsRoot: standard, platform: "win32" }), standard);
     assert.equal(realpathSync(standard), standard);
+    assert.equal(existsSync(privateRoot), false);
     assert.equal(selectManagedModelStore({ privateModelsRoot: privateRoot }), privateRoot);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
