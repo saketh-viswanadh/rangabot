@@ -265,8 +265,9 @@ For this candidate line, `sourceBaseCommit` is the original merged source
 and Windows direct-MSIX, isolated MakeAppx attestation, and bounded OPC
 and whole-file BlockMap verification, plus the sandboxed Mac App Store source
 candidate, timestamp-sized Mach-O seal binding, schema-grounded SQL planning,
-and cross-platform Mac security test correction at commit
-`8137b1d6a9995cd967aba7773654456959c3d97e`.
+cross-platform Mac security test correction, and profile-local dataset semantic
+context with verified-usage retrieval at commit
+`fda45ec7d5b293d04fba2277e8f80add83d415aa`.
 The generated v3 manifest records
 the exact clean packaging HEAD as `sourceCommit`; the installed verifier uses
 that value as its commit identity and does not require `.git`.
