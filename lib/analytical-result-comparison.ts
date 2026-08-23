@@ -32,6 +32,7 @@ type ComparisonOptions = {
   referenceSql: string;
   absoluteTolerance?: number;
   relativeTolerance?: number;
+  normalizeNumericStrings?: boolean;
 };
 
 type TopLevelSqlFeatures = { orderBy: boolean; limitOrOffset: boolean };
@@ -86,8 +87,23 @@ function objectValue(value: object) {
   catch { return null; }
 }
 
-function cellsMatch(left: unknown, right: unknown, absoluteTolerance: number, relativeTolerance: number) {
+function exactNumericString(value: unknown) {
+  if (typeof value !== "string" || !/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(value)) return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  if (!/[.eE]/.test(value) && !Number.isSafeInteger(numeric)) return null;
+  return numeric;
+}
+
+function cellsMatch(left: unknown, right: unknown, absoluteTolerance: number, relativeTolerance: number, normalizeNumericStrings: boolean) {
   if (left === null || right === null) return left === right;
+  if (normalizeNumericStrings && typeof left !== typeof right) {
+    const leftNumber = typeof left === "number" ? left : exactNumericString(left);
+    const rightNumber = typeof right === "number" ? right : exactNumericString(right);
+    if (leftNumber !== null && rightNumber !== null) {
+      return Math.abs(leftNumber - rightNumber) <= Math.max(absoluteTolerance, relativeTolerance * Math.max(Math.abs(leftNumber), Math.abs(rightNumber)));
+    }
+  }
   if (typeof left !== typeof right) return false;
   if (typeof left === "number" && typeof right === "number") {
     if (!Number.isFinite(left) || !Number.isFinite(right)) return Object.is(left, right);
@@ -99,16 +115,16 @@ function cellsMatch(left: unknown, right: unknown, absoluteTolerance: number, re
   return Object.is(left, right);
 }
 
-function rowsMatch(left: unknown[], right: unknown[], absoluteTolerance: number, relativeTolerance: number) {
+function rowsMatch(left: unknown[], right: unknown[], absoluteTolerance: number, relativeTolerance: number, normalizeNumericStrings: boolean) {
   return left.length === right.length
-    && left.every((value, index) => cellsMatch(value, right[index], absoluteTolerance, relativeTolerance));
+    && left.every((value, index) => cellsMatch(value, right[index], absoluteTolerance, relativeTolerance, normalizeNumericStrings));
 }
 
-function maximumRowMatching(candidateRows: unknown[][], referenceRows: unknown[][], absoluteTolerance: number, relativeTolerance: number) {
+function maximumRowMatching(candidateRows: unknown[][], referenceRows: unknown[][], absoluteTolerance: number, relativeTolerance: number, normalizeNumericStrings: boolean) {
   const matchedCandidateByReference = Array<number>(referenceRows.length).fill(-1);
   const visit = (candidateIndex: number, seen: boolean[]): boolean => {
     for (let referenceIndex = 0; referenceIndex < referenceRows.length; referenceIndex += 1) {
-      if (seen[referenceIndex] || !rowsMatch(candidateRows[candidateIndex], referenceRows[referenceIndex], absoluteTolerance, relativeTolerance)) continue;
+      if (seen[referenceIndex] || !rowsMatch(candidateRows[candidateIndex], referenceRows[referenceIndex], absoluteTolerance, relativeTolerance, normalizeNumericStrings)) continue;
       seen[referenceIndex] = true;
       if (matchedCandidateByReference[referenceIndex] === -1 || visit(matchedCandidateByReference[referenceIndex], seen)) {
         matchedCandidateByReference[referenceIndex] = candidateIndex;
@@ -128,6 +144,7 @@ function maximumRowMatching(candidateRows: unknown[][], referenceRows: unknown[]
 export function compareSqlResults(candidate: SqlExecutionResult, reference: SqlExecutionResult, options: ComparisonOptions): AnalyticalResultComparison {
   const absoluteTolerance = options.absoluteTolerance ?? 1e-9;
   const relativeTolerance = options.relativeTolerance ?? 1e-9;
+  const normalizeNumericStrings = options.normalizeNumericStrings ?? false;
   const referenceFeatures = topLevelSqlFeatures(options.referenceSql);
   const candidateFeatures = topLevelSqlFeatures(options.candidateSql);
   const orderMode = referenceFeatures.orderBy ? "ordered" : "unordered";
@@ -152,13 +169,13 @@ export function compareSqlResults(candidate: SqlExecutionResult, reference: SqlE
   if (orderMode === "ordered") {
     let matchedRows = 0;
     for (let index = 0; index < reference.rows.length; index += 1) {
-      if (!rowsMatch(candidate.rows[index], reference.rows[index], absoluteTolerance, relativeTolerance)) return fail("row-values", matchedRows);
+      if (!rowsMatch(candidate.rows[index], reference.rows[index], absoluteTolerance, relativeTolerance, normalizeNumericStrings)) return fail("row-values", matchedRows);
       matchedRows += 1;
     }
     return { ...base, passed: true, mismatch: null, matchedRows };
   }
 
-  const matchedRows = maximumRowMatching(candidate.rows, reference.rows, absoluteTolerance, relativeTolerance);
+  const matchedRows = maximumRowMatching(candidate.rows, reference.rows, absoluteTolerance, relativeTolerance, normalizeNumericStrings);
   return matchedRows === reference.rows.length
     ? { ...base, passed: true, mismatch: null, matchedRows }
     : fail("row-values", matchedRows);

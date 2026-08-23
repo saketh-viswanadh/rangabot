@@ -74,6 +74,8 @@ export interface GenerationOptions {
   modelId?: string;
   numPredict?: number;
   numContext?: number;
+  temperature?: number;
+  seed?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
   jsonSchema?: Record<string, unknown>;

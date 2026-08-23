@@ -30,7 +30,7 @@ const {
 
 export const DESKTOP_ARTIFACT_SCHEMA_VERSION = 3;
 export const DESKTOP_SOURCE_BASE_COMMIT = "8b161635f79ac6a572524ba22e3af7364fe08a5b";
-export const DESKTOP_SOURCE_BASELINE_COMMIT = "7241f0ae70876869ab88f41527353de9b5baef2b";
+export const DESKTOP_SOURCE_BASELINE_COMMIT = "8137b1d6a9995cd967aba7773654456959c3d97e";
 export const DESKTOP_FUSE_POLICY_NAME = "electron-43-hardened-v2";
 
 const sha256Pattern = /^[0-9a-f]{64}$/;
@@ -137,7 +137,7 @@ export type DesktopPackagingTooling = {
   fuseWireStates: number[];
   fuseInspection: DesktopFuseInspection;
   signature: {
-    mode: "adhoc" | "unsigned-candidate";
+    mode: "adhoc" | "unsigned-candidate" | "app-store-development" | "app-store-distribution";
     postFuseMutation: boolean;
     deepStrictVerified: boolean;
   };
@@ -430,8 +430,10 @@ function normalizePackagingTooling(tooling: DesktopPackagingTooling, target: Des
     || tooling.fuseWireStates.some((state, index) => state !== REQUIRED_DESKTOP_FUSE_WIRE_STATES[index])
     || !isRecord(tooling.fuseInspection)
     || !isRecord(tooling.signature) || !exactKeys(tooling.signature, ["mode", "postFuseMutation", "deepStrictVerified"])
-    || (tooling.signature.mode !== "adhoc" && tooling.signature.mode !== "unsigned-candidate")
-    || (target.platform === "darwin" ? tooling.signature.mode !== "adhoc" : tooling.signature.mode !== "unsigned-candidate")
+    || !["adhoc", "unsigned-candidate", "app-store-development", "app-store-distribution"].includes(tooling.signature.mode)
+    || (target.platform === "darwin"
+      ? !["adhoc", "app-store-development", "app-store-distribution"].includes(tooling.signature.mode)
+      : tooling.signature.mode !== "unsigned-candidate")
     || (tooling.signature.mode === "unsigned-candidate" && tooling.signature.deepStrictVerified !== false)
     || typeof tooling.signature.postFuseMutation !== "boolean"
     || typeof tooling.signature.deepStrictVerified !== "boolean") {
@@ -768,6 +770,9 @@ function snapshotSignedMachOCode(path: string): DesktopArtifactFile {
     let signatureOffset = -1;
     let signatureSize = -1;
     let signatureCommandOffset = -1;
+    let linkEditCommandOffset = -1;
+    let linkEditFileOffset = -1;
+    let linkEditFileSize = -1;
     for (let index = 0; index < commands; index += 1) {
       if (commandOffset + 8 > source.length) throw new Error("The desktop launcher has a truncated Mach-O command table.");
       const command = source.readUInt32LE(commandOffset);
@@ -783,24 +788,44 @@ function snapshotSignedMachOCode(path: string): DesktopArtifactFile {
         signatureOffset = source.readUInt32LE(commandOffset + 8);
         signatureSize = source.readUInt32LE(commandOffset + 12);
       }
+      if (command === 0x19 && commandSize >= 72
+        && source.subarray(commandOffset + 8, commandOffset + 24).toString("ascii").split("\0", 1)[0] === "__LINKEDIT") {
+        if (linkEditCommandOffset !== -1) throw new Error("The desktop launcher has duplicate __LINKEDIT segments.");
+        const fileOffset = source.readBigUInt64LE(commandOffset + 40);
+        const fileSize = source.readBigUInt64LE(commandOffset + 48);
+        if (fileOffset > BigInt(Number.MAX_SAFE_INTEGER) || fileSize > BigInt(Number.MAX_SAFE_INTEGER)) {
+          throw new Error("The desktop launcher __LINKEDIT segment is not safely representable.");
+        }
+        linkEditCommandOffset = commandOffset;
+        linkEditFileOffset = Number(fileOffset);
+        linkEditFileSize = Number(fileSize);
+      }
       commandOffset += commandSize;
     }
     if (signatureCommandOffset === -1 || signatureOffset < commandOffset || signatureSize <= 0
-      || signatureOffset + signatureSize > source.length) {
+      || signatureOffset + signatureSize !== source.length) {
       throw new Error("The desktop launcher has an invalid embedded code signature.");
+    }
+    if (linkEditCommandOffset === -1 || linkEditFileOffset < commandOffset
+      || linkEditFileSize <= signatureSize || linkEditFileOffset + linkEditFileSize !== source.length
+      || signatureOffset < linkEditFileOffset) {
+      throw new Error("The desktop launcher has an invalid __LINKEDIT signature layout.");
     }
 
     // The outer ad-hoc seal necessarily changes after the embedded resource
     // manifest is written. Bind every launcher byte except the circular
-    // LC_CODE_SIGNATURE payload and its offset/size fields. Code, load
-    // commands, entitlements outside that payload, and appended bytes remain
-    // identity-bound, while the final signature is independently verified.
+    // LC_CODE_SIGNATURE payload, its offset/size fields, and the derived
+    // __LINKEDIT file-size field. codesign updates that segment length when a
+    // timestamp changes the tail signature size. The exact tail layout is
+    // validated above; code, all other load-command fields, and non-signature
+    // __LINKEDIT bytes remain identity-bound while the signature is verified.
     const prefix = Buffer.from(source.subarray(0, signatureOffset));
     prefix.fill(0, signatureCommandOffset + 8, signatureCommandOffset + 16);
+    prefix.fill(0, linkEditCommandOffset + 48, linkEditCommandOffset + 56);
     const suffix = source.subarray(signatureOffset + signatureSize);
     const canonicalBytes = prefix.length + suffix.length;
     const hash = createHash("sha256")
-      .update("rangabot-signed-mach-o-code-v1\0")
+      .update("rangabot-signed-mach-o-code-v2\0")
       .update(prefix)
       .update(suffix)
       .digest("hex");
@@ -1037,7 +1062,8 @@ export function inspectDesktopArtifact(options: {
     return emptyVerification("mixed", "identity-mismatch", manifest);
   }
   if (!manifest.packagingTooling.signature.postFuseMutation
-    || (manifest.packagingTooling.signature.mode === "adhoc" && !manifest.packagingTooling.signature.deepStrictVerified)) {
+    || (manifest.packagingTooling.signature.mode !== "unsigned-candidate"
+      && !manifest.packagingTooling.signature.deepStrictVerified)) {
     return emptyVerification("unknown", "manifest-invalid", manifest);
   }
   const runtime = options.runtime ?? {

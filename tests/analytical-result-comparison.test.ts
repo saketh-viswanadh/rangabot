@@ -31,6 +31,14 @@ test("compares cells by column position and preserves typed identity", () => {
   assert.equal(compareSqlResults(result(["a"], [[true]]), result(["x"], [[1]]), unordered).passed, false);
 });
 
+test("optionally normalizes canonical numeric JSON strings across SQL engines", () => {
+  const normalized = { ...unordered, normalizeNumericStrings: true };
+  assert.equal(compareSqlResults(result(["a"], [["42"]]), result(["x"], [[42]]), normalized).passed, true);
+  assert.equal(compareSqlResults(result(["a"], [["1.25"]]), result(["x"], [[1.25]]), normalized).passed, true);
+  assert.equal(compareSqlResults(result(["a"], [["001"]]), result(["x"], [[1]]), normalized).passed, false);
+  assert.equal(compareSqlResults(result(["a"], [["9007199254740993"]]), result(["x"], [[9007199254740992]]), normalized).passed, false);
+});
+
 test("requires compatible shapes even for empty results", () => {
   assert.equal(compareSqlResults(result(["a"], []), result(["a", "b"], []), unordered).mismatch, "column-count");
   assert.equal(compareSqlResults(result(["a", "b"], [[1]]), result(["x", "y"], [[1, 2]]), unordered).mismatch, "row-width");

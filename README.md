@@ -97,6 +97,12 @@ It is not a supported download or release. Local build architecture, privacy
 boundaries, unsigned limitations, and the distinct verification-only profile are documented in
 [docs/MACOS_DESKTOP_DEVELOPMENT.md](docs/MACOS_DESKTOP_DEVELOPMENT.md).
 
+A separate Mac App Store source candidate uses Electron's sandboxed `mas`
+runtime, an app-private managed model store, and explicit security-scoped access
+for user-selected files. Apple signing, TestFlight installation, App Review,
+and public availability remain **NOT RUN**. See
+[docs/MAC_APP_STORE_DISTRIBUTION.md](docs/MAC_APP_STORE_DISTRIBUTION.md).
+
 Experienced users can copy `.env.example` to `.env.local` and use the manual
 model guidance in [docs/models.md](docs/models.md).
 
@@ -290,6 +296,17 @@ removed. These results prove renderer grounding and regression safety, not broad
 analytical planning or human usefulness. Run the frozen renderer suite with
 `npm run conversation:evaluate:sql:narration` and see the
 [narration contract](docs/ANALYTICAL_NARRATION_CONTRACT.md).
+
+The August 2026 SQL engineering pass adds relationship-aware schema linking,
+typed table and column meaning, confirmed join context, operation decomposition,
+execution-guided candidates, and a semantic intent contract before execution.
+On disclosed regression matrices it moved 571/720 to 720/720 and 146/640 to
+624/640; those are regression results, not independent generalization proof.
+The external BIRD Mini-Dev comparison improved from 1/500 (0.2%) without typed
+context to 18/500 (3.6%) with it, while remaining too inaccurate and slow for a
+general SQL-expert claim. See the
+[SQL capability update](docs/SQL_CAPABILITY_UPDATE_2026-08-23.md) for the exact
+claim boundary and remaining gaps.
 
 Every answer exposes an optional **How this was calculated** trace with the
 query, dataset name, row count, timing, and input/query fingerprints. Model

@@ -8,7 +8,7 @@ import { resolveAnalyticalSemanticRoles } from "./analytical-semantic-roles.ts";
 
 type Aggregate = "count" | "sum" | "avg" | "min" | "max";
 type OuterAggregate = Exclude<Aggregate, "count">;
-type Operation = "ratio" | "conditional_rate" | "distinct_count" | "duration_average" | "threshold_count" | "period_growth" | "per_entity_average" | "aggregate_over_groups" | "anti_join";
+type Operation = "ratio" | "conditional_rate" | "distinct_count" | "duration_average" | "threshold_count" | "period_growth" | "month_over_month" | "per_entity_average" | "aggregate_over_groups" | "anti_join" | "complete_filtered_sum" | "complete_count_average" | "target_attainment" | "target_variance" | "latest_per_group";
 type Operator = "eq" | "neq" | "lt" | "lte" | "gt" | "gte" | "is_null" | "is_not_null";
 export type Filter = { column: string; operator: Operator; value: string };
 
@@ -45,7 +45,7 @@ export type AdvancedAnalyticalPlan = {
   explanation: string;
 };
 
-const operations: Operation[] = ["ratio", "conditional_rate", "distinct_count", "duration_average", "threshold_count", "period_growth", "per_entity_average", "aggregate_over_groups", "anti_join"];
+const operations: Operation[] = ["ratio", "conditional_rate", "distinct_count", "duration_average", "threshold_count", "period_growth", "month_over_month", "per_entity_average", "aggregate_over_groups", "anti_join", "complete_filtered_sum", "complete_count_average", "target_attainment", "target_variance", "latest_per_group"];
 const aggregates: Aggregate[] = ["count", "sum", "avg", "min", "max"];
 const outerAggregates: OuterAggregate[] = ["sum", "avg", "min", "max"];
 const operators: Operator[] = ["eq", "neq", "lt", "lte", "gt", "gte", "is_null", "is_not_null"];
@@ -92,13 +92,13 @@ export function buildAdvancedAnalyticalMessages(messages: ChatMessage[], dataset
   const request = requestText(messages); const focused = focusedColumns(messages, dataset, columns);
   const schema = focused.map((column) => `- ${column.table}.${column.name}: ${column.type}`).join("\n");
   return [
-    { role: "system", content: "You are a domain-neutral local analytical planner, not a SQL writer. Map the request to exactly one generic operation using only enum-approved schema fields. ratio divides an aggregate metric by a secondary aggregate metric; secondaryMetric * means the source row count. conditional_rate divides rows matching numeratorFilters by rows matching denominatorFilters. distinct_count counts unique entity values after explicit filters. duration_average averages elapsed time between startField and endField. threshold_count counts entities whose grouped row count reaches threshold. period_growth compares summed metric over two explicit date ranges. per_entity_average sums metric per entity then averages those sums. aggregate_over_groups first applies innerAggregate to metric for each groupField, then applies outerAggregate across those group values; use distinct only with inner count. anti_join returns source entities with no relatedField match. If the operation, population, grain, measure, or required field is ambiguous or unrepresentable, return clarify or unavailable. Never infer causal effects, forecasts, or unsupported statistics." },
+    { role: "system", content: "You are a domain-neutral local analytical planner, not a SQL writer. Map the request to exactly one generic operation using only enum-approved schema fields. ratio divides an aggregate metric by a secondary aggregate metric; secondaryMetric * means the source row count. conditional_rate divides rows matching numeratorFilters by rows matching denominatorFilters. distinct_count counts unique entity values after explicit filters. duration_average averages elapsed time between startField and endField. threshold_count counts entities whose grouped row count reaches threshold. period_growth compares summed metric over two explicit date ranges. month_over_month returns monthly metric totals and the difference from the previous month. per_entity_average sums metric per entity then averages those sums. aggregate_over_groups first applies innerAggregate to metric for each groupField, then applies outerAggregate across those group values; use distinct only with inner count. anti_join returns source entities with no relatedField match. complete_filtered_sum preserves every entity, sums source metric rows matching numeratorFilters, and returns zero when no row matches; entity is the entity-table key and groupField is the matching source key. complete_count_average preserves every filtered entity, counts relatedField rows through the matching groupField key including zero, then averages those counts. target_attainment and target_variance compare grouped metric totals through groupField with secondaryMetric targets keyed by entity. latest_per_group keeps one source row for each groupField, ordered newest by dateField and then by the higher entity tie-break field; entity, groupField, and dateField are output fields. If the operation, population, grain, measure, or required field is ambiguous or unrepresentable, return clarify or unavailable. Never infer causal effects, forecasts, or unsupported statistics." },
     { role: "user", content: `REQUEST:\n${request}\n\nSCHEMA:\n${schema}\n\nReturn every required JSON field. Copy table.column values exactly. Empty unused field references and arrays are required; use count, avg and false as neutral defaults for unused innerAggregate, outerAggregate and distinct fields. For aggregate_over_groups, groupField defines the grain, metric defines the inner measure (* only for row count), innerAggregate runs within each group, and outerAggregate runs across groups. Filter values must come from the request. Dates use YYYY-MM-DD with half-open ranges. Explain the population, grain and calculation or the exact ambiguity without claiming a result.` },
   ];
 }
 
 export function shouldUseAdvancedAnalyticalPlan(request: string) {
-  return /\b(?:distinct|unique|divided by|ratio|percentage|average (?:duration|elapsed|number|count|.+ time)|time between|how long|at least \d+|growth|average .+ per |never \w+|without (?:a |any )?match)\b/i.test(request);
+  return /\b(?:distinct|unique|divided by|ratio|percentage|percent|rate|average (?:duration|elapsed|number|count|.+ time)|average\s+of\s+each\b.{0,100}\btotal|time between|how long|at least \d+|growth|average .+ per |never \w+|without (?:a |any )?match|have no (?:related )?|has no (?:related )?|including\b.{0,80}\b(?:zero|no)|latest|newest|most recent)\b/i.test(request);
 }
 
 export function parseAdvancedAnalyticalPlan(raw: string): AdvancedAnalyticalPlan {
@@ -183,12 +183,14 @@ function inferObservationSource(plan: AdvancedAnalyticalPlan, request: string, e
   const candidates = [...new Set(columns.filter((column) => column.table && column.name === entity.name).map((column) => column.table!))].map((table) => {
     // The counted entity is expected to be named in the request, so its
     // canonical table is not treated as evidence for the qualifying relation.
-    const qualifyingMention = table !== entity.table && relationNamedInRequest(table, request) ? 12 : 0;
+    const primary = primaryIdentifierForTable(table, columns);
+    const canonicalEntityRelation = primary?.name === entity.name;
+    const qualifyingMention = !canonicalEntityRelation && relationNamedInRequest(table, request) ? 12 : 0;
     const filterProximity = filterTables.reduce((score, filterTable) => {
       const distance = relationDistance(graph, table, filterTable);
       return score + (distance === 0 ? 8 : distance === 1 ? 5 : distance === 2 ? 2 : 0);
     }, 0);
-    const barePopulationMention = table === entity.table && namesBareDistinctPopulation(table, request) ? 4 : 0;
+    const barePopulationMention = canonicalEntityRelation && namesBareDistinctPopulation(table, request) ? 4 : 0;
     return { table, score: qualifyingMention + filterProximity + barePopulationMention };
   }).sort((left, right) => right.score - left.score || left.table.localeCompare(right.table));
   // When the identifier exists on both an entity relation and one or more fact
@@ -212,10 +214,15 @@ function fieldOnSource(field: string, source: string, columns: DatasetColumn[]) 
 }
 
 function primaryIdentifierForTable(table: string, columns: DatasetColumn[]) {
-  const tableWords = words(table);
+  const singular = (value: string) => value.toLowerCase().replaceAll("_", " ").match(/[a-z0-9]+/g)?.map((word) => {
+    if (word.length > 4 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+    if (word.length > 4 && /(?:ches|shes|xes|zes|sses)$/.test(word)) return word.slice(0, -2);
+    return word.length > 3 && word.endsWith("s") ? word.slice(0, -1) : word;
+  }) ?? [];
+  const tableWords = singular(table);
   const identifiers = columns.filter((column) => column.table === table && column.name.endsWith("_id"));
   const exact = identifiers.filter((column) => {
-    const root = words(column.name.slice(0, -3));
+    const root = singular(column.name.slice(0, -3));
     return root.length === tableWords.length && root.every((word, index) => word === tableWords[index]);
   });
   return (exact.length === 1 ? exact[0] : identifiers.length === 1 ? identifiers[0] : undefined);
@@ -244,14 +251,24 @@ function negatedBefore(requestTokens: string[], index: number) {
 }
 
 function namesWholePopulationForRate(request: string, relation: string) {
-  if (!/\b(?:percent|percentage|share)\b/i.test(request)
+  if (!/\b(?:percent|percentage|share|rate)\b/i.test(request)
     || /\b(?:growth|change|increase|decrease|ratio|divided by)\b/i.test(request)
     || /\b(?:not|without|excluding|except|non[-\s])\b/i.test(request)) return false;
+  const relationPattern = relation.split("_").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[ _-]+");
+  if (new RegExp(`\\brate\\b.{0,50}\\b(?:across|among|of)\\s+(?:all|every)\\s+(?:rows?\\s+(?:in|of)\\s+)?${relationPattern}\\b`, "i").test(request)) return true;
+  if (new RegExp(`\\bamong\\s+all\\s+${relationPattern}\\b.{0,80}\\b(?:percent|percentage|rate)\\b`, "i").test(request)) return true;
   const requestTokens = words(request);
   const relationTokens = words(relation);
   const relationIndex = requestTokens.findIndex((_, index) => relationTokens.every((word, offset) => requestTokens[index + offset] === word));
-  const rateIndex = requestTokens.findLastIndex((word, index) => index < relationIndex && ["percent", "percentage", "share"].includes(word));
-  if (relationIndex < 0 || rateIndex < 0) return false;
+  const rateIndex = requestTokens.findLastIndex((word, index) => index < relationIndex && ["percent", "percentage", "share", "rate"].includes(word));
+  if (relationIndex < 0) return false;
+  if (rateIndex < 0) {
+    const laterRate = requestTokens.findIndex((word, index) => index > relationIndex && ["percent", "percentage", "share", "rate"].includes(word));
+    const prefix = requestTokens.slice(Math.max(0, relationIndex - 2), relationIndex);
+    const predicate = requestTokens[relationIndex + relationTokens.length];
+    return laterRate > relationIndex && prefix.includes("all") && prefix.some((word) => word === "among" || word === "of")
+      && ["what", "which", "are", "is", "were", "was"].includes(predicate ?? "");
+  }
   const populationScope = requestTokens.slice(rateIndex + 1, relationIndex);
   if (!populationScope.every((word) => ["of", "the", "all"].includes(word))) return false;
   const predicate = requestTokens[relationIndex + relationTokens.length];
@@ -285,6 +302,27 @@ function explicitBooleanRateCondition(request: string, relation: string, columns
     return value === undefined ? [] : [{ column: `${relation}.${column.name}`, operator: "eq" as const, value }];
   });
   return matches.length === 1 ? matches[0] : null;
+}
+
+function inferredAntiJoin(request: string, columns: DatasetColumn[], base: AdvancedAnalyticalPlan) {
+  const roles = resolveAnalyticalSemanticRoles(request, columns);
+  if (roles.relatedRelation.confidence !== "high") return null;
+  const relatedTable = roles.relatedRelation.value!;
+  const relatedPrimary = primaryIdentifierForTable(relatedTable, columns);
+  if (!relatedPrimary) return null;
+  const sharedKeys = columns.filter((column) => column.table === relatedTable && column.name.endsWith("_id") && column.name !== relatedPrimary.name)
+    .flatMap((relatedKey) => columns.filter((column) => column.table && column.table !== relatedTable && column.name === relatedKey.name
+      && primaryIdentifierForTable(column.table, columns)?.name === column.name)
+      .filter((entityKey) => fieldEvidence(entityKey.name, request) > 0)
+      .map((entityKey) => ({ relatedKey, entityKey })));
+  if (sharedKeys.length !== 1) return null;
+  return {
+    ...base,
+    operation: "anti_join" as const,
+    source: sharedKeys[0].entityKey.table!,
+    entity: `${sharedKeys[0].entityKey.table}.${sharedKeys[0].entityKey.name}`,
+    relatedField: `${relatedPrimary.table}.${relatedPrimary.name}`,
+  };
 }
 
 function validDate(value: string) {
@@ -357,7 +395,15 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
 
   const roles = resolveAnalyticalSemanticRoles(request, columns);
   const groupedCountAverage = /\b(?:average|mean)\b.{0,80}\b(?:number|count)\b.{0,80}\b(?:per|by|for each)\b/i.test(request);
-  if (/\b(?:ratio|divided by)\b/i.test(request) && roles.measure.confidence === "high") {
+  if (/\b(?:including|include)\b.{0,80}\b(?:zero|no)\b/i.test(request) && /\b(?:sum|total|revenue|amount)\b/i.test(request)) {
+    const inferred = inferredCompleteFilteredSum(request, columns, normalized);
+    normalized.operation = "complete_filtered_sum";
+    if (inferred) Object.assign(normalized, inferred);
+    decisions.push({ field: "operation", action: "replaced", reason: "The request explicitly requires a filtered total over a complete entity population." });
+  } else if (/\b(?:latest|newest|most recent)\b/i.test(request) && /\b(?:per|for each|by)\b/i.test(request)) {
+    normalized.operation = "latest_per_group";
+    decisions.push({ field: "operation", action: "replaced", reason: "The request explicitly requires one deterministic latest row per group." });
+  } else if (/\b(?:ratio|divided by)\b/i.test(request) && roles.measure.confidence === "high") {
     normalized.operation = "ratio";
     normalized.metric = roles.measure.value!;
     if (roles.secondaryMeasure.confidence === "high") normalized.secondaryMetric = roles.secondaryMeasure.value!;
@@ -381,13 +427,11 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
     normalized.innerAggregate = "count";
     normalized.outerAggregate = "avg";
     normalized.distinct = normalized.distinct || Boolean(normalized.entity);
-  } else if (/\b(?:average|mean)\b.{0,40}\btotal\b.{0,80}\b(?:per|by|for each)\b/i.test(request)) {
-    if (roles.measure.confidence !== "high" || roles.group.confidence !== "high") return clarify("Which approved measure and entity define the requested average of totals?");
-    normalized.operation = "per_entity_average";
-    normalized.metric = roles.measure.value!;
-    const metricTable = normalized.metric.split(".")[0];
-    normalized.entity = fieldOnSource(roles.group.value!, metricTable, columns);
-    normalized.source = metricTable;
+  } else if (/\b(?:average|mean)\b.{0,40}\btotal\b.{0,80}\b(?:per|by|for each)\b/i.test(request)
+    || /\b(?:average|mean)\s+of\s+each\b.{0,80}\btotal\b/i.test(request)) {
+    const inferred = inferredPerEntityAverage(request, columns, normalized);
+    if (!inferred) return clarify("Which approved measure and entity define the requested average of totals?");
+    Object.assign(normalized, inferred);
     decisions.push({ field: "operation", action: "replaced", reason: "The request explicitly asks to average a summed measure across entities." });
   } else if (/\b(?:average|mean)\b.{0,50}\b(?:duration|elapsed|time between)\b/i.test(request)
     && roles.startTime.confidence === "high" && roles.endTime.confidence === "high") {
@@ -408,15 +452,11 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
     normalized.entity = fieldOnSource(roles.thresholdEntity.value!, normalized.source, columns);
     normalized.threshold = Number(threshold?.[1] ?? 0);
     decisions.push({ field: "operation", action: "replaced", reason: "The request explicitly identifies an entity, observation relation and positive threshold." });
-  } else if (/\b(?:never|without)\b/i.test(request)
-    && roles.unmatchedEntity.confidence === "high" && roles.relatedRelation.confidence === "high") {
-    const entity = columnFor(roles.unmatchedEntity.value!, columns);
-    const relatedId = primaryIdentifierForTable(roles.relatedRelation.value!, columns);
-    if (!entity || !relatedId) return clarify("Which approved entity and related relation define the unmatched population?");
-    normalized.operation = "anti_join";
-    normalized.source = entity.table!;
-    normalized.entity = roles.unmatchedEntity.value!;
-    normalized.relatedField = `${relatedId.table}.${relatedId.name}`;
+  } else if (/\b(?:never|without|(?:have|has|had)\s+no\s+(?:related\s+)?)\b/i.test(request)
+    && roles.relatedRelation.confidence === "high") {
+    const inferred = inferredAntiJoin(request, columns, normalized);
+    if (!inferred) return clarify("Which approved entity and related relation define the unmatched population?");
+    Object.assign(normalized, inferred);
     decisions.push({ field: "operation", action: "replaced", reason: "The request explicitly identifies an entity population without a related observation." });
   } else if (/\bgrowth\s+(?:in|of|from|between)\b/i.test(request) && roles.measure.confidence === "high") {
     normalized.operation = "period_growth";
@@ -449,6 +489,7 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
     normalized.filters = normalized.filters.filter((filter) => !(filter.column.endsWith("_id") && Number(filter.value) === normalized.threshold)); anchor = entity;
   } else if (normalized.operation === "period_growth") {
     const metric = requireColumn("metric", numeric, "The growth metric"); if ("plan" in metric) return metric; anchor = metric;
+    if (fieldEvidence(normalized.metric, request) === 0) return clarify("Which explicitly requested numeric field defines the growth measure?");
     const ranges = monthRanges(request);
     if (ranges.length === 2) {
       [normalized.firstStart, normalized.firstEnd] = [ranges[0].start, ranges[0].end];
@@ -462,6 +503,10 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
     if (!chosen || !temporal.test(chosen.type)) return clarify("Which date field should define the comparison periods?");
     normalized.dateField = `${chosen.table}.${chosen.name}`;
     if (![normalized.firstStart, normalized.firstEnd, normalized.secondStart, normalized.secondEnd].every(validDate)) return clarify("The requested comparison periods could not be converted into valid calendar dates.");
+  } else if (normalized.operation === "month_over_month") {
+    const metric = requireColumn("metric", numeric, "The monthly metric"); if ("plan" in metric) return metric;
+    const date = requireColumn("dateField", temporal, "The monthly date field"); if ("plan" in date) return date;
+    if (metric.table !== date.table) return clarify("The monthly metric and date must belong to one approved relation."); anchor = metric;
   } else if (normalized.operation === "per_entity_average") {
     const metric = requireColumn("metric", numeric, "The averaged metric"); if ("plan" in metric) return metric;
     const entity = columnFor(normalized.entity, columns); if (!entity || !normalized.entity.endsWith("_id")) return clarify("Which entity should define the per-entity average?"); anchor = metric;
@@ -485,6 +530,28 @@ export function auditAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, reques
   } else if (normalized.operation === "conditional_rate") {
     if (!normalized.numeratorFilters.length) return clarify("Which explicit condition defines the numerator?");
     anchor = columnFor(normalized.numeratorFilters[0].column, columns);
+  } else if (normalized.operation === "complete_filtered_sum") {
+    const metric = requireColumn("metric", numeric, "The filtered total metric"); if ("plan" in metric) return metric;
+    const entity = columnFor(normalized.entity, columns); const eventKey = columnFor(normalized.groupField, columns);
+    if (!entity || !eventKey || entity.table === eventKey.table || entity.name !== eventKey.name || !entity.name.endsWith("_id")) return clarify("Which shared entity key connects the complete population to its observations?");
+    if (metric.table !== eventKey.table || !normalized.numeratorFilters.length || normalized.numeratorFilters.some((filter) => columnFor(filter.column, columns)?.table !== metric.table)) return clarify("Which explicit observation condition defines the filtered total?");
+    anchor = metric;
+  } else if (normalized.operation === "complete_count_average") {
+    const entity = columnFor(normalized.entity, columns); const eventKey = columnFor(normalized.groupField, columns); const related = columnFor(normalized.relatedField, columns);
+    if (!entity || !eventKey || !related || entity.table === eventKey.table || eventKey.table !== related.table || entity.name !== eventKey.name || !entity.name.endsWith("_id") || !related.name.endsWith("_id")) return clarify("Which complete entity population and related observation key define the average count?");
+    if (normalized.filters.some((filter) => columnFor(filter.column, columns)?.table !== entity.table)) return clarify("Complete-population count filters must apply only to the entity relation.");
+    normalized.source = entity.table!; anchor = entity;
+  } else if (normalized.operation === "target_attainment" || normalized.operation === "target_variance") {
+    const metric = requireColumn("metric", numeric, "The actual metric"); if ("plan" in metric) return metric;
+    const target = requireColumn("secondaryMetric", numeric, "The target metric"); if ("plan" in target) return target;
+    const entity = columnFor(normalized.entity, columns); const eventKey = columnFor(normalized.groupField, columns);
+    if (!entity || !eventKey || entity.table !== target.table || eventKey.table !== metric.table || entity.name !== eventKey.name || !entity.name.endsWith("_id")) return clarify("Which target relation and shared entity key define the comparison?");
+    anchor = metric;
+  } else if (normalized.operation === "latest_per_group") {
+    const group = columnFor(normalized.groupField, columns); const date = columnFor(normalized.dateField, columns); const tie = columnFor(normalized.entity, columns);
+    if (!group || !date || !tie || group.table !== date.table || date.table !== tie.table || !temporal.test(date.type)) return clarify("Which group, timestamp, and deterministic tie-break field define the latest row?");
+    if (fieldEvidence(normalized.groupField, request) === 0 || fieldEvidence(normalized.dateField, request) === 0 || fieldEvidence(normalized.entity, request) === 0) return clarify("The latest-row fields must be explicitly supported by the request.");
+    anchor = date;
   }
   if (anchor?.table && normalized.operation !== "anti_join" && normalized.source !== anchor.table) {
     normalized.source = anchor.table; decisions.push({ field: "source", action: "replaced", reason: "The source was aligned with the validated operation fields." });
@@ -506,6 +573,125 @@ export function normalizeAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, re
   return auditAdvancedAnalyticalPlan(plan, request, columns).plan;
 }
 
+function inferredCompleteFilteredSum(request: string, columns: DatasetColumn[], base: AdvancedAnalyticalPlan) {
+  const roles = resolveAnalyticalSemanticRoles(request, columns);
+  const numeric = /INT|DECIMAL|DOUBLE|REAL|FLOAT|NUMERIC/i;
+  const rankedMetrics = columns.filter((column) => column.table && numeric.test(column.type) && !column.name.endsWith("_id"))
+    .map((column) => ({ column, score: fieldEvidence(column.name, request) }))
+    .sort((left, right) => right.score - left.score || `${left.column.table}.${left.column.name}`.localeCompare(`${right.column.table}.${right.column.name}`));
+  const inferredMetric = rankedMetrics[0] && rankedMetrics[0].score > 0 && rankedMetrics[0].score > (rankedMetrics[1]?.score ?? -1) ? rankedMetrics[0].column : undefined;
+  const populationTable = roles.populationRelation.confidence === "high" ? roles.populationRelation.value : null;
+  const populationKey = populationTable ? primaryIdentifierForTable(populationTable, columns) : undefined;
+  const linkedMetrics = populationKey ? rankedMetrics.filter(({ column }) => column.table
+    && columns.some((candidate) => candidate.table === column.table && candidate.name === populationKey.name)) : [];
+  const linkedMetric = linkedMetrics[0] && linkedMetrics[0].score > 0 && linkedMetrics[0].score > (linkedMetrics[1]?.score ?? -1) ? linkedMetrics[0].column : undefined;
+  const metric = roles.measure.confidence === "high" ? columnFor(roles.measure.value!, columns) : linkedMetric ?? inferredMetric;
+  if (!metric?.table || !numeric.test(metric.type) || metric.name.endsWith("_id")) return null;
+  const sourceKeys = columns.filter((column) => column.table === metric.table && column.name.endsWith("_id"));
+  const pairs = sourceKeys.flatMap((sourceKey) => columns.filter((column) => column.table && column.table !== metric.table && column.name === sourceKey.name)
+    .filter((entityKey) => primaryIdentifierForTable(entityKey.table!, columns)?.name === entityKey.name)
+    .filter((entityKey) => relationNamedInRequest(entityKey.table!, request) || fieldEvidence(entityKey.name, request) > 0)
+    .map((entityKey) => ({ sourceKey, entityKey })));
+  if (pairs.length !== 1) return null;
+  const booleanConditions = columns.filter((column) => column.table === metric.table && /BOOL/i.test(column.type)).flatMap((column) => {
+    const value = requestedBoolean(`${metric.table}.${column.name}`, request);
+    return value === undefined ? [] : [{ column: `${metric.table}.${column.name}`, operator: "eq" as const, value }];
+  });
+  const textColumns = columns.filter((column) => column.table === metric.table && /CHAR|TEXT|STRING|ENUM/i.test(column.type));
+  const metricPattern = metric.name.split("_").join("[ _-]+");
+  const relationPattern = metric.table.split("_").join("[ _-]+");
+  const value = request.match(new RegExp(`\\b([a-z][a-z0-9_-]*)\\s+${metricPattern}\\b`, "i"))?.[1]
+    ?? request.match(new RegExp(`\\b(?:for|from|among)\\s+([a-z][a-z0-9_-]*)\\s+${relationPattern}\\b`, "i"))?.[1];
+  const textCondition = textColumns.length === 1 && value && requestContainsLiteral(request, value)
+    ? { column: `${textColumns[0].table}.${textColumns[0].name}`, operator: "eq" as const, value }
+    : null;
+  const condition = booleanConditions.length === 1 ? booleanConditions[0] : textCondition;
+  if (!condition) return null;
+  return {
+    ...base,
+    operation: "complete_filtered_sum" as const,
+    source: metric.table,
+    metric: `${metric.table}.${metric.name}`,
+    entity: `${pairs[0].entityKey.table}.${pairs[0].entityKey.name}`,
+    groupField: `${pairs[0].sourceKey.table}.${pairs[0].sourceKey.name}`,
+    numeratorFilters: [condition],
+  };
+}
+
+function inferredPerEntityAverage(request: string, columns: DatasetColumn[], base: AdvancedAnalyticalPlan) {
+  const roles = resolveAnalyticalSemanticRoles(request, columns);
+  const numeric = /INT|DECIMAL|DOUBLE|REAL|FLOAT|NUMERIC/i;
+  const possessiveEntity = request.match(/\b(?:average|mean)\s+of\s+each\s+([a-z][a-z0-9_-]*)['’]s\s+total\b/i)?.[1] ?? "";
+  const possessiveCandidates = possessiveEntity ? columns.filter((column) => column.table && column.name.endsWith("_id")
+    && words(column.name.replace(/_id$/, "")).includes(words(possessiveEntity)[0] ?? "")) : [];
+  const canonicalPossessive = possessiveCandidates.find((column) => primaryIdentifierForTable(column.table!, columns)?.name === column.name);
+  const groupField = roles.group.confidence === "high" ? roles.group.value
+    : canonicalPossessive ? `${canonicalPossessive.table}.${canonicalPossessive.name}`
+      : inferRequestedIdentifier(request, columns);
+  const group = groupField ? columnFor(groupField, columns) : undefined;
+  if (!group?.name.endsWith("_id")) return null;
+  const namedMetrics = columns.filter((column) => column.table && numeric.test(column.type) && !column.name.endsWith("_id"))
+    .map((column) => ({ column, score: fieldEvidence(column.name, request) }))
+    .filter(({ column, score }) => score > 0 && columns.some((candidate) => candidate.table === column.table && candidate.name === group.name))
+    .sort((left, right) => right.score - left.score || `${left.column.table}.${left.column.name}`.localeCompare(`${right.column.table}.${right.column.name}`));
+  const roleMetric = roles.measure.confidence === "high" ? columnFor(roles.measure.value!, columns) : undefined;
+  const linkedRoleMetric = roleMetric?.table && columns.some((candidate) => candidate.table === roleMetric.table && candidate.name === group.name) ? roleMetric : undefined;
+  const metric = linkedRoleMetric ?? (namedMetrics[0] && namedMetrics[0].score > (namedMetrics[1]?.score ?? -1) ? namedMetrics[0].column : undefined);
+  if (!metric?.table) return null;
+  return {
+    ...base,
+    operation: "per_entity_average" as const,
+    source: metric.table,
+    metric: `${metric.table}.${metric.name}`,
+    entity: `${metric.table}.${group.name}`,
+  };
+}
+
+function inferredPeriodGrowth(request: string, columns: DatasetColumn[], base: AdvancedAnalyticalPlan) {
+  const temporal = columns.filter((column) => column.table && /DATE|TIME/i.test(column.type))
+    .map((column) => ({ column, score: fieldEvidence(column.name, request) }))
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score || `${left.column.table}.${left.column.name}`.localeCompare(`${right.column.table}.${right.column.name}`));
+  if (!temporal[0] || temporal[0].score === temporal[1]?.score) return null;
+  const date = temporal[0].column;
+  const metrics = columns.filter((column) => column.table === date.table && /INT|DECIMAL|DOUBLE|REAL|FLOAT|NUMERIC/i.test(column.type) && !column.name.endsWith("_id"))
+    .map((column) => ({ column, score: fieldEvidence(column.name, request) }))
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score || left.column.name.localeCompare(right.column.name));
+  if (!metrics[0] || metrics[0].score === metrics[1]?.score) return null;
+  return {
+    ...base,
+    operation: "period_growth" as const,
+    source: date.table!,
+    metric: `${date.table}.${metrics[0].column.name}`,
+    dateField: `${date.table}.${date.name}`,
+  };
+}
+
+function inferredLatestPerGroup(request: string, columns: DatasetColumn[], base: AdvancedAnalyticalPlan) {
+  const temporal = columns.filter((column) => column.table && /DATE|TIME/i.test(column.type))
+    .map((column) => ({ column, score: fieldEvidence(`${column.table}.${column.name}`, request) }))
+    .sort((left, right) => right.score - left.score || `${left.column.table}.${left.column.name}`.localeCompare(`${right.column.table}.${right.column.name}`));
+  if (!temporal[0] || temporal[0].score <= 0 || temporal[0].score === temporal[1]?.score) return null;
+  const date = temporal[0].column;
+  const source = date.table!;
+  const identifiers = columns.filter((column) => column.table === source && column.name.endsWith("_id"));
+  const groupLabel = request.match(/\b(?:per|for each|by)\s+(?:the\s+)?([a-z][a-z0-9_-]*)/i)?.[1] ?? "";
+  const tieLabel = request.match(/\bhigher\s+([a-z][a-z0-9_-]*)\s+(?:id|identifier)\b/i)?.[1] ?? "";
+  const matchesLabel = (column: DatasetColumn, label: string) => words(column.name.replace(/_id$/, "")).includes(words(label)[0] ?? "");
+  const groups = identifiers.filter((column) => matchesLabel(column, groupLabel));
+  const ties = identifiers.filter((column) => matchesLabel(column, tieLabel) && column.name !== groups[0]?.name);
+  if (groups.length !== 1 || ties.length !== 1) return null;
+  return {
+    ...base,
+    operation: "latest_per_group" as const,
+    source,
+    entity: `${source}.${ties[0].name}`,
+    groupField: `${source}.${groups[0].name}`,
+    dateField: `${source}.${date.name}`,
+  };
+}
+
 /**
  * Recovers from malformed model JSON only when the current request and schema
  * independently resolve every required role. It never uses fixture knowledge,
@@ -519,6 +705,12 @@ export function recoverAdvancedAnalyticalPlan(request: string, columns: DatasetC
     dateField: "", relatedField: "", filters: [], numeratorFilters: [], denominatorFilters: [], threshold: 0, decimals: 2,
     firstStart: "", firstEnd: "", secondStart: "", secondEnd: "", explanation: "Compile the roles explicitly resolved from the current request and approved schema.",
   };
+  if (/\b(?:including|include)\b.{0,80}\b(?:zero|no)\b/i.test(request) && /\b(?:sum|total|revenue|amount|weight)\b/i.test(request)) {
+    return inferredCompleteFilteredSum(request, columns, base);
+  }
+  if (/\b(?:latest|newest|most recent)\b/i.test(request) && /\b(?:per|for each|by)\b/i.test(request)) {
+    return inferredLatestPerGroup(request, columns, base);
+  }
   if (/\b(?:average|mean)\b.{0,50}\b(?:duration|elapsed|time between)\b/i.test(request)
     && roles.startTime.confidence === "high" && roles.endTime.confidence === "high") {
     return { ...base, operation: "duration_average", source: roles.startTime.value!.split(".")[0], startField: roles.startTime.value!, endField: roles.endTime.value! };
@@ -530,9 +722,9 @@ export function recoverAdvancedAnalyticalPlan(request: string, columns: DatasetC
     return { ...base, operation: "aggregate_over_groups", source, metric: fieldOnSource(roles.countTarget.value!, source, columns), entity: fieldOnSource(roles.countTarget.value!, source, columns), groupField: fieldOnSource(roles.group.value!, source, columns), distinct: true };
   }
   if (/\b(?:average|mean)\b.{0,40}\btotal\b.{0,80}\b(?:per|by|for each)\b/i.test(request)
-    && roles.measure.confidence === "high" && roles.group.confidence === "high") {
-    const source = roles.measure.value!.split(".")[0];
-    return { ...base, operation: "per_entity_average", source, metric: roles.measure.value!, entity: fieldOnSource(roles.group.value!, source, columns) };
+    || /\b(?:average|mean)\s+of\s+each\b.{0,80}\btotal\b/i.test(request)
+  ) {
+    return inferredPerEntityAverage(request, columns, base);
   }
   if (/\b(?:ratio|divided by)\b/i.test(request) && roles.measure.confidence === "high") {
     const source = roles.measure.value!.split(".")[0];
@@ -545,13 +737,11 @@ export function recoverAdvancedAnalyticalPlan(request: string, columns: DatasetC
     const source = roles.thresholdRelation.value!; const threshold = Number(request.match(/\bat least\s+(\d+)\b/i)?.[1] ?? 0);
     return threshold > 0 ? { ...base, operation: "threshold_count", source, entity: fieldOnSource(roles.thresholdEntity.value!, source, columns), threshold } : null;
   }
-  if (/\b(?:never|without)\b/i.test(request)
-    && roles.unmatchedEntity.confidence === "high" && roles.relatedRelation.confidence === "high") {
-    const entity = columnFor(roles.unmatchedEntity.value!, columns); const related = primaryIdentifierForTable(roles.relatedRelation.value!, columns);
-    return entity && related ? { ...base, operation: "anti_join", source: entity.table!, entity: roles.unmatchedEntity.value!, relatedField: `${related.table}.${related.name}` } : null;
+  if (/\b(?:never|without|(?:have|has|had)\s+no\s+(?:related\s+)?)\b/i.test(request)) {
+    return inferredAntiJoin(request, columns, base);
   }
-  if (/\bgrowth\b/i.test(request) && roles.measure.confidence === "high") {
-    return { ...base, operation: "period_growth", source: roles.measure.value!.split(".")[0], metric: roles.measure.value!, dateField: roles.dateField.confidence === "high" ? roles.dateField.value! : "" };
+  if (/\bgrowth\b/i.test(request)) {
+    return inferredPeriodGrowth(request, columns, base);
   }
   if (roles.populationRelation.confidence === "high"
     && namesWholePopulationForRate(request, roles.populationRelation.value!)) {
@@ -610,9 +800,15 @@ export function compileAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, colu
     duration_average: [plan.startField, plan.endField],
     threshold_count: [plan.entity],
     period_growth: [plan.metric, plan.dateField],
+    month_over_month: [plan.metric, plan.dateField],
     per_entity_average: [plan.metric, plan.entity],
     aggregate_over_groups: [plan.metric, plan.groupField],
     anti_join: [plan.entity, plan.relatedField],
+    complete_filtered_sum: [plan.metric, plan.entity, plan.groupField, ...plan.numeratorFilters.map((filter) => filter.column)],
+    complete_count_average: [plan.entity, plan.groupField, plan.relatedField],
+    target_attainment: [plan.metric, plan.secondaryMetric, plan.entity, plan.groupField],
+    target_variance: [plan.metric, plan.secondaryMetric, plan.entity, plan.groupField],
+    latest_per_group: [plan.entity, plan.groupField, plan.dateField],
   };
   const usedValues = [...operationValues[plan.operation], ...plan.filters.map((filter) => filter.column)].filter((field) => Boolean(field) && field !== "*");
   const refs = usedValues.map((field) => reference(field, columns)); const relation = fromClause(plan.source, refs, columns); const baseWhere = where(plan.filters, columns); const suffix = baseWhere.length ? `\nWHERE ${baseWhere.join(" AND ")}` : ""; const round = (value: string) => plan.decimals ? `ROUND(${value}, ${plan.decimals})` : value;
@@ -623,6 +819,7 @@ export function compileAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, colu
   else if (plan.operation === "duration_average") { const start = reference(plan.startField, columns); const end = reference(plan.endField, columns); query = `SELECT ${round(`AVG(DATE_DIFF('minute', ${start.sql}, ${end.sql})) / 60.0`)} AS ${quote("average_duration_hours")}\n${relation}${suffix}`; }
   else if (plan.operation === "threshold_count") { const entity = reference(plan.entity, columns); query = `SELECT COUNT(*) AS ${quote("matching_entities")} FROM (SELECT ${entity.sql}\n${relation}${suffix}\nGROUP BY ${entity.sql}\nHAVING COUNT(*) >= ${plan.threshold}) AS ${quote("qualified")}`; }
   else if (plan.operation === "period_growth") { const metric = reference(plan.metric, columns); const date = reference(plan.dateField, columns); query = `WITH ${quote("periods")} AS (SELECT SUM(${metric.sql}) FILTER (WHERE ${date.sql} >= DATE '${plan.firstStart}' AND ${date.sql} < DATE '${plan.firstEnd}') AS ${quote("first_value")}, SUM(${metric.sql}) FILTER (WHERE ${date.sql} >= DATE '${plan.secondStart}' AND ${date.sql} < DATE '${plan.secondEnd}') AS ${quote("second_value")}\n${relation}${suffix}) SELECT ${round(`100.0 * (${quote("second_value")} - ${quote("first_value")}) / NULLIF(${quote("first_value")}, 0)`)} AS ${quote("growth_pct")} FROM ${quote("periods")}`; }
+  else if (plan.operation === "month_over_month") { const metric = reference(plan.metric, columns); const date = reference(plan.dateField, columns); if (metric.table !== date.table) throw new Error("The month-over-month metric and date must belong to one relation."); query = `WITH ${quote("monthly_values")} AS (SELECT DATE_TRUNC('month', ${date.sql}) AS ${quote("period_month")}, SUM(${metric.sql}) AS ${quote("period_value")}\nFROM ${quote(metric.table)}${suffix}\nGROUP BY 1) SELECT ${quote("period_month")}, ${quote("period_value")}, ${quote("period_value")} - LAG(${quote("period_value")}) OVER (ORDER BY ${quote("period_month")}) AS ${quote("change_from_previous")} FROM ${quote("monthly_values")} ORDER BY ${quote("period_month")}`; }
   else if (plan.operation === "per_entity_average") { const metric = reference(plan.metric, columns); const entity = reference(plan.entity, columns); query = `SELECT ${round(`AVG(${quote("entity_value")})`)} AS ${quote("average_per_entity")} FROM (SELECT ${entity.sql}, SUM(${metric.sql}) AS ${quote("entity_value")}\n${relation}${suffix}\nGROUP BY ${entity.sql}) AS ${quote("per_entity")}`; }
   else if (plan.operation === "aggregate_over_groups") {
     const group = reference(plan.groupField, columns);
@@ -630,11 +827,39 @@ export function compileAdvancedAnalyticalPlan(plan: AdvancedAnalyticalPlan, colu
     const inner = plan.innerAggregate === "count" ? `COUNT(${plan.distinct && operand !== "*" ? `DISTINCT ${operand}` : operand})` : `${plan.innerAggregate.toUpperCase()}(${operand})`;
     query = `SELECT ${round(`${plan.outerAggregate.toUpperCase()}(${quote("group_value")})`)} AS ${quote("aggregate_over_groups")} FROM (SELECT ${group.sql}, ${inner} AS ${quote("group_value")}\n${relation}${suffix}\nGROUP BY ${group.sql}) AS ${quote("group_values")}`;
   }
-  else {
+  else if (plan.operation === "anti_join") {
     const entity = reference(plan.entity, columns); const related = reference(plan.relatedField, columns);
     const shared = columns.find((column) => column.table === entity.table && column.name.endsWith("_id") && columns.some((candidate) => candidate.table === related.table && candidate.name === column.name));
     if (!shared || plan.source !== entity.table) throw new Error("The anti-join requires a direct approved entity relationship.");
     query = `SELECT ${entity.sql}\nFROM ${quote(entity.table)}\nLEFT JOIN ${quote(related.table)} USING (${quote(shared.name)})${suffix ? `${suffix} AND` : "\nWHERE"} ${related.sql} IS NULL\nORDER BY ${entity.sql}`;
+  }
+  else if (plan.operation === "complete_filtered_sum") {
+    const entity = reference(plan.entity, columns); const eventKey = reference(plan.groupField, columns); const metric = reference(plan.metric, columns);
+    if (entity.table === eventKey.table || eventKey.table !== metric.table || entity.column !== eventKey.column) throw new Error("The complete filtered sum requires one shared entity key across two approved relations.");
+    const conditions = where(plan.numeratorFilters, columns);
+    if (!conditions.length || plan.numeratorFilters.some((filter) => reference(filter.column, columns).table !== metric.table)) throw new Error("The complete filtered sum requires an observation-bound filter.");
+    const entityFilters = where(plan.filters, columns);
+    if (plan.filters.some((filter) => reference(filter.column, columns).table !== entity.table)) throw new Error("Complete-population filters must apply to the entity relation.");
+    query = `SELECT ${entity.sql}, COALESCE(SUM(${metric.sql}) FILTER (WHERE ${conditions.join(" AND ")}), 0) AS ${quote("filtered_sum")}\nFROM ${quote(entity.table)}\nLEFT JOIN ${quote(metric.table)} ON ${eventKey.sql} = ${entity.sql}${entityFilters.length ? `\nWHERE ${entityFilters.join(" AND ")}` : ""}\nGROUP BY ${entity.sql}\nORDER BY ${entity.sql}`;
+  }
+  else if (plan.operation === "complete_count_average") {
+    const entity = reference(plan.entity, columns); const eventKey = reference(plan.groupField, columns); const related = reference(plan.relatedField, columns);
+    if (entity.table === eventKey.table || eventKey.table !== related.table || entity.column !== eventKey.column || !entity.column.endsWith("_id") || !related.column.endsWith("_id")) throw new Error("The complete count average requires one shared entity key and one related-row identifier.");
+    const entityFilters = where(plan.filters, columns);
+    if (plan.filters.some((filter) => reference(filter.column, columns).table !== entity.table)) throw new Error("Complete-population count filters must apply to the entity relation.");
+    query = `SELECT ${round(`AVG(${quote("activity_count")})`)} AS ${quote("complete_count_average")} FROM (SELECT ${entity.sql}, COUNT(${related.sql}) AS ${quote("activity_count")}\nFROM ${quote(entity.table)}\nLEFT JOIN ${quote(related.table)} ON ${eventKey.sql} = ${entity.sql}${entityFilters.length ? `\nWHERE ${entityFilters.join(" AND ")}` : ""}\nGROUP BY ${entity.sql}) AS ${quote("complete_population")}`;
+  }
+  else if (plan.operation === "target_attainment" || plan.operation === "target_variance") {
+    const metric = reference(plan.metric, columns); const target = reference(plan.secondaryMetric, columns); const entity = reference(plan.entity, columns); const eventKey = reference(plan.groupField, columns);
+    if (entity.table !== target.table || eventKey.table !== metric.table || entity.column !== eventKey.column || !entity.column.endsWith("_id")) throw new Error("The target comparison requires one shared entity key across actual and target relations.");
+    const actuals = `WITH ${quote("actuals")} AS (SELECT ${eventKey.sql} AS ${quote(entity.column)}, SUM(${metric.sql}) AS ${quote("actual")} FROM ${quote(metric.table)} GROUP BY ${eventKey.sql})`;
+    if (plan.operation === "target_attainment") query = `${actuals} SELECT ${entity.sql}, COALESCE(${quote("actuals")}.${quote("actual")}, 0) AS ${quote("actual")}, ${target.sql} AS ${quote("target")}, ${round(`100.0 * COALESCE(${quote("actuals")}.${quote("actual")}, 0) / NULLIF(${target.sql}, 0)`)} AS ${quote("attainment_pct")} FROM ${quote(entity.table)} LEFT JOIN ${quote("actuals")} ON ${quote("actuals")}.${quote(entity.column)} = ${entity.sql} ORDER BY ${entity.sql}`;
+    else query = `${actuals} SELECT ${entity.sql}, COALESCE(${quote("actuals")}.${quote("actual")}, 0) - ${target.sql} AS ${quote("variance")} FROM ${quote(entity.table)} LEFT JOIN ${quote("actuals")} ON ${quote("actuals")}.${quote(entity.column)} = ${entity.sql} WHERE COALESCE(${quote("actuals")}.${quote("actual")}, 0) < ${target.sql} ORDER BY ${quote("variance")}, ${entity.sql}`;
+  }
+  else {
+    const tie = reference(plan.entity, columns); const group = reference(plan.groupField, columns); const date = reference(plan.dateField, columns);
+    if (tie.table !== group.table || group.table !== date.table) throw new Error("The latest-row fields must belong to one approved relation.");
+    query = `WITH ${quote("ranked_rows")} AS (\n  SELECT ${tie.sql}, ${group.sql}, ${date.sql}, ROW_NUMBER() OVER (PARTITION BY ${group.sql} ORDER BY ${date.sql} DESC, ${tie.sql} DESC) AS ${quote("rangabot_rank")}\n  FROM ${quote(group.table)}${suffix}\n)\nSELECT ${quote(tie.column)}, ${quote(group.column)}, ${quote(date.column)} FROM ${quote("ranked_rows")} WHERE ${quote("rangabot_rank")} = 1 ORDER BY ${quote(group.column)}`;
   }
   return { action: "query", query: validateSqlPreviewQuery(query), explanation: plan.explanation || "Run the validated advanced analytical operation." };
 }

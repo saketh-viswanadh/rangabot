@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -148,6 +149,41 @@ test("unpackaged normal profile keeps its existing userData behavior and never a
     assert.equal(prepared.kind, "normal");
     assert.equal(prepared.verificationPolicy, undefined);
   } finally { rmSync(userDataPath, { recursive: true, force: true }); }
+});
+
+test("packaged Mac App Store profile binds every Electron writable path beneath sandboxed userData", () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "rangabot-mas-userdata-")));
+  const userDataPath = join(root, "Library", "Containers", "com.rangabot.desktop", "Data", "Library", "Application Support", "Rangabot");
+  const setPaths: Array<[string, string]> = [];
+  try {
+    const prepared = prepareDesktopStartupProfileBeforeLock({
+      electronApp: {
+        getPath(name: string) {
+          assert.equal(name, "userData");
+          return userDataPath;
+        },
+        setPath(name: string, path: string) { setPaths.push([name, path]); },
+      } as never,
+      launchProfile: NORMAL_DESKTOP_LAUNCH_PROFILE,
+      isPackaged: true,
+      platform: "darwin",
+      windowsStore: false,
+      macAppStore: true,
+    });
+    assert.equal(prepared.userDataPath, userDataPath);
+    assert.deepEqual(setPaths, [
+      ["userData", userDataPath],
+      ["sessionData", join(userDataPath, "sessionData")],
+      ["logs", join(userDataPath, "logs")],
+      ["crashDumps", join(userDataPath, "crashDumps")],
+    ]);
+    for (const [, path] of setPaths) {
+      assert.equal(realpathSync(path), path);
+      // Windows does not expose POSIX mode enforcement; the macOS candidate
+      // exercises this assertion on the platform where chmod is meaningful.
+      if (process.platform !== "win32") assert.equal(lstatSync(path).mode & 0o077, 0);
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 function createInternalMsixDataFixture() {

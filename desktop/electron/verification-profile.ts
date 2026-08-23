@@ -1,4 +1,6 @@
 import type { App } from "electron";
+import { chmodSync, lstatSync, mkdirSync, realpathSync } from "node:fs";
+import { isAbsolute, join, resolve } from "node:path";
 import {
   DESKTOP_FINDER_VERIFICATION_BUILD_PROFILE,
   validateFinderVerificationCapsuleReadOnly,
@@ -32,6 +34,7 @@ export function prepareDesktopStartupProfileBeforeLock(input: {
   isPackaged: boolean;
   platform: NodeJS.Platform;
   windowsStore: boolean;
+  macAppStore?: boolean;
   localAppDataPath?: string;
   execPath?: string;
 }): PreparedDesktopStartupProfile {
@@ -49,6 +52,36 @@ export function prepareDesktopStartupProfileBeforeLock(input: {
       input.electronApp.setPath("sessionData", packagedPaths.sessionDataPath);
       input.electronApp.setPath("logs", packagedPaths.logsPath);
       input.electronApp.setPath("crashDumps", packagedPaths.crashDumpsPath);
+    }
+    if (input.platform === "darwin" && input.macAppStore) {
+      if (!input.isPackaged || input.windowsStore) throw new Error("The Mac App Store runtime identity is inconsistent.");
+      const userDataPath = input.electronApp.getPath("userData");
+      if (!isAbsolute(userDataPath) || resolve(userDataPath) !== userDataPath) {
+        throw new Error("The Mac App Store user-data path is invalid.");
+      }
+      const macPaths = {
+        userDataPath,
+        sessionDataPath: join(userDataPath, "sessionData"),
+        logsPath: join(userDataPath, "logs"),
+        crashDumpsPath: join(userDataPath, "crashDumps"),
+      };
+      for (const path of Object.values(macPaths)) {
+        mkdirSync(path, { recursive: true, mode: 0o700 });
+        const status = lstatSync(path);
+        if (status.isSymbolicLink() || !status.isDirectory() || realpathSync(path) !== path) {
+          throw new Error("Mac App Store writable paths must be real private directories.");
+        }
+        chmodSync(path, 0o700);
+      }
+      input.electronApp.setPath("userData", macPaths.userDataPath);
+      input.electronApp.setPath("sessionData", macPaths.sessionDataPath);
+      input.electronApp.setPath("logs", macPaths.logsPath);
+      input.electronApp.setPath("crashDumps", macPaths.crashDumpsPath);
+      return Object.freeze({
+        kind: "normal" as const,
+        windowTitle: "Rangabot" as const,
+        userDataPath: macPaths.userDataPath,
+      });
     }
     return Object.freeze({
       kind: "normal" as const,

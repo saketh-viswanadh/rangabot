@@ -1,5 +1,7 @@
 import type { AdvancedAnalyticalPlan } from "./advanced-analytical-plan.ts";
 import type { AnalyticalPlan } from "./analytical-plan.ts";
+import { generalSqlOutputColumns, type GeneralSqlPlan } from "./general-sql-plan.ts";
+import { expertRelationalOutputColumns, type ExpertRelationalPlan } from "./expert-relational-plan.ts";
 import type { SqlExecutionResult } from "./sql-runtime.ts";
 
 export const ANALYTICAL_NARRATION_CONTRACT_VERSION = "1.0.0" as const;
@@ -10,7 +12,10 @@ const maximumCellCharacters = 300;
 
 export type ResolvedAnalyticalPlan =
   | { kind: "basic"; plan: AnalyticalPlan }
-  | { kind: "advanced"; plan: AdvancedAnalyticalPlan };
+  | { kind: "advanced"; plan: AdvancedAnalyticalPlan }
+  | { kind: "general"; plan: GeneralSqlPlan }
+  | { kind: "expert"; plan: ExpertRelationalPlan }
+  | { kind: "direct"; plan: { explanation: string; outputColumns: string[] } };
 
 export type AnalyticalNarrationMode = "empty" | "list" | "scalar" | "table";
 export type AnalyticalNarrationUnit = "hours" | "percent" | null;
@@ -149,7 +154,10 @@ function renderedFilters(filters: Filter[]) {
 
 function scopeFor(resolved: ResolvedAnalyticalPlan) {
   const sections: Array<{ label: string; filters: Filter[]; emptyText: string }> = [];
-  if (resolved.kind === "basic") {
+  if (resolved.kind === "expert" || resolved.kind === "direct") {
+    return { text: "", claims: [], omitted: false, shortened: false };
+  }
+  if (resolved.kind === "basic" || resolved.kind === "general") {
     if (resolved.plan.filters.length) sections.push({ label: "Scope", filters: resolved.plan.filters, emptyText: "all rows" });
   } else if (resolved.plan.operation === "conditional_rate") {
     if (resolved.plan.filters.length) sections.push({ label: "Base scope", filters: resolved.plan.filters, emptyText: "all source rows" });
@@ -212,6 +220,7 @@ function advancedLabel(plan: AdvancedAnalyticalPlan) {
   if (plan.operation === "duration_average") return capitalized(`Average duration from ${fieldName(plan.startField)} to ${fieldName(plan.endField)}`);
   if (plan.operation === "threshold_count") return capitalized(`Count of ${entity} values with at least ${plan.threshold} rows from ${source}`);
   if (plan.operation === "period_growth") return capitalized(`Growth in ${metric} from [${plan.firstStart}, ${plan.firstEnd}) to [${plan.secondStart}, ${plan.secondEnd})`);
+  if (plan.operation === "month_over_month") return capitalized(`Monthly total ${metric} with change from the previous month`);
   if (plan.operation === "per_entity_average") return capitalized(`Average total ${metric} per ${entity}`);
   if (plan.operation === "aggregate_over_groups") {
     const innerNames: Record<string, string> = { count: "count of", avg: "average", sum: "total", min: "minimum", max: "maximum" };
@@ -220,18 +229,78 @@ function advancedLabel(plan: AdvancedAnalyticalPlan) {
     const distinct = plan.distinct ? "distinct " : "";
     return capitalized(`${outerNames[plan.outerAggregate] ?? plan.outerAggregate} ${distinct}${innerNames[plan.innerAggregate] ?? plan.innerAggregate} ${measured} per ${group}`);
   }
+  if (plan.operation === "complete_filtered_sum") return capitalized(`Filtered total ${metric} for every ${fieldName(plan.entity)}`);
+  if (plan.operation === "complete_count_average") return capitalized(`Average related-row count across the complete filtered ${fieldName(plan.entity)} population`);
+  if (plan.operation === "target_attainment") return capitalized(`Actual ${metric} and percentage attainment against ${fieldName(plan.secondaryMetric)}`);
+  if (plan.operation === "target_variance") return capitalized(`Below-target variance for ${fieldName(plan.entity)}`);
+  if (plan.operation === "latest_per_group") return capitalized(`Latest row per ${group}`);
   return capitalized(`${entity} values without a matching row in ${tableName(plan.relatedField)}`);
 }
 
 export function analyticalNarrationLabel(resolved: ResolvedAnalyticalPlan) {
-  return resolved.kind === "advanced" ? advancedLabel(resolved.plan) : basicLabel(resolved.plan);
+  if (resolved.kind === "advanced") return advancedLabel(resolved.plan);
+  if (resolved.kind === "expert") return "Verified expert relational result";
+  if (resolved.kind === "direct") return "Verified SQL result";
+  if (resolved.kind === "general") return "Verified relational result";
+  return basicLabel(resolved.plan);
 }
 
 function expectedOutput(resolved: ResolvedAnalyticalPlan): ExpectedOutput {
+  if (resolved.kind === "direct") return {
+    grain: "table",
+    columns: resolved.plan.outputColumns.map((name) => ({ label: fieldName(name), unit: null, expectedName: name })),
+  };
+  if (resolved.kind === "expert") return {
+    grain: "table",
+    columns: expertRelationalOutputColumns(resolved.plan).map((name) => ({ label: fieldName(name), unit: null, expectedName: name })),
+  };
+  if (resolved.kind === "general") return {
+    grain: "table",
+    columns: generalSqlOutputColumns(resolved.plan).map((name) => ({ label: fieldName(name), unit: null, expectedName: name })),
+  };
   if (resolved.kind === "advanced") {
     if (resolved.plan.operation === "anti_join") return {
       grain: "list",
       columns: [{ label: fieldName(resolved.plan.entity), unit: null, expectedName: leaf(resolved.plan.entity) }],
+    };
+    if (resolved.plan.operation === "complete_filtered_sum") return {
+      grain: "table",
+      columns: [
+        { label: fieldName(resolved.plan.entity), unit: null, expectedName: leaf(resolved.plan.entity) },
+        { label: analyticalNarrationLabel(resolved), unit: null, expectedName: "filtered_sum" },
+      ],
+    };
+    if (resolved.plan.operation === "latest_per_group") return {
+      grain: "table",
+      columns: [
+        { label: fieldName(resolved.plan.entity), unit: null, expectedName: leaf(resolved.plan.entity) },
+        { label: fieldName(resolved.plan.groupField), unit: null, expectedName: leaf(resolved.plan.groupField) },
+        { label: fieldName(resolved.plan.dateField), unit: null, expectedName: leaf(resolved.plan.dateField) },
+      ],
+      };
+    if (resolved.plan.operation === "month_over_month") return {
+      grain: "table",
+      columns: [
+        { label: "Period month", unit: null, expectedName: "period_month" },
+        { label: "Period value", unit: null, expectedName: "period_value" },
+        { label: "Change from previous", unit: null, expectedName: "change_from_previous" },
+      ],
+    };
+    if (resolved.plan.operation === "target_attainment") return {
+      grain: "table",
+      columns: [
+        { label: fieldName(resolved.plan.entity), unit: null, expectedName: leaf(resolved.plan.entity) },
+        { label: "Actual", unit: null, expectedName: "actual" },
+        { label: "Target", unit: null, expectedName: "target" },
+        { label: "Attainment", unit: "percent", expectedName: "attainment_pct" },
+      ],
+    };
+    if (resolved.plan.operation === "target_variance") return {
+      grain: "table",
+      columns: [
+        { label: fieldName(resolved.plan.entity), unit: null, expectedName: leaf(resolved.plan.entity) },
+        { label: "Variance", unit: null, expectedName: "variance" },
+      ],
     };
     const unit: AnalyticalNarrationUnit = resolved.plan.operation === "conditional_rate" || resolved.plan.operation === "period_growth"
       ? "percent"
@@ -243,8 +312,14 @@ function expectedOutput(resolved: ResolvedAnalyticalPlan): ExpectedOutput {
       duration_average: "average_duration_hours",
       threshold_count: "matching_entities",
       period_growth: "growth_pct",
+      month_over_month: "change_from_previous",
       per_entity_average: "average_per_entity",
       aggregate_over_groups: "aggregate_over_groups",
+      complete_filtered_sum: "filtered_sum",
+      complete_count_average: "complete_count_average",
+      target_attainment: "attainment_pct",
+      target_variance: "variance",
+      latest_per_group: "rangabot_rank",
     };
     return { grain: "scalar", columns: [{ label: analyticalNarrationLabel(resolved), unit, expectedName: names[resolved.plan.operation] }] };
   }
@@ -445,13 +520,14 @@ export function auditVerifiedAnalyticalNarration(narration: VerifiedAnalyticalNa
     label: analyticalNarrationLabel(resolved),
     columns: expectedOutput(resolved).columns.map((column) => column.label),
   }))) allowedNumbers.add(token);
-  for (const token of numericClaims(JSON.stringify({
-    rows: result.rows.slice(0, maximumRenderedRows).map((row) => row.slice(0, maximumRenderedColumns)),
-    returnedRows: result.receipt.returnedRows,
-    returnedColumns: result.columns.length,
-    displayedRows: narration.displayedRows,
-    displayedColumns: narration.displayedColumns,
-  }))) allowedNumbers.add(token);
+  for (const row of result.rows.slice(0, maximumRenderedRows)) {
+    for (const cell of row.slice(0, maximumRenderedColumns)) {
+      for (const token of numericClaims(rawCellText(cell))) allowedNumbers.add(token);
+    }
+  }
+  for (const count of [result.receipt.returnedRows, result.columns.length, narration.displayedRows, narration.displayedColumns]) {
+    allowedNumbers.add(String(count));
+  }
   for (const token of numericClaims(narration.answer)) if (!allowedNumbers.has(token)) failures.add("unsupported-number");
   const canonical = compileVerifiedAnalyticalNarration(resolved, result);
   if (JSON.stringify(narration) !== JSON.stringify(canonical)) failures.add("canonical-mismatch");

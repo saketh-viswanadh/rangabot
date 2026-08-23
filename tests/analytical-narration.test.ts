@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { AdvancedAnalyticalPlan } from "../lib/advanced-analytical-plan.ts";
 import type { AnalyticalPlan } from "../lib/analytical-plan.ts";
+import type { GeneralSqlPlan } from "../lib/general-sql-plan.ts";
 import { ANALYTICAL_NARRATION_CONTRACT_VERSION, auditVerifiedAnalyticalNarration, compileVerifiedAnalyticalNarration, type ResolvedAnalyticalPlan } from "../lib/analytical-narration.ts";
 import type { SqlExecutionResult } from "../lib/sql-runtime.ts";
 
@@ -46,6 +47,10 @@ function basic(overrides: Partial<AnalyticalPlan> = {}): ResolvedAnalyticalPlan 
       dimensions: [], filters: [], sort: [], limit: 0, decimals: 2, explanation: "ignored model prose", ...overrides,
     },
   };
+}
+
+function general(overrides: Partial<GeneralSqlPlan> = {}): ResolvedAnalyticalPlan {
+  return { kind: "general", plan: { action: "query", source: "readings", dimensions: ["readings.device_id"], filters: [], aggregates: [{ slot: "metric_1", aggregate: "sum", field: "readings.value", distinct: false }], windows: [], having: [], qualify: [], orderBy: [], limit: 0, explanation: "ignored model prose", ...overrides } };
 }
 
 test("renders every advanced scalar operation from typed semantics and exact cells", () => {
@@ -90,6 +95,12 @@ test("renders anti-join lists and basic grouped aggregates without model-authore
   assert.match(narration.answer, /Payments payment status equals paid/);
   assert.match(narration.answer, /\| North \| 25 \|/);
   assert.deepEqual(auditVerifiedAnalyticalNarration(narration, grouped, groupedResult), { valid: true, failures: [] });
+
+  const latest = advanced({ operation: "latest_per_group", source: "shipment_quotes", metric: "", secondaryMetric: "", entity: "shipment_quotes.quote_id", groupField: "shipment_quotes.shipment_id", dateField: "shipment_quotes.quoted_at" });
+  const latestResult = result(["quote_id", "shipment_id", "quoted_at"], [[32, 101, "2026-07-02 09:00:00"], [34, 102, "2026-07-03 09:00:00"]]);
+  const latestNarration = compileVerifiedAnalyticalNarration(latest, latestResult);
+  assert.match(latestNarration.answer, /\| 32 \| 101 \| 2026-07-02 09:00:00 \|/);
+  assert.deepEqual(auditVerifiedAnalyticalNarration(latestNarration, latest, latestResult), { valid: true, failures: [] });
 });
 
 test("handles empty, null, and exactly disclosed bounded results", () => {
@@ -111,6 +122,15 @@ test("handles empty, null, and exactly disclosed bounded results", () => {
   assert.match(truncated.answer, /runtime row limit was reached/);
   assert.doesNotMatch(truncated.answer, /complete result/);
   assert.deepEqual(auditVerifiedAnalyticalNarration(truncated, basic({ aggregate: "count", metric: "*", dimensions: ["customers.region"] }), truncatedResult), { valid: true, failures: [] });
+});
+
+test("renders general relational outputs only from compiler-owned columns and cells", () => {
+  const plan = general({ windows: [{ slot: "window_1", function: "row_number", input: "", partitionBy: ["readings.device_id"], orderBy: [{ field: "metric_1", direction: "desc" }], frameRows: 0 }] });
+  const execution = result(["device_id", "metric_1", "window_1"], [[7, 18, "1"], [8, 11, "2"]]);
+  const narration = compileVerifiedAnalyticalNarration(plan, execution);
+  assert.equal(narration.mode, "table");
+  assert.match(narration.answer, /\| 7 \| 18 \| 1 \|/);
+  assert.deepEqual(auditVerifiedAnalyticalNarration(narration, plan, execution), { valid: true, failures: [] });
 });
 
 test("escapes hostile result strings and never treats them as instructions", () => {

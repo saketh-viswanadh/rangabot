@@ -98,7 +98,7 @@ test("Forge creates a Windows diagnostic ZIP and finalizes the PE fuse target wi
   assert.match(forge, /new MakerZIP\(\{\}, \["win32"\]\)/);
   assert.doesNotMatch(forge, /MakerSquirrel|squirrelVendor|windows-squirrel-vendor|RangaBot-win32-x64-Setup\.exe/);
   assert.match(forge, /path\.resolve\(outputPath, "RangaBot\.exe"\)/);
-  assert.match(forge, /packageAfterCopy:[\s\S]*if \(platform === "darwin"\)/);
+  assert.match(forge, /packageAfterCopy:[\s\S]*if \(platform === "darwin" \|\| platform === "mas"\)/);
   assert.match(forge, /postPackage:[\s\S]*finalizePackagedExecutables/);
   assert.match(forge, /assertWindowsPeCertificateTableAbsent\(executable, "Fuse-mutated RangaBot\.exe"\)/);
   assert.doesNotMatch(forge, /Get-AuthenticodeSignature|powershell\.exe|signtool|HashMismatch/);

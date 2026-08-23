@@ -75,8 +75,8 @@ test("wraps the legacy analytical path with exact evidence, grants, model, and t
   assert.deepEqual(outcome.result.warnings, []);
   assert.equal(fixture.state.identityCalls, 1);
   assert.equal(fixture.state.schemaCalls, 1);
-  assert.equal(fixture.state.jsonCalls, 1);
-  assert.equal(fixture.state.sqlCalls.length, 1);
+  assert.equal(fixture.state.jsonCalls, 2);
+  assert.equal(fixture.state.sqlCalls.length, 2);
   assert.equal(fixture.state.sqlCalls[0].expectedInputSha256, inputSha256);
   assert.deepEqual(fixture.state.sqlCalls[0].expectedFileIdentity, fileIdentity);
   assert.equal(fixture.state.jsonOptions?.modelId, "llama3.2:3b");
@@ -107,6 +107,37 @@ test("uses the trusted renderer without a second free-text model call", async ()
   assert.deepEqual(outcome.result.warnings, []);
   assert.deepEqual(outcome.result.evidence[0].claims, outcome.diagnostics?.narration?.narrative.claims);
   assert.ok(outcome.trace);
+});
+
+test("routes context-bearing requests to direct verified SQL instead of failing in the narrow typed model grammar", async () => {
+  const query = "SELECT c.region, SUM(p.amount) AS paid_revenue FROM payments p JOIN orders o ON o.order_id = p.order_id JOIN customers c ON c.customer_id = o.customer_id GROUP BY c.region";
+  let contextPlannerCalls = 0;
+  const fixture = dependencies({
+    completeJson: async (messages) => {
+      contextPlannerCalls += 1;
+      assert.match(messages[1].content, /QUESTION \(the sole source of requested intent\)/);
+      assert.match(messages[1].content, /QUERY-SPECIFIC EVIDENCE/);
+      return JSON.stringify({ decision: "query", explanation: "Use the trusted revenue meaning and confirmed relationships.", candidates: [{ query, explanation: "Sum approved payments by customer region." }] });
+    },
+    executeSql: async (input) => input.query.includes('AS "field"')
+      ? { ...execution(input.query), columns: ["field", "value"], rows: [], receipt: { ...execution(input.query).receipt, returnedRows: 0 } }
+      : execution(input.query),
+  });
+  const outcome = await runAnalyticsExpertPack(request("Show booked value by market"), fixture.value, {
+    semanticContext: {
+      version: 1,
+      tables: [{ table: "customers", aliases: ["markets"] }],
+      columns: [{ table: "payments", column: "amount", aliases: ["booked value"] }],
+      relationships: [
+        { fromTable: "payments", fromColumn: "order_id", toTable: "orders", toColumn: "order_id", confirmed: true },
+        { fromTable: "orders", fromColumn: "customer_id", toTable: "customers", toColumn: "customer_id", confirmed: true },
+      ],
+      queryEvidence: "Market means customers.region.",
+    },
+  });
+  assert.equal(outcome.result.status, "success");
+  assert.equal(outcome.diagnostics?.proposal.query, query);
+  assert.equal(contextPlannerCalls, 1);
 });
 
 test("never lets model-authored planning prose enter the verified answer", async () => {
@@ -147,6 +178,32 @@ test("executes a fully grounded conditional rate without asking the model to pla
   assert.equal(outcome.result.receipt.model, undefined);
   assert.equal(outcome.trace?.modelId, undefined);
   assert.match(outcome.result.responseProposal ?? "", /66\.67%/);
+});
+
+test("executes a decomposed general window plan without model-authored SQL", async () => {
+  const fixture = dependencies({
+    inspectSchema: async () => [
+      { table: "transactions", name: "transaction_id", type: "INTEGER" },
+      { table: "transactions", name: "account_id", type: "INTEGER" },
+      { table: "transactions", name: "occurred_on", type: "DATE" },
+      { table: "transactions", name: "amount", type: "DOUBLE" },
+    ],
+    completeJson: async () => { throw new Error("The deterministic general resolver should avoid model planning."); },
+    executeSql: async (input) => {
+      fixture.state.sqlCalls.push(input);
+      const rows = [[1, 7, "2026-01-01", 4, 4], [2, 7, "2026-01-02", 3, 7]];
+      return { columns: ["transaction_id", "account_id", "occurred_on", "amount", "window_1"], rows, receipt: { ...execution(input.query).receipt, returnedRows: 2 } };
+    },
+  });
+  const question = "Show transaction ID, account ID, occurred on, amount, and the running total of amount per account ordered by occurred on then transaction ID.";
+  const outcome = await runAnalyticsExpertPack(request(question), fixture.value);
+  assert.equal(outcome.result.status, "success");
+  assert.equal(fixture.state.jsonCalls, 0);
+  const diagnosticWindows = outcome.diagnostics?.plan.windows as Array<{ function?: unknown }> | undefined;
+  assert.equal(diagnosticWindows?.[0]?.function, "running_sum");
+  assert.match(outcome.diagnostics?.proposal.query ?? "", /ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW/);
+  assert.match(outcome.result.responseProposal ?? "", /\| 2 \| 7 \| 2026-01-02 \| 3 \| 7 \|/);
+  assert.equal(outcome.result.receipt.model, undefined);
 });
 
 test("maps planning, schema, and cancellation failures into terminal typed outcomes", async () => {
@@ -292,5 +349,22 @@ test("returns a clarification without running the final query", async () => {
   assert.equal(outcome.result.status, "clarification");
   assert.equal(outcome.result.responseProposal, "Which measurable field should define that comparison?");
   assert.equal(outcome.trace, undefined);
+  assert.equal(fixture.state.sqlCalls.length, 0);
+});
+
+test("asks for the missing temporal anchor instead of inventing a pivot year", async () => {
+  const fixture = dependencies({
+    inspectSchema: async () => [
+      { table: "transactions", name: "transaction_id", type: "INTEGER" },
+      { table: "transactions", name: "account_id", type: "INTEGER" },
+      { table: "transactions", name: "occurred_on", type: "DATE" },
+      { table: "transactions", name: "amount", type: "DOUBLE" },
+    ],
+    completeJson: async () => { throw new Error("An underspecified pivot must not call the model."); },
+  });
+  const outcome = await runAnalyticsExpertPack(request("Pivot total amount into April and May columns for every account ID."), fixture.value);
+  assert.equal(outcome.result.status, "clarification");
+  assert.match(outcome.result.responseProposal ?? "", /Which year/i);
+  assert.equal(fixture.state.jsonCalls, 0);
   assert.equal(fixture.state.sqlCalls.length, 0);
 });
