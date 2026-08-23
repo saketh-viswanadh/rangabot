@@ -925,6 +925,7 @@ test("main process statically retains fail-closed lifecycle controls", () => {
   assert.match(source, /R60_SERVER_START[\s\S]*?startLeasedDesktopServer[\s\S]*?R70_READINESS[\s\S]*?waitForDesktopServer[\s\S]*?R80_WINDOW_CREATE[\s\S]*?createMainWindow[\s\S]*?R90_WINDOW_LOAD[\s\S]*?loadURL[\s\S]*?R99_RUNNING/);
   const profile = readFileSync(join(projectRoot, "desktop", "electron", "verification-profile.ts"), "utf8");
   assert.match(profile, /validateFinderVerificationCapsuleReadOnly\(\{[\s\S]*?getPath\("appData"\)[\s\S]*?setPath\("userData"[\s\S]*?preflightVerificationExternalFilesystemRegistries/);
-  assert.doesNotMatch(profile, /process\.env|mkdir|chmod|writeFile|rename|unlink|rmSync/);
+  const verificationBranch = profile.slice(profile.indexOf("  const capsule = validateFinderVerificationCapsuleReadOnly"));
+  assert.doesNotMatch(verificationBranch, /process\.env|mkdir|chmod|writeFile|rename|unlink|rmSync/);
   assert.doesNotMatch(source, /shell\.openExternal|ELECTRON_RUN_AS_NODE|remote\./);
 });

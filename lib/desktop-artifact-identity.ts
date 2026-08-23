@@ -137,7 +137,7 @@ export type DesktopPackagingTooling = {
   fuseWireStates: number[];
   fuseInspection: DesktopFuseInspection;
   signature: {
-    mode: "adhoc" | "unsigned-candidate";
+    mode: "adhoc" | "unsigned-candidate" | "app-store-development" | "app-store-distribution";
     postFuseMutation: boolean;
     deepStrictVerified: boolean;
   };
@@ -430,8 +430,10 @@ function normalizePackagingTooling(tooling: DesktopPackagingTooling, target: Des
     || tooling.fuseWireStates.some((state, index) => state !== REQUIRED_DESKTOP_FUSE_WIRE_STATES[index])
     || !isRecord(tooling.fuseInspection)
     || !isRecord(tooling.signature) || !exactKeys(tooling.signature, ["mode", "postFuseMutation", "deepStrictVerified"])
-    || (tooling.signature.mode !== "adhoc" && tooling.signature.mode !== "unsigned-candidate")
-    || (target.platform === "darwin" ? tooling.signature.mode !== "adhoc" : tooling.signature.mode !== "unsigned-candidate")
+    || !["adhoc", "unsigned-candidate", "app-store-development", "app-store-distribution"].includes(tooling.signature.mode)
+    || (target.platform === "darwin"
+      ? !["adhoc", "app-store-development", "app-store-distribution"].includes(tooling.signature.mode)
+      : tooling.signature.mode !== "unsigned-candidate")
     || (tooling.signature.mode === "unsigned-candidate" && tooling.signature.deepStrictVerified !== false)
     || typeof tooling.signature.postFuseMutation !== "boolean"
     || typeof tooling.signature.deepStrictVerified !== "boolean") {
@@ -1037,7 +1039,8 @@ export function inspectDesktopArtifact(options: {
     return emptyVerification("mixed", "identity-mismatch", manifest);
   }
   if (!manifest.packagingTooling.signature.postFuseMutation
-    || (manifest.packagingTooling.signature.mode === "adhoc" && !manifest.packagingTooling.signature.deepStrictVerified)) {
+    || (manifest.packagingTooling.signature.mode !== "unsigned-candidate"
+      && !manifest.packagingTooling.signature.deepStrictVerified)) {
     return emptyVerification("unknown", "manifest-invalid", manifest);
   }
   const runtime = options.runtime ?? {

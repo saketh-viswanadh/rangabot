@@ -4,16 +4,20 @@ import {
   closeSync,
   existsSync,
   lstatSync,
+  mkdtempSync,
   openSync,
   readFileSync,
   readSync,
   readdirSync,
+  realpathSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import { FuseState, FuseV1Options, FuseVersion, getCurrentFuseWire } from "@electron/fuses";
+import { signAsync } from "@electron/osx-sign";
 import {
   DESKTOP_FUSE_POLICY_NAME,
   REQUIRED_DESKTOP_FUSE_NAMES,
@@ -330,6 +334,118 @@ async function finalizeWindows(output: string, target: DesktopArtifactTarget) {
   };
 }
 
+type MacAppStoreSignatureMode = "app-store-development" | "app-store-distribution";
+
+function requiredMacSigningValue(name: string, pattern: RegExp) {
+  const value = process.env[name];
+  if (!value || value.includes(String.fromCharCode(0)) || !pattern.test(value)) {
+    throw new Error(`${name} is required and invalid for Mac App Store signing.`);
+  }
+  return value;
+}
+
+function macAppStoreSigningConfiguration(mode: MacAppStoreSignatureMode) {
+  const expectedDistribution = mode === "app-store-development" ? "mas-development" : "mas-distribution";
+  if (process.env.RANGABOT_DESKTOP_DISTRIBUTION !== expectedDistribution) {
+    throw new Error("The staged Mac App Store signature mode does not match the requested distribution.");
+  }
+  const profile = requiredMacSigningValue("RANGABOT_MAC_PROVISIONING_PROFILE", /^\/[^\r\n]{1,2047}$/);
+  const profileStatus = lstatSync(profile);
+  if (profileStatus.isSymbolicLink() || !profileStatus.isFile()) {
+    throw new Error("The Mac App Store provisioning profile must be a real file.");
+  }
+  return Object.freeze({
+    mode,
+    type: mode === "app-store-development" ? "development" as const : "distribution" as const,
+    identity: requiredMacSigningValue("RANGABOT_MAC_APP_SIGNING_IDENTITY", /^[^\r\n]{3,256}$/),
+    teamId: requiredMacSigningValue("RANGABOT_MAC_TEAM_ID", /^[A-Z0-9]{10}$/),
+    profile: realpathSync(profile),
+    entitlements: resolve(projectRoot, "desktop", "mas", "entitlements.plist"),
+    childEntitlements: resolve(projectRoot, "desktop", "mas", "entitlements.inherit.plist"),
+  });
+}
+
+function displayEntitlements(appPath: string) {
+  const result = spawnSync("/usr/bin/codesign", ["--display", "--entitlements", ":-", appPath], {
+    encoding: "utf8",
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+  const xmlStart = output.indexOf("<?xml");
+  if (result.error) throw result.error;
+  if (result.status !== 0 || result.signal || xmlStart < 0 || !output.includes("com.apple.security.app-sandbox")) {
+    throw new Error("The Mac App Store application entitlements could not be read.");
+  }
+  return output.slice(xmlStart);
+}
+
+async function signEntireAppForMacAppStore(appPath: string, mode: MacAppStoreSignatureMode) {
+  const config = macAppStoreSigningConfiguration(mode);
+  await signAsync({
+    app: appPath,
+    platform: "mas",
+    type: config.type,
+    identity: config.identity,
+    provisioningProfile: config.profile,
+    preAutoEntitlements: true,
+    preEmbedProvisioningProfile: true,
+    strictVerify: true,
+    optionsForFile: (filePath) => ({
+      entitlements: filePath.includes(".app/") ? config.childEntitlements : config.entitlements,
+    }),
+  });
+  return Object.freeze({ ...config, effectiveEntitlements: displayEntitlements(appPath) });
+}
+
+function sealOuterAppForMacAppStore(
+  appPath: string,
+  config: ReturnType<typeof macAppStoreSigningConfiguration> & { effectiveEntitlements: string },
+) {
+  const temporaryRoot = mkdtempSync(resolve(projectRoot, "desktop", "out", "mas-entitlements-"));
+  try {
+    const entitlementsPath = join(temporaryRoot, "effective-entitlements.plist");
+    writeFileSync(entitlementsPath, config.effectiveEntitlements, { mode: 0o600, flag: "wx" });
+    execFileSync("/usr/bin/codesign", [
+      "--sign", config.identity,
+      "--force",
+      "--timestamp",
+      "--entitlements", entitlementsPath,
+      appPath,
+    ], { stdio: "inherit" });
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+function verifyFinalMacAppStoreSignature(
+  appPath: string,
+  config: ReturnType<typeof macAppStoreSigningConfiguration>,
+) {
+  execFileSync("/usr/bin/codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath], { stdio: "inherit" });
+  const details = spawnSync("/usr/bin/codesign", ["--display", "--verbose=4", appPath], { encoding: "utf8" });
+  const output = `${details.stdout ?? ""}\n${details.stderr ?? ""}`;
+  if (details.error) throw details.error;
+  if (details.status !== 0 || details.signal
+    || !output.includes(`Identifier=com.rangabot.desktop`)
+    || !output.includes(`TeamIdentifier=${config.teamId}`)
+    || !output.includes(`Authority=${config.identity}`)
+    || output.includes("Signature=adhoc")) {
+    throw new Error("The final Mac App Store application signature identity is invalid.");
+  }
+  const entitlements = displayEntitlements(appPath);
+  for (const key of [
+    "com.apple.security.app-sandbox",
+    "com.apple.security.files.bookmarks.app-scope",
+    "com.apple.security.files.user-selected.read-write",
+    "com.apple.security.network.client",
+    "com.apple.security.network.server",
+  ]) {
+    if (!new RegExp(`<key>${key.replaceAll(".", "\\.")}</key>\\s*<true\\s*/>`).test(entitlements)) {
+      throw new Error(`The final Mac App Store application is missing entitlement ${key}.`);
+    }
+  }
+}
+
 async function finalize(output: string, target: DesktopArtifactTarget) {
   if (target.platform === "win32") return finalizeWindows(output, target);
   const { arch } = target;
@@ -353,10 +469,15 @@ async function finalize(output: string, target: DesktopArtifactTarget) {
   assertMachOArchitecture(executable, arch);
   for (const native of unsignedNatives) assertMachOArchitecture(join(artifactRoot, ...native.path.split("/")), arch);
 
+  const stagedSignatureMode = staged.packagingTooling.signature.mode;
+  const macAppStore = stagedSignatureMode === "app-store-development" || stagedSignatureMode === "app-store-distribution";
+  const macAppStoreSigning = macAppStore
+    ? await signEntireAppForMacAppStore(appPath, stagedSignatureMode)
+    : undefined;
   // Fuse mutation invalidates the original Mach-O signature. Sign nested code
   // first, then hash the exact post-sign Resources bytes that will be bound by
   // the installed artifact manifest.
-  signEntireAppAdHoc(appPath);
+  if (!macAppStore) signEntireAppAdHoc(appPath);
   const postMutationWire = await assertFuses(appPath, target);
   if (postMutationWire.states.some((state, index) => state !== wire.states[index])) {
     throw new Error("The initial ad-hoc signature restoration changed the Electron fuse wire.");
@@ -385,7 +506,7 @@ async function finalize(output: string, target: DesktopArtifactTarget) {
       fuseWireStates: postMutationWire.states,
       fuseInspection: postMutationWire.inspection,
       signature: {
-        mode: "adhoc",
+        mode: stagedSignatureMode,
         postFuseMutation: true,
         deepStrictVerified: true,
       },
@@ -398,11 +519,16 @@ async function finalize(output: string, target: DesktopArtifactTarget) {
   writeManifestAtomically(manifestPath, manifest, "darwin");
   makeTreeReadOnly(artifactRoot);
 
-  sealOuterAppAdHoc(appPath);
-  verifyFinalAdHocSignature(appPath);
+  if (macAppStore && macAppStoreSigning) {
+    sealOuterAppForMacAppStore(appPath, macAppStoreSigning);
+    verifyFinalMacAppStoreSignature(appPath, macAppStoreSigning);
+  } else {
+    sealOuterAppAdHoc(appPath);
+    verifyFinalAdHocSignature(appPath);
+  }
   const signedWire = await assertFuses(appPath, target);
   if (signedWire.states.some((state, index) => state !== postMutationWire.states[index])) {
-    throw new Error("The final ad-hoc signature step changed the Electron fuse wire.");
+    throw new Error("The final macOS signature step changed the Electron fuse wire.");
   }
   const signedBundleFiles = collectDesktopBundleFiles(contentsRoot, "darwin");
   if (JSON.stringify(signedBundleFiles) !== JSON.stringify(bundleFiles)) {

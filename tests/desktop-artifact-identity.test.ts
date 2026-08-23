@@ -329,6 +329,45 @@ test("installed verification is known without Git or cwd discovery and exposes a
   }
 });
 
+test("Mac App Store development and distribution signatures are valid known-build modes only after deep post-fuse proof", () => {
+  for (const mode of ["app-store-development", "app-store-distribution"] as const) {
+    const fixture = createResourceFixture();
+    try {
+      const manifestPath = join(fixture.root, "manifest.json");
+      const manifest = createDesktopArtifactManifest(manifestInput(
+        fixture.arch,
+        fixture.bundleFiles,
+        fixture.resources,
+        fixture.natives,
+        {
+          packagingTooling: {
+            ...manifestInput(fixture.arch, fixture.bundleFiles, fixture.resources, fixture.natives).packagingTooling,
+            signature: { mode, postFuseMutation: true, deepStrictVerified: true },
+          },
+        },
+      ));
+      writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
+      const verified = inspectDesktopArtifact({ resourceRoot: fixture.root, manifestPath, runtime: runtimeEvidence(fixture.arch) });
+      assert.equal(verified.state, "known");
+
+      const invalid = createDesktopArtifactManifest(manifestInput(
+        fixture.arch,
+        fixture.bundleFiles,
+        fixture.resources,
+        fixture.natives,
+        {
+          packagingTooling: {
+            ...manifest.packagingTooling,
+            signature: { mode, postFuseMutation: true, deepStrictVerified: false },
+          },
+        },
+      ));
+      writeFileSync(manifestPath, `${JSON.stringify(invalid)}\n`);
+      assert.equal(inspectDesktopArtifact({ resourceRoot: fixture.root, manifestPath, runtime: runtimeEvidence(fixture.arch) }).state, "unknown");
+    } finally { rmSync(fixture.cleanupRoot, { recursive: true, force: true }); }
+  }
+});
+
 test("x64 identities accept only the independently inventoried x64 native chain", () => {
   const fixture = createResourceFixture("x64");
   const manifestPath = join(fixture.root, "rangabot-desktop-artifact.json");

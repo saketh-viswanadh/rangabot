@@ -97,6 +97,12 @@ It is not a supported download or release. Local build architecture, privacy
 boundaries, unsigned limitations, and the distinct verification-only profile are documented in
 [docs/MACOS_DESKTOP_DEVELOPMENT.md](docs/MACOS_DESKTOP_DEVELOPMENT.md).
 
+A separate Mac App Store source candidate uses Electron's sandboxed `mas`
+runtime, an app-private managed model store, and explicit security-scoped access
+for user-selected files. Apple signing, TestFlight installation, App Review,
+and public availability remain **NOT RUN**. See
+[docs/MAC_APP_STORE_DISTRIBUTION.md](docs/MAC_APP_STORE_DISTRIBUTION.md).
+
 Experienced users can copy `.env.example` to `.env.local` and use the manual
 model guidance in [docs/models.md](docs/models.md).
 

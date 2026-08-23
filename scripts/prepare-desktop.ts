@@ -54,6 +54,10 @@ const OLLAMA_RUNTIME_SHA256 = Object.freeze({
   win32: "7b4f6ce09c1f2c3b21561b323779beaf3ca3c7012f8e4522605a13cbbb19f0b8",
 });
 const ELECTRON_WINDOWS_X64_SHA256 = "ef0709cfa719739acce73de6f9b684304baf38c6454376638a70d34a7cecffe0";
+const ELECTRON_MAS_SHA256 = Object.freeze({
+  arm64: "8037c385407a2efc9b85b0d1b39121735571e0bc6a00eb44d29c1873fbe1a9d3",
+  x64: "a51158c5bb802cd441049fd733bfe803b6b5581f01dd83bbfb5cee07b45626c4",
+});
 
 function parseTarget(arguments_: string[]): DesktopArtifactTarget {
   const values = arguments_.filter((argument) => argument.startsWith("--arch=")).map((argument) => argument.slice(7));
@@ -275,6 +279,22 @@ function prepareOfflineElectronZip(target: DesktopArtifactTarget) {
     if (sha256File(zipPath) !== ELECTRON_WINDOWS_X64_SHA256) throw new Error("The pinned Windows Electron archive checksum is invalid.");
     return zipPath;
   }
+  const distribution = process.env.RANGABOT_DESKTOP_DISTRIBUTION;
+  if (distribution !== undefined && distribution !== "mas-development" && distribution !== "mas-distribution") {
+    throw new Error("The desktop distribution is not recognized.");
+  }
+  if (distribution?.startsWith("mas-")) {
+    const zipPath = resolve(zipRoot, `electron-v${electronVersion}-mas-${target.arch}.zip`);
+    if (!existsSync(zipPath) || sha256File(zipPath) !== ELECTRON_MAS_SHA256[target.arch]) {
+      rmSync(zipPath, { force: true });
+      execFileSync("/usr/bin/curl", ["--fail", "--location", "--show-error", "--output", zipPath,
+        `https://github.com/electron/electron/releases/download/v${electronVersion}/electron-v${electronVersion}-mas-${target.arch}.zip`], { stdio: "inherit" });
+    }
+    if (sha256File(zipPath) !== ELECTRON_MAS_SHA256[target.arch]) {
+      throw new Error("The pinned Mac App Store Electron archive checksum is invalid.");
+    }
+    return zipPath;
+  }
   const appPath = resolve(projectRoot, "node_modules", "electron", "dist", "Electron.app");
   const executable = resolve(appPath, "Contents", "MacOS", "Electron");
   if (!existsSync(executable)) throw new Error("The exact installed Electron app is unavailable for offline packaging.");
@@ -356,6 +376,15 @@ function assertNoPrivatePayload(files: readonly DesktopArtifactFile[]) {
 
 const target = parseTarget(process.argv.slice(2));
 const { arch } = target;
+const desktopDistribution = process.env.RANGABOT_DESKTOP_DISTRIBUTION;
+if (desktopDistribution !== undefined
+  && desktopDistribution !== "mas-development"
+  && desktopDistribution !== "mas-distribution") {
+  throw new Error("The desktop distribution is not recognized.");
+}
+if (desktopDistribution?.startsWith("mas-") && target.platform !== "darwin") {
+  throw new Error("The Mac App Store distribution is macOS-only.");
+}
 if (process.platform !== target.platform) throw new Error("Desktop packaging must run on the same operating system as its target.");
 if (process.env.RANGABOT_DESKTOP_TARGET_PLATFORM !== target.platform
   || process.env.RANGABOT_DESKTOP_TARGET_ARCH !== arch) throw new Error("The prepared desktop target does not match the Forge target.");
@@ -451,7 +480,9 @@ const manifest = createDesktopArtifactManifest({
       })),
     },
     signature: {
-      mode: target.platform === "darwin" ? "adhoc" : "unsigned-candidate",
+      mode: desktopDistribution?.startsWith("mas-")
+        ? desktopDistribution === "mas-development" ? "app-store-development" : "app-store-distribution"
+        : target.platform === "darwin" ? "adhoc" : "unsigned-candidate",
       postFuseMutation: false,
       deepStrictVerified: false,
     },
