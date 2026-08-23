@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { shouldRunSqlAnalysis } from "../lib/conversational-analysis.ts";
+import { classifyConversationalAnalysis, shouldRunSqlAnalysis } from "../lib/conversational-analysis.ts";
 
 test("runs analysis for analytical requests and contextual analytical follow-ups", () => {
   assert.equal(shouldRunSqlAnalysis([{ role: "user", content: "What is the average revenue by region?" }]), true);
@@ -18,4 +18,10 @@ test("runs analysis for analytical requests and contextual analytical follow-ups
     { role: "assistant", content: "North leads.", analysisTrace: { engine: "duckdb", dataset: "sales.csv", query: "SELECT 1", returnedRows: 2, truncated: false, durationMs: 12, inputSha256: "a".repeat(64), querySha256: "b".repeat(64) } },
     { role: "user", content: "What about South?" },
   ]), true);
+});
+
+test("separates general calculation from requests that require an attached dataset", () => {
+  assert.deepEqual(classifyConversationalAnalysis([{ role: "user", content: "Calculate 2 + 2" }]), { requested: true, requiresDataset: false, explicitlyDeclined: false });
+  assert.deepEqual(classifyConversationalAnalysis([{ role: "user", content: "Count the attached rows" }]), { requested: true, requiresDataset: true, explicitlyDeclined: false });
+  assert.deepEqual(classifyConversationalAnalysis([{ role: "user", content: "Explain this code; do not analyze the attached dataset" }]), { requested: false, requiresDataset: false, explicitlyDeclined: true });
 });

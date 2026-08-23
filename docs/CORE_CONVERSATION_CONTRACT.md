@@ -4,6 +4,7 @@ Version: 1.3.0
 Frozen benchmark: 2026-08-02
 Lifecycle amendment: 2026-08-07
 Semantic task-frame amendment: 2026-08-10
+Capability-routing and bounded-verification amendment: 2026-08-24
 
 This contract defines what ordinary Rangabot conversation must do regardless of
 which supported local Ollama model is selected. It is an orchestration and
@@ -69,6 +70,46 @@ author its own terminal state.
 
 These rules are model-independent. They improve the reliability of every local
 model but do not make a weak model's answer semantically correct.
+
+## Inspectable capability routing
+
+Rangabot selects one bounded route before any governed resource is opened. The
+route distinguishes ordinary conversation, deterministic answers, approved
+memory recall, attached-data analysis, Word creation, Knowledge Vault use,
+approved code context, clarification, safe local continuation, and unavailable
+cloud handoff.
+
+- An ambiguous request asks the user to choose before any resource is opened.
+- The current turn may decline attached data, code, Vault, Word creation, or
+  approved memory; the latest applicable instruction wins.
+- A persisted receipt separates resources whose access was attempted from those
+  whose use completed. A failure must not be reported as either no attempt or a
+  successful use.
+- Unavailable external actions state that nothing happened and, where useful,
+  continue with a local draft or checklist.
+
+## Bounded Finish & Verify
+
+Finish receipts describe only checks the local runtime can prove mechanically.
+
+- A narrowly parsed standalone arithmetic request is evaluated locally and
+  returned deterministically without asking the language model.
+- Exact quoted literals, measurable count and format constraints, completeness,
+  and the presence of complete, non-empty fenced code blocks may be checked.
+- Sentence counts fail closed with a manual-confirmation warning when an
+  initialism creates an ambiguous punctuation boundary; Finish does not guess
+  whether the following capitalized words continue the sentence. The bounded
+  receipt exposes that reason so the UI asks the user to confirm the count.
+- Text and list structure are derived from a CommonMark/GFM parse. Decoded text
+  entities count by their decoded character; hidden definitions and
+  conservatively excluded raw HTML, comments, and image placeholders do not.
+- An automatic repair may change only whitespace and leading bullet markers. The
+  remaining text must be character-for-character identical after whitespace is
+  normalized, the repair must reduce the issue count, and no rendered fenced,
+  indented, or inline code may be present.
+- The receipt does **not** claim to understand or preserve arbitrary semantic
+  relationships such as ownership, dates, roles, budgets, or causality. Those
+  remain model output and require task-appropriate evidence or human review.
 
 ## Frozen v1 benchmark
 

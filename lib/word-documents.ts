@@ -21,6 +21,7 @@ import {
   WidthType,
 } from "docx";
 import type { ChatMessage } from "./providers/types";
+export { shouldPlanWordDocument } from "./capability-intents.ts";
 
 export type WordDocumentBrief = {
   title: string;
@@ -174,14 +175,6 @@ export function buildFallbackWordDraft(brief: WordDocumentBrief): WordDraft {
     ],
     assumptions: [],
   };
-}
-
-export function shouldPlanWordDocument(messages: ChatMessage[]) {
-  const latestUser = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
-  if (/\b(create|make|generate|export|prepare|write)\b.{0,45}\b(word|docx|document)\b/i.test(latestUser) || /\b(word|docx|document)\b.{0,45}\b(create|make|generate|export)\b/i.test(latestUser)) return true;
-  const lastCreated = messages.findLastIndex((message) => Boolean(message.wordArtifact));
-  const lastIntent = messages.findLastIndex((message) => message.artifactIntent === "word");
-  return lastIntent > lastCreated;
 }
 
 export function isWordConversationSummaryRequest(messages: ChatMessage[]) {
