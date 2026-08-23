@@ -7,6 +7,8 @@ import { expertPackFailureStatus } from "./expert-pack-http.ts";
 import type { ExpertPackRequest } from "./expert-packs.ts";
 import { isValidAnalysisTrace } from "./chat-validation.ts";
 import type { ChatMessage } from "./providers/types.ts";
+import { getApprovedDataset } from "./datasets.ts";
+import { getDatasetSemanticMemory, recordDatasetSemanticUsage, selectDatasetSemanticContext } from "./dataset-semantic-contexts.ts";
 
 export type AnalyticsChatInput = {
   messages: ChatMessage[];
@@ -29,7 +31,17 @@ export type AnalyticsChatDependencies = {
 const defaultDependencies: AnalyticsChatDependencies = {
   getConversation,
   issueRequest: issueAuthorizedAnalyticsRequest,
-  runPack: (request, signal) => runAnalyticsExpertPack(request, undefined, { signal }),
+  runPack: async (request, signal) => {
+    const datasetId = request.grants.find((grant) => grant.permission === "approved-dataset:read" && grant.resource?.kind === "dataset")?.resource?.id;
+    const dataset = datasetId ? getApprovedDataset(datasetId) : null;
+    const semanticContext = dataset ? selectDatasetSemanticContext(request.currentRequest, getDatasetSemanticMemory(dataset)) : undefined;
+    const outcome = await runAnalyticsExpertPack(request, undefined, { signal, semanticContext });
+    if (dataset && outcome.result.status === "success" && outcome.diagnostics?.contextUsage) {
+      try { recordDatasetSemanticUsage(dataset, outcome.diagnostics.contextUsage); }
+      catch { /* Usage learning must never hide a verified analytical answer. */ }
+    }
+    return outcome;
+  },
 };
 
 export function analyticsTraceMatchesOutcome(outcome: AnalyticsPackOutcome) {

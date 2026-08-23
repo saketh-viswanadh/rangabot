@@ -71,8 +71,8 @@ export function applyAnalyticalSemanticContext(
   if ((context.tables?.length ?? 0) > 120 || (context.columns?.length ?? 0) > 600 || (context.relationships?.length ?? 0) > 300) {
     throw new Error("The analytical semantic context exceeds its bounded schema limits.");
   }
-  const byField = new Map<string, DatasetColumn>(sourceColumns.flatMap((column) => column.table ? [[`${column.table}.${column.name}`, column] as [string, DatasetColumn]] : []));
-  const tables = new Set(sourceColumns.flatMap((column) => column.table ? [column.table] : []));
+  const byField = new Map<string, DatasetColumn>(sourceColumns.map((column) => [`${column.table ?? "dataset"}.${column.name}`, column]));
+  const tables = new Set(sourceColumns.map((column) => column.table ?? "dataset"));
   const tableContexts = new Map<string, { description?: string; aliases: string[] }>();
   for (const [index, item] of (context.tables ?? []).entries()) {
     if (!item || !schemaName(item.table) || !tables.has(item.table) || tableContexts.has(item.table)) throw new Error(`Semantic table context ${index} is invalid, duplicated, or not in the approved schema.`);
@@ -102,10 +102,10 @@ export function applyAnalyticalSemanticContext(
   }
   const queryEvidence = boundedText(context.queryEvidence, maximumQueryEvidenceBytes, "Query-specific semantic evidence");
   const columns = sourceColumns.map((column) => {
-    if (!column.table) return { ...column };
-    const tableContext = tableContexts.get(column.table);
-    const columnContext = columnContexts.get(`${column.table}.${column.name}`);
-    const addedReferences = [...relationships.values()].filter((item) => item.fromTable === column.table && item.fromColumn === column.name)
+    const table = column.table ?? "dataset";
+    const tableContext = tableContexts.get(table);
+    const columnContext = columnContexts.get(`${table}.${column.name}`);
+    const addedReferences = [...relationships.values()].filter((item) => item.fromTable === table && item.fromColumn === column.name)
       .map((item) => ({ table: item.toTable, column: item.toColumn }));
     const referenceMap = new Map([...(column.references ?? []), ...addedReferences].map((reference) => [`${reference.table}.${reference.column}`, reference]));
     return {

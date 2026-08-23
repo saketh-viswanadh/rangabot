@@ -7,6 +7,7 @@ import {
 } from "./desktop-external-filesystem-policy.ts";
 import { writePrivateJsonFileAtomic } from "./private-storage.ts";
 import { runtimePaths } from "./runtime-paths.ts";
+import { removeDatasetSemanticMemory } from "./dataset-semantic-contexts.ts";
 import { inspectDatasetForApproval, type DatasetFileIdentity } from "./sql-runtime.ts";
 
 export type ApprovedDataset = {
@@ -118,6 +119,7 @@ export function revokeDataset(id: string) {
   const next = datasets.filter((dataset) => dataset.id !== id);
   if (next.length === datasets.length) return false;
   writeRegistry(next);
+  removeDatasetSemanticMemory(id);
   return true;
 }
 
