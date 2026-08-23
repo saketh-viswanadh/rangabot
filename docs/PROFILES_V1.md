@@ -264,8 +264,9 @@ For this candidate line, `sourceBaseCommit` is the original merged source
 `sourceBaselineCommit` is the completed first-run onboarding, mobile review,
 and Windows direct-MSIX, isolated MakeAppx attestation, and bounded OPC
 and whole-file BlockMap verification, plus the sandboxed Mac App Store source
-candidate and timestamp-sized Mach-O seal binding at commit
-`94fd070c817769dd02a1088c3edb1adba91a8864`.
+candidate, timestamp-sized Mach-O seal binding, schema-grounded SQL planning,
+and cross-platform Mac security test correction at commit
+`434bb2199f56489f8e369ad519b1e1ef5fe0c37e`.
 The generated v3 manifest records
 the exact clean packaging HEAD as `sourceCommit`; the installed verifier uses
 that value as its commit identity and does not require `.git`.
