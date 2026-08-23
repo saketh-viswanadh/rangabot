@@ -57,7 +57,9 @@ test("security-scoped bookmarks persist privately, restore, replace by path, and
     restored.stop();
 
     const savedPath = join(userDataPath, "mac-app-store-security-scoped-bookmarks.json");
-    assert.equal(lstatSync(savedPath).mode & 0o777, 0o600);
+    // Windows does not expose POSIX mode enforcement; the macOS candidate
+    // exercises this assertion on the platform where chmod is meaningful.
+    if (process.platform !== "win32") assert.equal(lstatSync(savedPath).mode & 0o777, 0o600);
     const saved = JSON.parse(readFileSync(savedPath, "utf8")) as Array<{ path: string; bookmark: string }>;
     assert.deepEqual(saved, [
       { path: firstPath, bookmark: replacement },
