@@ -190,8 +190,32 @@ export function normalizeAnalyticalPlan(plan: AnalyticalPlan, request: string, c
 }
 
 export function resolveAnalyticalBoundary(request: string): AnalyticalPlan | null {
-  if (!/\b(?:best|most valuable|highest-performing|lowest-performing)\b/i.test(request)) return null;
-  return { action: "clarify", source: "", aggregate: "count", metric: "*", alias: "result", dimensions: [], filters: [], sort: [], limit: 0, decimals: 0, explanation: "Which measurable field should define that comparison?" };
+  const boundary = (action: "clarify" | "unavailable", explanation: string): AnalyticalPlan => ({
+    action, source: "", aggregate: "count", metric: "*", alias: "result", dimensions: [], filters: [], sort: [], limit: 0, decimals: 0, explanation,
+  });
+  if (/\b(?:delete|remove|erase|drop|truncate|update|insert|overwrite|replace|alter|create)\b.{0,120}\b(?:row|rows|record|records|table|database|data|cancelled|pending|completed)\b|\b(?:delete|drop|truncate|update|insert|alter)\s+(?:from|into|table)\b/i.test(request)) {
+    return boundary("unavailable", "Analytics is read-only and cannot change or delete the approved dataset.");
+  }
+  if (/\b(?:prove|show|demonstrate|establish)\b.{0,100}\b(?:cause|causes|caused|causal|causality|because of|leads? to|drives?)\b|\b(?:cause|causes|causal effect|causality)\b/i.test(request)) {
+    return boundary("unavailable", "The available observational data cannot establish the requested causal effect.");
+  }
+  if (/\b(?:pivot|cross[- ]tab)\b/i.test(request)
+    && /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(request)
+    && !/\b(?:19|20)\d{2}\b/.test(request)) {
+    return boundary("clarify", "Which year should the named months use? Add the year so the period boundaries are explicit.");
+  }
+  const currentDescribesRowOrState = /\bcurrent\s+(?:row|record|event|observation|fact)\b|\bcurrent\s+[a-z][a-z0-9_-]*\s+and\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+before\s+it\b|\bcurrently\s+(?:active|inactive|enabled|disabled|open|closed)\b/i.test(request);
+  if (/\b(?:recent|recently|current|currently|latest)\b/i.test(request)
+    && !/\b(?:19|20)\d{2}\b|\b(?:today|yesterday|this (?:week|month|quarter|year)|last \d+ (?:days?|weeks?|months?|years?))\b/i.test(request)
+    && !/\b(?:latest|newest|most recent)\b.{0,100}\b(?:per|for each|by)\b/i.test(request)
+    && !currentDescribesRowOrState) {
+    return boundary("clarify", "What exact date, period, or reference time should define “recent” for this analysis?");
+  }
+  if (/\b(?:best|most valuable|highest-performing|lowest-performing)\b/i.test(request)
+    && !/\b(?:by|based on|in terms of|using|measured by)\b.{1,80}\b[\p{L}\p{N}_]+\b/iu.test(request)) {
+    return boundary("clarify", "Which measurable field should define that comparison?");
+  }
+  return null;
 }
 
 function quote(name: string) { return `"${name.replaceAll('"', '""')}"`; }

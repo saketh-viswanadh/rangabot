@@ -30,10 +30,11 @@ export function focusDatabaseSchema(columns: DatasetColumn[], request: string): 
   }
   const requestTokens = schemaTokens(request);
   const scores = [...byTable].map(([table, tableColumns]) => {
-    let score = [...schemaTokens(table)].filter((token) => requestTokens.has(token)).length * 5;
+    const representative = tableColumns[0];
+    let score = [...schemaTokens([table, representative?.semantic?.tableDescription ?? "", ...(representative?.semantic?.tableAliases ?? [])].join(" "))].filter((token) => requestTokens.has(token)).length * 5;
     for (const column of tableColumns) {
       if (column.name.endsWith("_id")) continue;
-      score += [...schemaTokens(column.name)].filter((token) => requestTokens.has(token)).length * 2;
+      score += [...schemaTokens([column.name, column.semantic?.description ?? "", ...(column.semantic?.aliases ?? [])].join(" "))].filter((token) => requestTokens.has(token)).length * 2;
     }
     return { table, score };
   }).sort((a, b) => b.score - a.score || a.table.localeCompare(b.table));

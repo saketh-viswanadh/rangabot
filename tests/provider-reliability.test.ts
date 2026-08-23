@@ -68,6 +68,17 @@ test("sends the same explicit context budget to every model", async () => {
   assert.deepEqual((JSON.parse(requestBody) as { options?: unknown }).options, { num_predict: 1000, num_ctx: 2048 });
 });
 
+test("passes explicit deterministic generation controls without changing defaults", async () => {
+  let requestBody = "";
+  await withFetch(async (_input, init) => {
+    requestBody = String(init?.body);
+    return Response.json({ message: { content: "ok" } });
+  }, async () => {
+    assert.equal(await completeTextWithOllama([{ role: "user", content: "hello" }], { temperature: 0, seed: 17 }), "ok");
+  });
+  assert.deepEqual((JSON.parse(requestBody) as { options?: unknown }).options, { num_predict: 1000, num_ctx: 4096, temperature: 0, seed: 17 });
+});
+
 test("uses the explicitly resolved pack model instead of a hidden provider default", async () => {
   let requestBody = "";
   await withFetch(async (_input, init) => {

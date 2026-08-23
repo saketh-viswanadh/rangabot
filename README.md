@@ -297,6 +297,17 @@ analytical planning or human usefulness. Run the frozen renderer suite with
 `npm run conversation:evaluate:sql:narration` and see the
 [narration contract](docs/ANALYTICAL_NARRATION_CONTRACT.md).
 
+The August 2026 SQL engineering pass adds relationship-aware schema linking,
+typed table and column meaning, confirmed join context, operation decomposition,
+execution-guided candidates, and a semantic intent contract before execution.
+On disclosed regression matrices it moved 571/720 to 720/720 and 146/640 to
+624/640; those are regression results, not independent generalization proof.
+The external BIRD Mini-Dev comparison improved from 1/500 (0.2%) without typed
+context to 18/500 (3.6%) with it, while remaining too inaccurate and slow for a
+general SQL-expert claim. See the
+[SQL capability update](docs/SQL_CAPABILITY_UPDATE_2026-08-23.md) for the exact
+claim boundary and remaining gaps.
+
 Every answer exposes an optional **How this was calculated** trace with the
 query, dataset name, row count, timing, and input/query fingerprints. Model
 provenance appears only when a model actually resolved the plan; deterministic

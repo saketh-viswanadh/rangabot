@@ -27,6 +27,10 @@ async function fixture() {
       INSERT INTO entry_logs VALUES (1, 1, 'Complete');
       CREATE TABLE members(member_id INTEGER, tier VARCHAR, status VARCHAR, active BOOLEAN);
       INSERT INTO members VALUES (1, 'Gold', 'Complete', TRUE), (2, 'Gold', 'Pending', FALSE), (3, 'Silver', 'Complete', TRUE);
+      CREATE TABLE shipments(shipment_id INTEGER, hub_id INTEGER, shipped_on DATE, weight DOUBLE);
+      INSERT INTO shipments VALUES (1, 1, DATE '2026-04-01', 10), (2, 1, DATE '2026-05-01', 12);
+      CREATE TABLE orders(order_id INTEGER, status VARCHAR);
+      INSERT INTO orders VALUES (1, 'shipped');
       CHECKPOINT;
     `);
   } finally { connection.closeSync(); instance.closeSync(); }
@@ -102,6 +106,11 @@ test("compiles fully resolved requests without a model plan", async () => {
 
     const scoped = await compileResolvedAdvancedAnalyticalPlan("What percentage of non Complete entries have Pending outcome?", columns, databasePath);
     assert.equal(scoped, null);
+
+    const schemaLinked = await compileResolvedAdvancedAnalyticalPlan("Calculate growth in weight from April 2026 to May 2026 using shipped_on.", columns, databasePath);
+    assert.equal(schemaLinked?.plan.source, "shipments");
+    assert.deepEqual(schemaLinked?.plan.filters, []);
+    assert.doesNotMatch(schemaLinked?.proposal.query ?? "", /orders|status = 'shipped'/i);
   } finally { cleanup(); }
 });
 
@@ -134,6 +143,29 @@ test("routes every categorical grounding read through the authorized executor", 
   });
   assert.ok(queries.length >= 1);
   assert.equal(grounded.plan.filters[0]?.column, "topics.label");
+});
+
+test("does not rediscover categorical values for fully typed non-categorical operations", async () => {
+  const columns = [
+    { table: "entities", name: "entity_id", type: "INTEGER" },
+    { table: "events", name: "event_id", type: "INTEGER" },
+    { table: "events", name: "entity_id", type: "INTEGER" },
+    { table: "events", name: "occurred_on", type: "DATE" },
+    { table: "events", name: "amount", type: "DOUBLE" },
+    { table: "events", name: "status", type: "VARCHAR" },
+    { table: "events", name: "is_completed", type: "BOOLEAN" },
+  ];
+  const failOnRead = async () => { throw new Error("categorical discovery must not run"); };
+  const latest: AdvancedAnalyticalPlan = {
+    ...plan(""), operation: "latest_per_group", source: "events", metric: "", entity: "events.event_id",
+    groupField: "events.entity_id", dateField: "events.occurred_on", filters: [],
+  };
+  assert.equal((await groundAdvancedAnalyticalFilters(latest, "Latest event per entity using occurred on.", columns, "/unused", failOnRead)).plan.action, "query");
+  const complete: AdvancedAnalyticalPlan = {
+    ...plan(""), operation: "complete_filtered_sum", source: "events", metric: "events.amount", entity: "entities.entity_id",
+    groupField: "events.entity_id", filters: [], numeratorFilters: [{ column: "events.is_completed", operator: "eq", value: "true" }],
+  };
+  assert.equal((await groundAdvancedAnalyticalFilters(complete, "Every entity including zero with completed amount.", columns, "/unused", failOnRead)).plan.action, "query");
 });
 
 test("conditional-rate grounding fails closed when one value matches multiple source fields", async () => {

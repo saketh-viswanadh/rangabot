@@ -9,9 +9,12 @@ export type FilterGroundingDecision = {
 
 function quote(name: string) { return `"${name.replaceAll('"', '""')}"`; }
 function literal(value: string) { return `'${value.replaceAll("'", "''")}'`; }
+function escapePattern(value: string) { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
 function explicitValue(request: string, value: string) {
   if (!value.trim() || /[{}[\]<>]|\$[a-z_]/i.test(value)) return false;
-  return request.toLocaleLowerCase().includes(value.trim().toLocaleLowerCase());
+  const phrase = words(value).map(escapePattern).join("[\\s-]+");
+  return Boolean(phrase) && new RegExp(`(?:^|[^\\p{L}\\p{N}_])${phrase}(?=$|[^\\p{L}\\p{N}_])`, "iu").test(request);
 }
 
 function categoricalColumns(columns: DatasetColumn[]) {
@@ -37,9 +40,7 @@ function words(value: string) {
 }
 
 function valueAppearsInRequest(request: string, value: string) {
-  const phrase = words(value);
-  if (!phrase.length) return false;
-  return ` ${words(request).join(" ")} `.includes(` ${phrase.join(" ")} `);
+  return explicitValue(request, value);
 }
 
 async function categoricalValuesNamedByRequest(request: string, columns: DatasetColumn[], executeSql: AnalyticalGroundingExecutor) {
@@ -90,9 +91,20 @@ export async function groundAdvancedAnalyticalFilters(plan: AdvancedAnalyticalPl
     decisions.push({ value: filter.value, action: "kept", reason: "The explicit value was absent, so the schema-bound filter was retained to produce an honest zero-match result." });
   }
   const existingValues = new Set(groups.flatMap((group) => (grounded[group] as Filter[]).map((filter) => filter.value.toLocaleLowerCase())));
-  const discoveryColumns = grounded.operation === "conditional_rate"
-    ? columns.filter((column) => column.table === grounded.source)
-    : columns;
+  // A compiler-resolved Boolean numerator already represents the explicit
+  // status concept (for example is_completed=TRUE). Rediscovering the same
+  // word in a text status column creates a second, semantically redundant
+  // filter and can move it to the wrong side of a complete-population join.
+  const supportsCategoricalDiscovery = grounded.operation === "conditional_rate"
+    || grounded.operation === "complete_filtered_sum"
+    || grounded.operation === "distinct_count";
+  const discoveryColumns = !supportsCategoricalDiscovery
+    ? []
+    : grounded.operation === "complete_filtered_sum" && grounded.numeratorFilters.length > 0
+    ? []
+    : grounded.operation === "conditional_rate"
+      ? columns.filter((column) => column.table === grounded.source)
+      : columns;
   const discovered = await categoricalValuesNamedByRequest(request, discoveryColumns, executeSql);
   const longest = discovered.filter((candidate) => !discovered.some((other) => other.value.length > candidate.value.length && valueAppearsInRequest(other.value, candidate.value)));
   const byValue = new Map<string, Array<{ field: string; value: string }>>();

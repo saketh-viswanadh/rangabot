@@ -35,7 +35,7 @@ function stem(word: string) {
   if (word.length > 5 && word.endsWith("ing")) return word.slice(0, -3);
   if (word.length > 4 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
   if (word.length > 4 && word.endsWith("ed")) return word.slice(0, -2);
-  if (word.length > 4 && word.endsWith("s")) return word.slice(0, -1);
+  if (word.length > 3 && word.endsWith("s")) return word.slice(0, -1);
   return word;
 }
 
@@ -65,7 +65,7 @@ function phrase(pattern: RegExp, request: string) {
 function rolePhrases(request: string) {
   const group = phrase(/\b(?:per|by|for each)\s+(.+?)(?=\b(?:where|with|who|that|during|from|between|in)\b|[?.!,]|$)/i, request);
   const countTarget = phrase(/\b(?:number|count)\s+(?:of\s+)?(.+?)\s+(?:per|by|for each)\b/i, request)
-    || phrase(/\bdistinct\s+(.+?)(?=\b(?:who|that|which|with|having|at least|per|by)\b|[?.!,]|$)/i, request);
+    || phrase(/\b(?:distinct|unique)\s+(.+?)(?=\b(?:who|that|which|with|having|at least|per|by)\b|[?.!,]|$)/i, request);
   const measure = phrase(/\b(?:average|mean)\s+(?:the\s+)?(?:total\s+)?(.+?)\s+(?:per|by|for each)\b/i, request)
     || phrase(/\b(?:total|sum of)\s+(.+?)(?=\s+divided by|\s+(?:per|by)\b|[?.!,]|$)/i, request)
     || phrase(/\bratio\s+of\s+(?:total\s+)?(.+?)\s+divided by\b/i, request)
@@ -76,8 +76,10 @@ function rolePhrases(request: string) {
   const denominatorRelation = phrase(/\bdivided by\s+(?:the\s+)?(?:total\s+)?(.+?)(?=[?.!,]|$)/i, request);
   const thresholdEntity = phrase(/\bhow many\s+(.+?)\s+(?:have|had|with)\s+at least\b/i, request);
   const thresholdRelation = phrase(/\bat least\s+\d+\s+(.+?)(?=[?.!,]|$)/i, request);
-  const unmatchedEntity = phrase(/\b(?:which|what)\s+(.+?)\s+(?:(?:were|was|are|is)\s+)?(?:never|without)\b/i, request);
-  const relatedRelation = phrase(/\b(?:never|without)\s+(?:(?:linked|matched|associated)\s+to\s+|(?:had|having|with)\s+|any\s+)?(.+?)(?=[?.!,]|$)/i, request);
+  const unmatchedEntity = phrase(/\b(?:which|what)\s+(.+?)\s+(?:(?:were|was|are|is)\s+)?(?:never|without)\b/i, request)
+    || phrase(/\b(?:which|what)\s+(.+?)\s+(?:have|has|had)\s+no\s+(?:related\s+)?/i, request);
+  const relatedRelation = phrase(/\b(?:never|without)\s+(?:(?:linked|matched|associated)\s+to\s+|(?:had|having|with)\s+|any\s+)?(.+?)(?=[?.!,]|$)/i, request)
+    || phrase(/\b(?:have|has|had)\s+no\s+(?:related\s+)?(.+?)(?=[?.!,]|$)/i, request);
   return { countTarget, group, measure, secondaryMeasure, startTime, endTime, denominatorRelation, thresholdEntity, thresholdRelation, unmatchedEntity, relatedRelation };
 }
 
@@ -99,6 +101,7 @@ function rank(phraseText: string, request: string, columns: DatasetColumn[], rol
     const tableTokens = tokens(column.table ?? "");
     const fieldOverlap = columnTokens.filter((word) => phraseTokens.has(word)).length;
     const tableOverlap = tableTokens.filter((word) => phraseTokens.has(word)).length;
+    const requestNamesTable = tableTokens.length > 0 && containsTokenSequence(tokens(request), tableTokens);
     const evidence: string[] = [];
     if (fieldOverlap === 0 && tableOverlap === 0) return { field: fieldName(column), score: 0, evidence };
     if ((role === "measure" || role === "time") && fieldOverlap === 0) return { field: fieldName(column), score: 0, evidence };
@@ -107,6 +110,7 @@ function rank(phraseText: string, request: string, columns: DatasetColumn[], rol
     let score = fieldOverlap * 8 + tableOverlap * 6;
     if (fieldOverlap) evidence.push("phrase matches field");
     if (tableOverlap) evidence.push("phrase matches relation");
+    if (requestNamesTable) { score += 8; evidence.push("request names relation"); }
     if (role === "identifier") {
       const mention = [...columnTokens, ...tableTokens].map((word) => orderedPhraseTokens.indexOf(word)).filter((index) => index >= 0).sort((left, right) => left - right)[0];
       if (mention !== undefined) { score += Math.max(0, 10 - mention * 3); evidence.push("early population mention"); }
@@ -133,6 +137,10 @@ function rank(phraseText: string, request: string, columns: DatasetColumn[], rol
   }
   const margin = candidates[0].score - (candidates[1]?.score ?? 0);
   return margin >= 3 ? { value: candidates[0].field, confidence: "high", candidates } : { value: null, confidence: "ambiguous", candidates };
+}
+
+function containsTokenSequence(haystack: string[], needle: string[]) {
+  return needle.length > 0 && haystack.some((_, index) => needle.every((word, offset) => haystack[index + offset] === word));
 }
 
 function rankRelation(phraseText: string, columns: DatasetColumn[]): ResolvedSemanticRole {
