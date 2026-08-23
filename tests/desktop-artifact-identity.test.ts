@@ -86,16 +86,23 @@ function writeFixtureFile(root: string, path: string, content: string | Buffer) 
 }
 
 function syntheticSignedMachO() {
-  const source = Buffer.alloc(80);
+  const source = Buffer.alloc(160);
   source.writeUInt32LE(0xfeedfacf, 0);
-  source.writeUInt32LE(1, 16);
-  source.writeUInt32LE(16, 20);
-  source.writeUInt32LE(0x1d, 32);
-  source.writeUInt32LE(16, 36);
-  source.writeUInt32LE(64, 40);
-  source.writeUInt32LE(16, 44);
-  source.fill(0x43, 48, 64);
-  source.fill(0x53, 64, 80);
+  source.writeUInt32LE(2, 16);
+  source.writeUInt32LE(88, 20);
+  source.writeUInt32LE(0x19, 32);
+  source.writeUInt32LE(72, 36);
+  source.write("__LINKEDIT", 40, "ascii");
+  source.writeBigUInt64LE(BigInt(0x1000), 56);
+  source.writeBigUInt64LE(BigInt(0x1000), 64);
+  source.writeBigUInt64LE(BigInt(128), 72);
+  source.writeBigUInt64LE(BigInt(32), 80);
+  source.writeUInt32LE(0x1d, 104);
+  source.writeUInt32LE(16, 108);
+  source.writeUInt32LE(144, 112);
+  source.writeUInt32LE(16, 116);
+  source.fill(0x43, 120, 144);
+  source.fill(0x53, 144, 160);
   return source;
 }
 
@@ -139,12 +146,23 @@ test("bundle identity binds launcher code without creating a signature-manifest 
     const original = readFileSync(launcherPath);
     const before = collectDesktopBundleFiles(fixture.contentsRoot);
     const signatureChanged = Buffer.from(original);
-    signatureChanged[70] ^= 0xff;
+    signatureChanged[150] ^= 0xff;
     writeFileSync(launcherPath, signatureChanged);
     assert.deepEqual(collectDesktopBundleFiles(fixture.contentsRoot), before);
 
+    const largerSignature = Buffer.concat([original, Buffer.alloc(16, 0x53)]);
+    largerSignature.writeBigUInt64LE(BigInt(48), 80);
+    largerSignature.writeUInt32LE(32, 116);
+    writeFileSync(launcherPath, largerSignature);
+    assert.deepEqual(collectDesktopBundleFiles(fixture.contentsRoot), before);
+
+    const inconsistentLinkEdit = Buffer.from(original);
+    inconsistentLinkEdit.writeBigUInt64LE(BigInt(33), 80);
+    writeFileSync(launcherPath, inconsistentLinkEdit);
+    assert.throws(() => collectDesktopBundleFiles(fixture.contentsRoot), /invalid __LINKEDIT signature layout/);
+
     const codeChanged = Buffer.from(original);
-    codeChanged[50] ^= 0xff;
+    codeChanged[130] ^= 0xff;
     writeFileSync(launcherPath, codeChanged);
     assert.notDeepEqual(collectDesktopBundleFiles(fixture.contentsRoot), before);
   } finally {

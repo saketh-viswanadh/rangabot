@@ -532,7 +532,7 @@ async function finalize(output: string, target: DesktopArtifactTarget) {
   }
   const signedBundleFiles = collectDesktopBundleFiles(contentsRoot, "darwin");
   if (JSON.stringify(signedBundleFiles) !== JSON.stringify(bundleFiles)) {
-    throw new Error("The final outer ad-hoc seal changed an identity-bound bundle file.");
+    throw new Error("The final outer macOS seal changed an identity-bound bundle file.");
   }
 
   const verified = inspectDesktopArtifact({

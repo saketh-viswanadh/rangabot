@@ -770,6 +770,9 @@ function snapshotSignedMachOCode(path: string): DesktopArtifactFile {
     let signatureOffset = -1;
     let signatureSize = -1;
     let signatureCommandOffset = -1;
+    let linkEditCommandOffset = -1;
+    let linkEditFileOffset = -1;
+    let linkEditFileSize = -1;
     for (let index = 0; index < commands; index += 1) {
       if (commandOffset + 8 > source.length) throw new Error("The desktop launcher has a truncated Mach-O command table.");
       const command = source.readUInt32LE(commandOffset);
@@ -785,24 +788,44 @@ function snapshotSignedMachOCode(path: string): DesktopArtifactFile {
         signatureOffset = source.readUInt32LE(commandOffset + 8);
         signatureSize = source.readUInt32LE(commandOffset + 12);
       }
+      if (command === 0x19 && commandSize >= 72
+        && source.subarray(commandOffset + 8, commandOffset + 24).toString("ascii").split("\0", 1)[0] === "__LINKEDIT") {
+        if (linkEditCommandOffset !== -1) throw new Error("The desktop launcher has duplicate __LINKEDIT segments.");
+        const fileOffset = source.readBigUInt64LE(commandOffset + 40);
+        const fileSize = source.readBigUInt64LE(commandOffset + 48);
+        if (fileOffset > BigInt(Number.MAX_SAFE_INTEGER) || fileSize > BigInt(Number.MAX_SAFE_INTEGER)) {
+          throw new Error("The desktop launcher __LINKEDIT segment is not safely representable.");
+        }
+        linkEditCommandOffset = commandOffset;
+        linkEditFileOffset = Number(fileOffset);
+        linkEditFileSize = Number(fileSize);
+      }
       commandOffset += commandSize;
     }
     if (signatureCommandOffset === -1 || signatureOffset < commandOffset || signatureSize <= 0
-      || signatureOffset + signatureSize > source.length) {
+      || signatureOffset + signatureSize !== source.length) {
       throw new Error("The desktop launcher has an invalid embedded code signature.");
+    }
+    if (linkEditCommandOffset === -1 || linkEditFileOffset < commandOffset
+      || linkEditFileSize <= signatureSize || linkEditFileOffset + linkEditFileSize !== source.length
+      || signatureOffset < linkEditFileOffset) {
+      throw new Error("The desktop launcher has an invalid __LINKEDIT signature layout.");
     }
 
     // The outer ad-hoc seal necessarily changes after the embedded resource
     // manifest is written. Bind every launcher byte except the circular
-    // LC_CODE_SIGNATURE payload and its offset/size fields. Code, load
-    // commands, entitlements outside that payload, and appended bytes remain
-    // identity-bound, while the final signature is independently verified.
+    // LC_CODE_SIGNATURE payload, its offset/size fields, and the derived
+    // __LINKEDIT file-size field. codesign updates that segment length when a
+    // timestamp changes the tail signature size. The exact tail layout is
+    // validated above; code, all other load-command fields, and non-signature
+    // __LINKEDIT bytes remain identity-bound while the signature is verified.
     const prefix = Buffer.from(source.subarray(0, signatureOffset));
     prefix.fill(0, signatureCommandOffset + 8, signatureCommandOffset + 16);
+    prefix.fill(0, linkEditCommandOffset + 48, linkEditCommandOffset + 56);
     const suffix = source.subarray(signatureOffset + signatureSize);
     const canonicalBytes = prefix.length + suffix.length;
     const hash = createHash("sha256")
-      .update("rangabot-signed-mach-o-code-v1\0")
+      .update("rangabot-signed-mach-o-code-v2\0")
       .update(prefix)
       .update(suffix)
       .digest("hex");
