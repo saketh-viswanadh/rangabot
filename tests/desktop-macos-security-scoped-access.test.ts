@@ -16,6 +16,8 @@ test("Mac App Store runtime detection is exact", () => {
 
 test("security-scoped bookmarks persist privately, restore, replace by path, and stop exactly once", () => {
   const userDataPath = realpathSync(resolve(mkdtempSync(join(tmpdir(), "rangabot-mas-bookmarks-"))));
+  const firstPath = resolve(userDataPath, "synthetic", "one");
+  const secondPath = resolve(userDataPath, "synthetic", "two");
   const calls: string[] = [];
   const app = {
     startAccessingSecurityScopedResource(bookmark: string) {
@@ -35,31 +37,31 @@ test("security-scoped bookmarks persist privately, restore, replace by path, and
     const first = rememberMacSecurityScopedAccess({
       app: app as never,
       userDataPath,
-      paths: ["/synthetic/one", "/synthetic/two"],
+      paths: [firstPath, secondPath],
       bookmarks: [firstBookmark, secondBookmark],
     });
-    assert.deepEqual(first.paths, ["/synthetic/one", "/synthetic/two"]);
+    assert.deepEqual(first.paths, [firstPath, secondPath]);
     first.stop();
     first.stop();
 
     const replaced = rememberMacSecurityScopedAccess({
       app: app as never,
       userDataPath,
-      paths: ["/synthetic/one"],
+      paths: [firstPath],
       bookmarks: [replacement],
     });
     replaced.stop();
 
     const restored = restoreMacSecurityScopedAccess({ app: app as never, userDataPath });
-    assert.deepEqual(restored.paths, ["/synthetic/one", "/synthetic/two"]);
+    assert.deepEqual(restored.paths, [firstPath, secondPath]);
     restored.stop();
 
     const savedPath = join(userDataPath, "mac-app-store-security-scoped-bookmarks.json");
     assert.equal(lstatSync(savedPath).mode & 0o777, 0o600);
     const saved = JSON.parse(readFileSync(savedPath, "utf8")) as Array<{ path: string; bookmark: string }>;
     assert.deepEqual(saved, [
-      { path: "/synthetic/one", bookmark: replacement },
-      { path: "/synthetic/two", bookmark: secondBookmark },
+      { path: firstPath, bookmark: replacement },
+      { path: secondPath, bookmark: secondBookmark },
     ]);
     assert.equal(calls.filter((value) => value.startsWith("start:")).length, 5);
     assert.equal(calls.filter((value) => value.startsWith("stop:")).length, 5);
@@ -71,13 +73,14 @@ test("security-scoped bookmarks persist privately, restore, replace by path, and
 
 test("security-scoped bookmark persistence fails closed on mismatches and linked destinations", () => {
   const userDataPath = realpathSync(resolve(mkdtempSync(join(tmpdir(), "rangabot-mas-bookmarks-unsafe-"))));
+  const selectedPath = resolve(userDataPath, "synthetic", "one");
   const bookmark = Buffer.from("bookmark").toString("base64");
   const app = { startAccessingSecurityScopedResource() { return () => undefined; } };
   try {
     assert.throws(() => rememberMacSecurityScopedAccess({
       app: app as never,
       userDataPath,
-      paths: ["/synthetic/one"],
+      paths: [selectedPath],
       bookmarks: [],
     }), /matching security-scoped permissions/);
     assert.throws(() => rememberMacSecurityScopedAccess({
@@ -94,7 +97,7 @@ test("security-scoped bookmark persistence fails closed on mismatches and linked
     assert.throws(() => rememberMacSecurityScopedAccess({
       app: app as never,
       userDataPath,
-      paths: ["/synthetic/one"],
+      paths: [selectedPath],
       bookmarks: [bookmark],
     }), /not a safe private file|destination is unsafe/);
     assert.equal(readFileSync(target, "utf8"), "sentinel\n");

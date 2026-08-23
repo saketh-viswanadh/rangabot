@@ -179,7 +179,9 @@ test("packaged Mac App Store profile binds every Electron writable path beneath 
     ]);
     for (const [, path] of setPaths) {
       assert.equal(realpathSync(path), path);
-      assert.equal(lstatSync(path).mode & 0o077, 0);
+      // Windows does not expose POSIX mode enforcement; the macOS candidate
+      // exercises this assertion on the platform where chmod is meaningful.
+      if (process.platform !== "win32") assert.equal(lstatSync(path).mode & 0o077, 0);
     }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
