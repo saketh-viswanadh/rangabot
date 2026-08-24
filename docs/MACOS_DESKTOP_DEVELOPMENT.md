@@ -44,9 +44,13 @@ private profile storage.
 npm run desktop:package:arm64
 ```
 
-An x64 command exists for architecture-specific engineering work, but parity is
-not established unless that architecture's Electron runtime and native DuckDB
-and sqlite-vec payloads independently load and pass packaged tests.
+Intel macOS packaging is not currently available. The managed x64 Ollama
+runtime does not yet have its own reviewed native/legal inventory, so the old
+`desktop:package:x64` and `desktop:make:x64` commands were removed rather than
+advertising a build that the release gate must reject. Windows x64 packaging is
+separate and remains supported by its Windows-specific commands and checks.
+Preparation, Forge configuration, finalization, signed-package verification,
+and installed-artifact identity all reject a Darwin x64 target.
 
 ## Finder verification-only artifact
 
@@ -124,7 +128,8 @@ dedicated clean macOS account or VM; this repository does not create one.
 ## Identity and packaging evidence
 
 The final per-architecture manifest binds the baseline commit, complete source
-snapshot, dependency lock, product version from `package.json`, historical
+snapshot, dependency lock, product version and independent Mac build number
+from `package.json`, historical
 web-feedback identity, launch profile,
 Electron/embedded Node/Next/native versions, fuse policy, full `Contents`
 bundle inventory, complete `Resources` inventory and every native payload.
@@ -133,8 +138,9 @@ POSIX-relative paths, byte lengths and lowercase SHA-256 digests. `generatedAt`
 is evidence metadata and is excluded from the derived artifact ID.
 
 After Forge packaging, finalization removes inherited broad ATS and unused
-camera, microphone, audio and Bluetooth plist declarations; requires both
-macOS bundle version fields to match the bound product version; directly reads
+camera, microphone, audio and Bluetooth plist declarations; requires
+`CFBundleShortVersionString` to match the bound product version and
+`CFBundleVersion` to match the independently bound Mac build number; directly reads
 and compares all nine named Electron fuses; restores an ad-hoc signature; hashes the
 post-mutation bundle/resources/native payloads; writes the manifest; seals the
 outer app; then rechecks the signature, fuse wire and exact identity. Any

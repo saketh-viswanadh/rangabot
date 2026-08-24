@@ -8,14 +8,18 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const {
   PROHIBITED_USAGE_DESCRIPTION_KEYS,
+  assertMacOSBuildNumber,
   assertMacOSInfoPlistPolicy,
   assertMacOSInfoPlistProductVersion,
+  assertMacOSMarketingVersion,
   hardenPackagedMacOSInfoPlist,
   readMacOSInfoPlist,
 } = require("../desktop/electron/macos-plist-policy.cjs") as {
   PROHIBITED_USAGE_DESCRIPTION_KEYS: readonly string[];
+  assertMacOSBuildNumber(value: unknown): void;
   assertMacOSInfoPlistPolicy(value: Record<string, unknown>): void;
-  assertMacOSInfoPlistProductVersion(value: Record<string, unknown>, productVersion: string): void;
+  assertMacOSInfoPlistProductVersion(value: Record<string, unknown>, productVersion: string, macBuildNumber: string): void;
+  assertMacOSMarketingVersion(value: unknown): void;
   hardenPackagedMacOSInfoPlist(outputPath: string): Record<string, unknown>;
   readMacOSInfoPlist(plistPath: string): Record<string, unknown>;
 };
@@ -41,20 +45,31 @@ test("macOS plist policy rejects inherited broad transport and unused permission
   }));
 });
 
-test("macOS plist product identity must match the bound package version", () => {
+test("macOS plist keeps the marketing version independent from the bound build number", () => {
   const plist = {
     CFBundleShortVersionString: "1.2.0",
     CFBundleVersion: "1.2.0",
   };
-  assert.doesNotThrow(() => assertMacOSInfoPlistProductVersion(plist, "1.2.0"));
+  assert.doesNotThrow(() => assertMacOSInfoPlistProductVersion(plist, "1.2.0", "1.2.0"));
+  assert.doesNotThrow(() => assertMacOSInfoPlistProductVersion({ ...plist, CFBundleVersion: "1.2.1" }, "1.2.0", "1.2.1"));
   assert.throws(
-    () => assertMacOSInfoPlistProductVersion({ ...plist, CFBundleShortVersionString: "0.1.0" }, "1.2.0"),
+    () => assertMacOSInfoPlistProductVersion({ ...plist, CFBundleShortVersionString: "0.1.0" }, "1.2.0", "1.2.0"),
     /CFBundleShortVersionString/,
   );
   assert.throws(
-    () => assertMacOSInfoPlistProductVersion({ ...plist, CFBundleVersion: "0.1.0" }, "1.2.0"),
+    () => assertMacOSInfoPlistProductVersion({ ...plist, CFBundleVersion: "0.1.0" }, "1.2.0", "1.2.0"),
     /CFBundleVersion/,
   );
+  for (const valid of ["1", "1.2", "1.2.0", "9999.99.99"]) {
+    assert.doesNotThrow(() => assertMacOSBuildNumber(valid));
+  }
+  for (const invalid of ["", "0", "0.1", "01", "1.02", "1.2.00", "10000", "1.100", "1.2.3.4", "1.2-beta"]) {
+    assert.throws(() => assertMacOSBuildNumber(invalid), /build number/i);
+  }
+  assert.doesNotThrow(() => assertMacOSMarketingVersion("1.2.0"));
+  for (const invalid of ["1", "1.2", "01.2.0", "1.2.0-beta"]) {
+    assert.throws(() => assertMacOSMarketingVersion(invalid), /marketing version/i);
+  }
 });
 
 test("Forge hardens the final plist before artifact finalization", () => {
@@ -64,7 +79,9 @@ test("Forge hardens the final plist before artifact finalization", () => {
   const finalizerIndex = forgeSource.indexOf("scripts\", \"finalize-desktop-package.ts");
   assert.ok(hardeningIndex >= 0, "Forge must invoke final-package plist hardening");
   assert.ok(finalizerIndex > hardeningIndex, "plist hardening must run before artifact finalization");
-  assert.match(finalizerSource, /assertMacOSInfoPlistProductVersion\([\s\S]*?staged\.productVersion\)/u);
+  assert.match(forgeSource, /appVersion: productVersion/u);
+  assert.match(forgeSource, /buildVersion: macBuildNumber/u);
+  assert.match(finalizerSource, /assertMacOSInfoPlistProductVersion\([\s\S]*?staged\.productVersion,[\s\S]*?staged\.macBuildNumber/u);
 });
 
 test("final-package plist hardening removes only the inherited broad declarations", {

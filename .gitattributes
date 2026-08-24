@@ -10,3 +10,6 @@
 *.woff2 binary
 *.docx binary
 *.pdf binary
+
+# Preserve the reviewed aggregate notice byte-for-byte, including upstream line endings.
+desktop/legal/OLLAMA_RUNTIME_NOTICES.md -text whitespace=-trailing-space

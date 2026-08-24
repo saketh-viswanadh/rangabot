@@ -1,5 +1,32 @@
 # Daily progress
 
+## 2026-08-25 — Mac App Store 1.2 source-candidate hardening
+
+- Reconstructed the uncommitted Mac-release work after a reboot removed its
+  temporary checkout. A fresh persistent branch was replayed from the recorded
+  successful patches and compared against an independent clean-base replay;
+  all 37 recovered non-notice source paths matched byte for byte.
+- Separated the public product version from the Mac upload build number and
+  bound both through Forge, the packaged plist, desktop manifest, runtime
+  receipt, and final package evidence. Unsupported Intel Mac commands were
+  removed because only Apple-silicon arm64 has a reviewed managed-runtime
+  inventory.
+- Added fail-closed Mac App Store profile/certificate validation, exact
+  certificate/private-key resolution, minimal entitlement checks, full nested
+  Mach-O signature and leaf-certificate verification, and strict expanded-PKG
+  topology, metadata, payload, and BOM reconciliation.
+- Removed the unused Sharp/libvips chain and added target-specific packaged
+  notices for Electron/Chromium/Node/sqlite-vec and the exact ten-file Ollama
+  arm64 runtime. The Ollama record binds 67 compiled Go modules, 93 recursively
+  reviewed module-license files, native/toolchain attributions, and the explicit
+  MIT grant for the referenced Levenshtein implementation.
+- Source tests, type checking, lint, production build, privacy/governance gates,
+  independent recovery comparison, and exact assembled Ollama payload checks
+  passed. The current Keychain still lacks Apple Distribution and Mac Installer
+  Distribution private-key identities, so signed package creation, clean
+  install/update/uninstall acceptance, TestFlight upload, and App Review remain
+  **NOT RUN**.
+
 ## 2026-08-24 — Version 1.2 source-release preparation
 
 - Unified the source, macOS package metadata, Windows package identity, release

@@ -20,6 +20,7 @@ import {
   collectDesktopArtifactFiles,
   collectDesktopBundleFiles,
   createDesktopArtifactManifest,
+  desktopRuntimeEvidenceFromResourceRoot,
   deriveDesktopArtifactId,
   deriveDesktopSourceManifestSha256,
   inspectDesktopArtifact,
@@ -111,7 +112,11 @@ function createResourceFixture(arch: DesktopArtifactArch = "arm64") {
   const contentsRoot = join(cleanupRoot, "Contents");
   const root = join(contentsRoot, "Resources");
   writeFixtureFile(root, "app.asar", "synthetic packaged app\n");
-  writeFixtureFile(root, "rangabot-resources/package.json", JSON.stringify({ name: "rangabot", version: "1.2.0" }));
+  writeFixtureFile(root, "rangabot-resources/package.json", JSON.stringify({
+    name: "rangabot",
+    version: "1.2.0",
+    desktopBuild: { macBuildNumber: "1.2.0" },
+  }));
   writeFixtureFile(root, `app.asar.unpacked/node_modules/@duckdb/node-bindings-darwin-${arch}/duckdb.node`, "synthetic DuckDB binding\n");
   writeFixtureFile(root, `app.asar.unpacked/node_modules/@duckdb/node-bindings-darwin-${arch}/libduckdb.dylib`, "synthetic DuckDB library\n");
   writeFixtureFile(root, `app.asar.unpacked/node_modules/sqlite-vec-darwin-${arch}/vec0.dylib`, "synthetic sqlite-vec library\n");
@@ -192,6 +197,7 @@ function manifestInput(
     sourceFiles,
     packageLockSha256: sha("2"),
     productVersion: "1.2.0",
+    macBuildNumber: "1.2.0",
     webFeedback: {
       state: "known",
       candidateBuildId: sha("3"),
@@ -264,6 +270,13 @@ test("desktop identity canonicalizes inventories and excludes generatedAt from i
       fixture.natives,
       { productVersion: "1.2.1" },
     ));
+    const otherMacBuildNumber = createDesktopArtifactManifest(manifestInput(
+      fixture.arch,
+      fixture.bundleFiles,
+      fixture.resources,
+      fixture.natives,
+      { macBuildNumber: "1.2.1" },
+    ));
     const reverse = createDesktopArtifactManifest(manifestInput(
       fixture.arch,
       fixture.bundleFiles,
@@ -282,6 +295,7 @@ test("desktop identity canonicalizes inventories and excludes generatedAt from i
     assert.equal(forward.desktopArtifactId, reverse.desktopArtifactId);
     assert.notEqual(forward.desktopArtifactId, otherPackagingCommit.desktopArtifactId);
     assert.notEqual(forward.desktopArtifactId, otherProductVersion.desktopArtifactId);
+    assert.notEqual(forward.desktopArtifactId, otherMacBuildNumber.desktopArtifactId);
     assert.equal(forward.schemaVersion, DESKTOP_ARTIFACT_SCHEMA_VERSION);
     assert.equal(forward.fuses.policyName, DESKTOP_FUSE_POLICY_NAME);
     assert.equal(forward.resourceManifestSha256, reverse.resourceManifestSha256);
@@ -344,6 +358,7 @@ test("installed verification is known without Git or cwd discovery and exposes a
     assert.equal(verified.baseCommit, manifest.sourceCommit);
     assert.equal(verified.build, `1.2.0+desktop.darwin.${fixture.arch}.${manifest.desktopArtifactId.slice(0, 12)}`);
     assert.equal(verified.productVersion, "1.2.0");
+    assert.equal(verified.macBuildNumber, "1.2.0");
     assert.equal(verified.sourceVersion, "0.1.0");
     assert.equal(verified.manifest?.webFeedback.sourceVersion, "0.1.0");
     assert.deepEqual(requireKnownDesktopArtifact({
@@ -381,6 +396,31 @@ test("installed verification rejects a manifest product version that differs fro
     assert.equal(verified.state, "mixed");
     assert.equal(verified.reason, "product-version-mismatch");
     assert.equal(verified.productVersion, null);
+  } finally {
+    rmSync(fixture.cleanupRoot, { recursive: true, force: true });
+  }
+});
+
+test("installed verification rejects a manifest Mac build number that differs from packaged package.json", () => {
+  const fixture = createResourceFixture();
+  const manifestPath = join(fixture.root, "rangabot-desktop-artifact.json");
+  try {
+    const manifest = createDesktopArtifactManifest(manifestInput(
+      fixture.arch,
+      fixture.bundleFiles,
+      fixture.resources,
+      fixture.natives,
+      { macBuildNumber: "1.2.1" },
+    ));
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const verified = inspectDesktopArtifact({
+      resourceRoot: fixture.root,
+      manifestPath,
+      runtime: runtimeEvidence(fixture.arch),
+    });
+    assert.equal(verified.state, "mixed");
+    assert.equal(verified.reason, "mac-build-number-mismatch");
+    assert.equal(verified.macBuildNumber, null);
   } finally {
     rmSync(fixture.cleanupRoot, { recursive: true, force: true });
   }
@@ -425,20 +465,37 @@ test("Mac App Store development and distribution signatures are valid known-buil
   }
 });
 
-test("x64 identities accept only the independently inventoried x64 native chain", () => {
+test("Darwin x64 artifacts cannot be created, parsed, or recognized as known", () => {
   const fixture = createResourceFixture("x64");
   const manifestPath = join(fixture.root, "rangabot-desktop-artifact.json");
   try {
-    const manifest = createDesktopArtifactManifest(manifestInput(fixture.arch, fixture.bundleFiles, fixture.resources, fixture.natives));
-    writeFileSync(manifestPath, JSON.stringify(manifest));
-    const verified = inspectDesktopArtifact({ resourceRoot: fixture.root, manifestPath, runtime: runtimeEvidence("x64") });
-    assert.equal(verified.state, "known");
-    assert.match(verified.build ?? "", /\+desktop\.darwin\.x64\.[0-9a-f]{12}$/);
-    assert.equal(inspectDesktopArtifact({
-      resourceRoot: fixture.root,
-      manifestPath,
-      runtime: runtimeEvidence("arm64"),
-    }).reason, "runtime-mismatch");
+    assert.throws(
+      () => createDesktopArtifactManifest(manifestInput(fixture.arch, fixture.bundleFiles, fixture.resources, fixture.natives)),
+      /macOS arm64 or Windows x64/,
+    );
+    assert.throws(
+      () => desktopRuntimeEvidenceFromResourceRoot({
+        resourceRoot: fixture.root,
+        platform: "darwin",
+        arch: "x64",
+        electron: "43.4.0",
+        embeddedNode: "24.13.1",
+      }),
+      /macOS arm64 or Windows x64/,
+    );
+
+    const arm64 = createResourceFixture("arm64");
+    try {
+      const valid = createDesktopArtifactManifest(manifestInput(arm64.arch, arm64.bundleFiles, arm64.resources, arm64.natives));
+      const unsupported = { ...valid, target: { platform: "darwin", arch: "x64" } };
+      assert.equal(parseDesktopArtifactManifest(unsupported), null);
+      writeFileSync(manifestPath, JSON.stringify(unsupported));
+      const verified = inspectDesktopArtifact({ resourceRoot: fixture.root, manifestPath, runtime: runtimeEvidence("x64") });
+      assert.equal(verified.state, "unknown");
+      assert.equal(verified.reason, "manifest-invalid");
+    } finally {
+      rmSync(arm64.cleanupRoot, { recursive: true, force: true });
+    }
   } finally {
     rmSync(fixture.cleanupRoot, { recursive: true, force: true });
   }
@@ -451,6 +508,7 @@ test("exact unsigned Windows x64 artifacts are launchable but never release-know
     const base = manifestInput("x64", fixture.bundleFiles, fixture.resources, fixture.natives);
     const windowsInput: DesktopArtifactManifestInput = {
       ...base,
+      macBuildNumber: null,
       runtimeVersions: { ...base.runtimeVersions, nativeModules: windowsNativeModules() },
       target: { platform: "win32", arch: "x64" },
       packagingTooling: {
@@ -460,6 +518,10 @@ test("exact unsigned Windows x64 artifacts are launchable but never release-know
       },
     };
     const manifest = createDesktopArtifactManifest(windowsInput);
+    assert.throws(
+      () => createDesktopArtifactManifest({ ...windowsInput, macBuildNumber: "1.2.0" }),
+      /Mac build number/i,
+    );
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     const runtime: DesktopRuntimeEvidence = {
       platform: "win32",
@@ -579,6 +641,18 @@ test("manifest creation and parsing reject unsafe, duplicate, incomplete, and mi
       })),
       new RegExp(DESKTOP_SOURCE_BASE_COMMIT),
     );
+    assert.throws(
+      () => createDesktopArtifactManifest(manifestInput(fixture.arch, fixture.bundleFiles, fixture.resources, fixture.natives, {
+        macBuildNumber: null,
+      })),
+      /Mac build number/i,
+    );
+    assert.throws(
+      () => createDesktopArtifactManifest(manifestInput(fixture.arch, fixture.bundleFiles, fixture.resources, fixture.natives, {
+        macBuildNumber: "1.02.0",
+      })),
+      /Mac build number/i,
+    );
 
     const valid = createDesktopArtifactManifest(manifestInput(fixture.arch, fixture.bundleFiles, fixture.resources, fixture.natives));
     const unsafe = JSON.parse(JSON.stringify(valid)) as Record<string, unknown> & { resources: Array<Record<string, unknown>> };
@@ -593,6 +667,10 @@ test("manifest creation and parsing reject unsafe, duplicate, incomplete, and mi
     const { productVersion: _productVersion, ...missingProductVersion } = valid;
     assert.equal(parseDesktopArtifactManifest(missingProductVersion), null);
     assert.equal(parseDesktopArtifactManifest({ ...valid, productVersion: "bad version" }), null);
+    const { macBuildNumber: _macBuildNumber, ...missingMacBuildNumber } = valid;
+    assert.equal(parseDesktopArtifactManifest(missingMacBuildNumber), null);
+    assert.equal(parseDesktopArtifactManifest({ ...valid, macBuildNumber: "1.02.0" }), null);
+    assert.equal(parseDesktopArtifactManifest({ ...valid, macBuildNumber: null }), null);
     const missingPackagingCommit = { ...valid } as Record<string, unknown>;
     delete missingPackagingCommit.sourceCommit;
     assert.equal(parseDesktopArtifactManifest(missingPackagingCommit), null);
@@ -606,9 +684,8 @@ test("manifest creation and parsing reject unsafe, duplicate, incomplete, and mi
   }
 });
 
-test("the sealed Finder verification profile changes artifact identity and is arm64-only", () => {
+test("the sealed Finder verification profile changes artifact identity on the supported arm64 target", () => {
   const fixture = createResourceFixture("arm64");
-  const x64 = createResourceFixture("x64");
   try {
     const normal = createDesktopArtifactManifest(manifestInput(fixture.arch, fixture.bundleFiles, fixture.resources, fixture.natives));
     const verification = createDesktopArtifactManifest(manifestInput(
@@ -621,11 +698,8 @@ test("the sealed Finder verification profile changes artifact identity and is ar
     assert.notEqual(normal.desktopArtifactId, verification.desktopArtifactId);
     assert.deepEqual(parseDesktopArtifactManifest(JSON.parse(JSON.stringify(verification)))?.launchProfile,
       FINDER_VERIFICATION_DESKTOP_LAUNCH_PROFILE);
-    assert.throws(() => createDesktopArtifactManifest(manifestInput(x64.arch, x64.bundleFiles, x64.resources, x64.natives,
-      { launchProfile: FINDER_VERIFICATION_DESKTOP_LAUNCH_PROFILE })), /launch profile/i);
   } finally {
     rmSync(fixture.cleanupRoot, { recursive: true, force: true });
-    rmSync(x64.cleanupRoot, { recursive: true, force: true });
   }
 });
 

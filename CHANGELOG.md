@@ -7,6 +7,25 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+### Changed
+
+- Separated the macOS upload build number from the public product version.
+  `CFBundleVersion` is now independently source-controlled, validated, and
+  bound into desktop artifact/runtime evidence so a replacement 1.2.0 upload
+  can advance its build identity without changing the marketing version.
+- Hardened the source path for a future signed Mac App Store candidate. The
+  package now fails closed unless its provisioning profile, app identity,
+  installer identity, entitlements, every Mach-O signature, expanded installer
+  topology, product/build versions, and target-specific legal payload all match
+  their reviewed evidence.
+- Removed the misleading Intel macOS package/make commands. Apple-silicon arm64
+  remains the only reviewed Mac target until x64 has its own exact native and
+  legal inventory; Windows x64 packaging remains separate.
+- Removed the unused Sharp/libvips image-optimization chain from desktop output
+  and staged exact Electron, Chromium, Node, sqlite-vec, and managed Ollama
+  notices with the packaged app. These are source-candidate controls, not a
+  claim that a signed 1.2.0 package, TestFlight build, or App Review is complete.
+
 ## 1.2.0 - 2026-08-24
 
 ### Added

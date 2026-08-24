@@ -60,6 +60,7 @@ export type ResponseFeedbackCandidateInspection = {
 
 export type RuntimeResponseFeedbackCandidateInspection = ResponseFeedbackCandidateInspection & {
   productVersion: string | null;
+  macBuildNumber: string | null;
 };
 
 export type KnownResponseFeedbackCandidate = {
@@ -420,8 +421,9 @@ let productionRuntimeCandidate: Readonly<KnownResponseFeedbackCandidate> | undef
 function runtimeCandidateInspection(
   candidate: ResponseFeedbackCandidateInspection,
   productVersion: string | null = runtimeProductVersion,
+  macBuildNumber: string | null = null,
 ): RuntimeResponseFeedbackCandidateInspection {
-  return { ...candidate, productVersion };
+  return { ...candidate, productVersion, macBuildNumber };
 }
 
 export function getRuntimeResponseFeedbackCandidate(): RuntimeResponseFeedbackCandidateInspection {
@@ -447,7 +449,7 @@ export function getRuntimeResponseFeedbackCandidate(): RuntimeResponseFeedbackCa
         artifactSha256: verified.artifactSha256,
         sourceVersion: verified.sourceVersion,
       };
-      return runtimeCandidateInspection(inspection, verified.productVersion);
+      return runtimeCandidateInspection(inspection, verified.productVersion, verified.macBuildNumber);
     } catch {
       return runtimeCandidateInspection(emptyInspection("unknown"));
     }

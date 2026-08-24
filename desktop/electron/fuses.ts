@@ -22,5 +22,8 @@ export const ELECTRON_FUSE_POLICY = Object.freeze({
 });
 
 export function electronFuseOptions(platform: NodeJS.Platform, arch: string) {
+  if (platform === "darwin" && arch !== "arm64") {
+    throw new Error("macOS desktop fuse preparation supports arm64 only.");
+  }
   return Object.freeze({ resetAdHocDarwinSignature: platform === "darwin" && arch === "arm64" });
 }

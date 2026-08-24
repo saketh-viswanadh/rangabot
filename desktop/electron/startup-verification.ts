@@ -22,7 +22,8 @@ export type DesktopResourceVerificationStage =
   | "A43_IDENTITY_MISMATCH"
   | "A44_RUNTIME_MISMATCH"
   | "A45_RESOURCE_MISMATCH"
-  | "A46_PRODUCT_VERSION_MISMATCH";
+  | "A46_PRODUCT_VERSION_MISMATCH"
+  | "A47_MAC_BUILD_NUMBER_MISMATCH";
 
 /**
  * Resolves and verifies only immutable packaged resources. This prelude must
@@ -56,6 +57,7 @@ export function verifyDesktopResourcesBeforeMutation(input: {
       "runtime-mismatch": "A44_RUNTIME_MISMATCH",
       "resource-mismatch": "A45_RESOURCE_MISMATCH",
       "product-version-mismatch": "A46_PRODUCT_VERSION_MISMATCH",
+      "mac-build-number-mismatch": "A47_MAC_BUILD_NUMBER_MISMATCH",
     };
     const rejectedStage = rejectedStages[artifact.reason];
     if (rejectedStage) input.reportStage?.(rejectedStage);

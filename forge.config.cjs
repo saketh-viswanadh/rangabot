@@ -5,7 +5,11 @@ const { MakerDMG } = require("@electron-forge/maker-dmg");
 const { MakerPKG } = require("@electron-forge/maker-pkg");
 const { MakerZIP } = require("@electron-forge/maker-zip");
 const { flipFuses, FuseVersion, FuseV1Options } = require("@electron/fuses");
-const { hardenPackagedMacOSInfoPlist } = require("./desktop/electron/macos-plist-policy.cjs");
+const {
+  assertMacOSBuildNumber,
+  assertMacOSMarketingVersion,
+  hardenPackagedMacOSInfoPlist,
+} = require("./desktop/electron/macos-plist-policy.cjs");
 const { assertWindowsPeCertificateTableAbsent } = require("./desktop/electron/windows-pe-certificate.cjs");
 
 const FUSE_POLICY_NAME = "electron-43-hardened-v2";
@@ -18,6 +22,17 @@ if (targetPlatform !== "darwin" && targetPlatform !== "win32") {
 const targetArch = process.env.RANGABOT_DESKTOP_TARGET_ARCH;
 if (targetArch !== "arm64" && targetArch !== "x64") {
   throw new Error("RANGABOT_DESKTOP_TARGET_ARCH must be exactly arm64 or x64.");
+}
+if ((targetPlatform === "darwin" && targetArch !== "arm64")
+  || (targetPlatform === "win32" && targetArch !== "x64")) {
+  throw new Error("Desktop packaging supports exactly macOS arm64 or Windows x64.");
+}
+const packageRecord = require("./package.json");
+const productVersion = packageRecord.version;
+const macBuildNumber = packageRecord.desktopBuild?.macBuildNumber;
+if (targetPlatform === "darwin") {
+  assertMacOSMarketingVersion(productVersion);
+  assertMacOSBuildNumber(macBuildNumber);
 }
 const desktopDistribution = process.env.RANGABOT_DESKTOP_DISTRIBUTION;
 if (desktopDistribution !== undefined
@@ -125,6 +140,36 @@ async function finalizePackagedExecutables(packageResult) {
   runFinalizer(packageResult);
 }
 
+function verifyMadeMacAppStorePackage(makeResults) {
+  if (desktopDistribution !== "mas-distribution") return makeResults;
+  const packageArtifacts = [];
+  for (const result of makeResults) {
+    if (result.platform !== "mas" || result.arch !== targetArch) {
+      throw new Error("Mac App Store maker result does not match the prepared target.");
+    }
+    for (const artifact of result.artifacts) if (artifact.endsWith(".pkg")) packageArtifacts.push({ result, artifact });
+  }
+  if (packageArtifacts.length !== 1) throw new Error("Mac App Store make must produce exactly one installer package.");
+  const packageArtifact = path.resolve(packageArtifacts[0].artifact);
+  const result = spawnSync(process.execPath, [
+    "--experimental-strip-types",
+    path.resolve(__dirname, "scripts", "verify-macos-mas-pkg.ts"),
+    `--pkg=${packageArtifact}`,
+    `--arch=${targetArch}`,
+  ], { cwd: __dirname, stdio: "inherit", env: process.env });
+  if (result.error) throw result.error;
+  if (result.status !== 0 || result.signal) throw new Error("Mac App Store installer package verification failed.");
+  const evidencePath = path.resolve(__dirname, "desktop", "out", `macos-mas-pkg-darwin-${targetArch}.json`);
+  if (!fs.existsSync(evidencePath)) throw new Error("Mac App Store installer package evidence was not created.");
+  const evidenceStatus = fs.lstatSync(evidencePath);
+  if (!evidenceStatus.isFile() || evidenceStatus.isSymbolicLink() || fs.realpathSync(evidencePath) !== evidencePath) {
+    throw new Error("Mac App Store installer package evidence was not created safely.");
+  }
+  return makeResults.map((makeResult) => makeResult === packageArtifacts[0].result
+    ? { ...makeResult, artifacts: [...makeResult.artifacts, evidencePath] }
+    : makeResult);
+}
+
 module.exports = {
   ...(refreshedNormalBuild
     ? { outDir: path.resolve(__dirname, "desktop", "out", "normal-candidate-20260812") }
@@ -133,6 +178,11 @@ module.exports = {
     name: appName,
     executableName: appName,
     appBundleId,
+    appVersion: productVersion,
+    ...(targetPlatform === "darwin" ? { buildVersion: macBuildNumber } : {}),
+    ...(targetPlatform === "win32"
+      ? { win32metadata: { CompanyName: "RangaBot contributors" } }
+      : {}),
     ...(macAppStoreBuild ? { extendInfo: { ElectronTeamID: macTeamId } } : {}),
     appCategoryType: "public.app-category.productivity",
     icon: path.resolve(__dirname, "desktop", "assets", targetPlatform === "darwin" ? "rangabot.icns" : "rangabot.ico"),
@@ -157,12 +207,13 @@ module.exports = {
       }
     },
     postPackage: async (_config, packageResult) => finalizePackagedExecutables(packageResult),
+    postMake: async (_config, makeResults) => verifyMadeMacAppStorePackage(makeResults),
   },
   rebuildConfig: {},
   makers: [
     ...(macAppStoreBuild
       ? [new MakerPKG({
-          name: `RangaBot-${require("./package.json").version}-${targetArch}-Mac-App-Store`,
+          name: `RangaBot-${productVersion}-build-${macBuildNumber}-${targetArch}-Mac-App-Store`,
           identity: macInstallerSigningIdentity,
         }, ["mas"])]
       : [

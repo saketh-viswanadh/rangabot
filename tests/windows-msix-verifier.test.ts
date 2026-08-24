@@ -108,6 +108,7 @@ function createSyntheticFinalizedApplication(root: string, productVersion = "1.2
     sourceFiles,
     packageLockSha256: sha("2"),
     productVersion,
+    macBuildNumber: null,
     webFeedback: {
       state: "known",
       candidateBuildId: sha("3"),

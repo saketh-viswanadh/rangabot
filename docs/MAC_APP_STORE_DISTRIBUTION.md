@@ -12,6 +12,11 @@ or silently change the direct-download `darwin` edition.
 ## Product boundary
 
 - Bundle identifier: `com.rangabot.desktop`.
+- Marketing version: `1.2.0`.
+- Initial source-controlled Mac build number: `1.2.0`. Confirm it is greater
+  than every previously uploaded Mac build before the first upload; increment
+  only this build number for each replacement upload while the marketing
+  version remains `1.2.0`.
 - Initial price: free.
 - Initial architecture candidate: Apple silicon (`arm64`). Intel and a universal
   package remain a separate release decision and are not implied by this build.
@@ -29,10 +34,13 @@ or silently change the direct-download `darwin` edition.
 
 ## Required Apple setup
 
-1. Install full Xcode and select it with `xcode-select`.
+1. Install full Xcode and either select it with `xcode-select` or set
+   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` for each release
+   command.
 2. Sign in to the enrolled Apple Developer account in Xcode.
 3. Create Apple Development and Apple Distribution certificates.
-4. Create the certificate needed to sign the Mac App Store installer package.
+4. Create a Mac Installer Distribution certificate (or retain a valid legacy
+   `3rd Party Mac Developer Installer` identity) for the App Store package.
 5. Register the explicit App ID `com.rangabot.desktop` with App Sandbox.
 6. Create matching Mac App Store development and distribution provisioning
    profiles and download them locally.
@@ -61,13 +69,24 @@ or final deep-signature verification disagrees.
 export RANGABOT_MAC_TEAM_ID='YOURTEAMID'
 export RANGABOT_MAC_APP_SIGNING_IDENTITY='Apple Distribution: Your Name (YOURTEAMID)'
 export RANGABOT_MAC_PROVISIONING_PROFILE='/absolute/path/RangaBot_MAS_Distribution.provisionprofile'
-export RANGABOT_MAC_INSTALLER_SIGNING_IDENTITY='3rd Party Mac Developer Installer: Your Name (YOURTEAMID)'
+export RANGABOT_MAC_INSTALLER_SIGNING_IDENTITY='Mac Installer Distribution: Your Name (YOURTEAMID)'
 npm run desktop:mas:make:arm64
 ```
+
+Each signing-identity value may instead be the exact 40-hex SHA-1 fingerprint
+shown by `security find-identity -v`. The verifier resolves both values to
+certificate/private-key identities, binds the team through certificate subject
+OU and `codesign` TeamIdentifier, and binds the package to the resolved
+installer certificate's SHA-256 fingerprint.
 
 The resulting `.pkg` is a submission artifact, not proof of installability or
 approval. A distribution-signed `.app` normally cannot be launched directly;
 Apple must re-sign it through TestFlight or the store.
+
+Forge gives the installer a build-specific name such as
+`RangaBot-1.2.0-build-1.2.0-arm64-Mac-App-Store.pkg`. The source-controlled
+`package.json` values, packaged plist, desktop artifact manifest, and final
+package evidence must all agree on both version identities.
 
 ## Acceptance before upload
 

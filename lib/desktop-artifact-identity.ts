@@ -28,14 +28,15 @@ const {
   readdirSync,
 } = identityFilesystem;
 
-export const DESKTOP_ARTIFACT_SCHEMA_VERSION = 4;
+export const DESKTOP_ARTIFACT_SCHEMA_VERSION = 5;
 export const DESKTOP_SOURCE_BASE_COMMIT = "8b161635f79ac6a572524ba22e3af7364fe08a5b";
-export const DESKTOP_SOURCE_BASELINE_COMMIT = "762da810eef91c9cc4778ddeb8c22ab66187965e";
+export const DESKTOP_SOURCE_BASELINE_COMMIT = "5652184a1c1d1d8663b0054426fbe33a982d7af8";
 export const DESKTOP_FUSE_POLICY_NAME = "electron-43-hardened-v2";
 
 const sha256Pattern = /^[0-9a-f]{64}$/;
 const gitCommitPattern = /^[0-9a-f]{40}$/;
 const versionPattern = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/;
+const macBuildNumberPattern = /^[1-9]\d{0,3}(?:\.(?:0|[1-9]\d?)){0,2}$/u;
 const packageNamePattern = /^(?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]{0,127}$/;
 const buildPattern = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/;
 const nativeFilePattern = /\.(?:dylib|node|so|dll|exe)$/i;
@@ -148,8 +149,13 @@ export type DesktopArtifactTarget = {
   arch: DesktopArtifactArch;
 };
 
+function isSupportedDesktopTarget(platform: unknown, arch: unknown) {
+  return (platform === "darwin" && arch === "arm64")
+    || (platform === "win32" && arch === "x64");
+}
+
 export type DesktopArtifactManifest = {
-  schemaVersion: 4;
+  schemaVersion: 5;
   /** Founder-approved source merge from which Profiles v1 was developed. */
   sourceBaseCommit: string;
   desktopArtifactId: string;
@@ -163,6 +169,8 @@ export type DesktopArtifactManifest = {
   packageLockSha256: string;
   /** Product version shipped by package.json and the platform package. */
   productVersion: string;
+  /** CFBundleVersion for macOS; explicitly null on non-macOS targets. */
+  macBuildNumber: string | null;
   /** Historical web-feedback evidence; its source version is intentionally independent. */
   webFeedback: DesktopWebFeedbackIdentity;
   launchProfile: DesktopLaunchProfile;
@@ -214,10 +222,12 @@ export type DesktopArtifactVerificationReason =
   | "runtime-mismatch"
   | "resource-mismatch"
   | "product-version-mismatch"
+  | "mac-build-number-mismatch"
   | "distribution-unsigned";
 
 export type DesktopArtifactVerification = ResponseFeedbackCandidateInspection & {
   productVersion: string | null;
+  macBuildNumber: string | null;
   reason: DesktopArtifactVerificationReason;
   manifest: DesktopArtifactManifest | null;
 };
@@ -540,6 +550,7 @@ function desktopIdentityPayload(manifest: Omit<DesktopArtifactManifest, "desktop
     sourceManifestSha256: manifest.sourceManifestSha256,
     packageLockSha256: manifest.packageLockSha256,
     productVersion: manifest.productVersion,
+    macBuildNumber: manifest.macBuildNumber,
     webFeedback: manifest.webFeedback,
     launchProfile: manifest.launchProfile,
     runtimeVersions: manifest.runtimeVersions,
@@ -568,6 +579,9 @@ export function desktopArtifactBuildName(
   if (!versionPattern.test(productVersion) || !sha256Pattern.test(desktopArtifactId)) {
     throw new Error("Cannot name a desktop build without valid product and artifact identities.");
   }
+  if (typeof target !== "string" && !isSupportedDesktopTarget(target.platform, target.arch)) {
+    throw new Error("Desktop build identities support exactly macOS arm64 or Windows x64.");
+  }
   const targetName = typeof target === "string" ? target : `${target.platform}.${target.arch}`;
   return `${productVersion}+desktop.${targetName}.${desktopArtifactId.slice(0, 12)}`;
 }
@@ -585,10 +599,12 @@ export function createDesktopArtifactManifest(input: DesktopArtifactManifestInpu
   if (typeof input.sourceDirty !== "boolean" || !sha256Pattern.test(input.sourceManifestSha256)
     || !sha256Pattern.test(input.packageLockSha256)) throw new Error("Desktop source identity is incomplete.");
   if (!versionPattern.test(input.productVersion)) throw new Error("Desktop product version is invalid.");
-  if ((input.target.platform !== "darwin" && input.target.platform !== "win32")
-    || (input.target.arch !== "arm64" && input.target.arch !== "x64")
-    || (input.target.platform === "win32" && input.target.arch !== "x64")) {
-    throw new Error("Only architecture-specific macOS and Windows x64 desktop identities are supported.");
+  if (!isSupportedDesktopTarget(input.target.platform, input.target.arch)) {
+    throw new Error("Desktop artifact identities support exactly macOS arm64 or Windows x64.");
+  }
+  if ((input.target.platform === "darwin" && (typeof input.macBuildNumber !== "string" || !macBuildNumberPattern.test(input.macBuildNumber)))
+    || (input.target.platform === "win32" && input.macBuildNumber !== null)) {
+    throw new Error("Desktop Mac build number is invalid for the target platform.");
   }
   if (!validGeneratedAt(input.generatedAt)) throw new Error("generatedAt must be a canonical UTC ISO timestamp.");
   const webFeedback = normalizeWebFeedback(input.webFeedback);
@@ -624,6 +640,7 @@ export function createDesktopArtifactManifest(input: DesktopArtifactManifestInpu
     sourceFiles,
     packageLockSha256: input.packageLockSha256,
     productVersion: input.productVersion,
+    macBuildNumber: input.macBuildNumber,
     webFeedback,
     launchProfile,
     runtimeVersions,
@@ -645,7 +662,7 @@ export function createDesktopArtifactManifest(input: DesktopArtifactManifestInpu
 export function parseDesktopArtifactManifest(value: unknown): DesktopArtifactManifest | null {
   if (!isRecord(value) || !exactKeys(value, [
     "schemaVersion", "sourceBaseCommit", "desktopArtifactId", "sourceBaselineCommit", "sourceCommit", "sourceDirty", "sourceManifestSha256",
-    "sourceFiles", "packageLockSha256", "productVersion", "webFeedback", "launchProfile", "runtimeVersions", "target", "fuses", "packagingTooling", "bundleManifestSha256",
+    "sourceFiles", "packageLockSha256", "productVersion", "macBuildNumber", "webFeedback", "launchProfile", "runtimeVersions", "target", "fuses", "packagingTooling", "bundleManifestSha256",
     "resourceManifestSha256", "nativeManifestSha256", "bundleFiles", "resources", "natives", "generatedAt",
   ]) || value.schemaVersion !== DESKTOP_ARTIFACT_SCHEMA_VERSION
     || value.sourceBaseCommit !== DESKTOP_SOURCE_BASE_COMMIT
@@ -661,10 +678,11 @@ export function parseDesktopArtifactManifest(value: unknown): DesktopArtifactMan
     || typeof value.nativeManifestSha256 !== "string" || !sha256Pattern.test(value.nativeManifestSha256)
     || typeof value.generatedAt !== "string" || !validGeneratedAt(value.generatedAt)
     || !isRecord(value.target) || !exactKeys(value.target, ["platform", "arch"])
-    || (value.target.platform !== "darwin" && value.target.platform !== "win32")
-    || (value.target.arch !== "arm64" && value.target.arch !== "x64")
-    || (value.target.platform === "win32" && value.target.arch !== "x64")) return null;
+    || !isSupportedDesktopTarget(value.target.platform, value.target.arch)) return null;
   const target = { platform: value.target.platform, arch: value.target.arch } as DesktopArtifactTarget;
+  if ((target.platform === "darwin" && (typeof value.macBuildNumber !== "string" || !macBuildNumberPattern.test(value.macBuildNumber)))
+    || (target.platform === "win32" && value.macBuildNumber !== null)) return null;
+  const macBuildNumber = target.platform === "darwin" ? value.macBuildNumber as string : null;
   const webFeedback = parseWebFeedback(value.webFeedback);
   const launchProfile = parseDesktopLaunchProfile(value.launchProfile);
   const sourceFiles = parseFiles(value.sourceFiles);
@@ -688,6 +706,7 @@ export function parseDesktopArtifactManifest(value: unknown): DesktopArtifactMan
     sourceFiles,
     packageLockSha256: value.packageLockSha256,
     productVersion: value.productVersion,
+    macBuildNumber,
     webFeedback,
     launchProfile,
     runtimeVersions,
@@ -890,6 +909,9 @@ export function desktopRuntimeEvidenceFromResourceRoot(input: {
   if (arch !== "arm64" && arch !== "x64") throw new Error("Desktop runtime architecture is unsupported.");
   const platform = input.platform ?? process.platform;
   if (platform !== "darwin" && platform !== "win32") throw new Error("Desktop runtime platform is unsupported.");
+  if (!isSupportedDesktopTarget(platform, arch)) {
+    throw new Error("Desktop runtime evidence supports exactly macOS arm64 or Windows x64.");
+  }
   const next = packageVersionBelowResourceRoot(root, "next");
   const nativeModules = desktopNativePackageNames(platform, arch).map((name) => ({
     name,
@@ -1016,6 +1038,7 @@ function emptyVerification(state: "unknown" | "dirty" | "mixed", reason: Desktop
     artifactSha256: null,
     sourceVersion: null,
     productVersion: null,
+    macBuildNumber: null,
     reason,
     manifest,
   };
@@ -1046,13 +1069,22 @@ function runtimeMatches(manifest: DesktopArtifactManifest, runtime: DesktopRunti
   return true;
 }
 
-function packagedProductVersion(artifactRoot: string) {
+function packagedProductIdentity(artifactRoot: string, platform: DesktopArtifactTarget["platform"]) {
   const packagePath = join(artifactRoot, "rangabot-resources", "package.json");
-  const record = JSON.parse(readManifestFile(packagePath)) as { name?: unknown; version?: unknown };
+  const record = JSON.parse(readManifestFile(packagePath)) as {
+    name?: unknown;
+    version?: unknown;
+    desktopBuild?: unknown;
+  };
   if (record.name !== "rangabot" || typeof record.version !== "string" || !versionPattern.test(record.version)) {
     throw new Error("Packaged product metadata is invalid.");
   }
-  return record.version;
+  if (platform === "win32") return { productVersion: record.version, macBuildNumber: null } as const;
+  if (!isRecord(record.desktopBuild) || typeof record.desktopBuild.macBuildNumber !== "string"
+    || !macBuildNumberPattern.test(record.desktopBuild.macBuildNumber)) {
+    throw new Error("Packaged Mac build metadata is invalid.");
+  }
+  return { productVersion: record.version, macBuildNumber: record.desktopBuild.macBuildNumber } as const;
 }
 
 /**
@@ -1096,8 +1128,12 @@ export function inspectDesktopArtifact(options: {
   try {
     const resources = collectDesktopArtifactFiles(root, [relativeManifest]);
     if (!sameFiles(resources, manifest.resources)) return emptyVerification("mixed", "resource-mismatch", manifest);
-    if (packagedProductVersion(root) !== manifest.productVersion) {
+    const packagedProduct = packagedProductIdentity(root, manifest.target.platform);
+    if (packagedProduct.productVersion !== manifest.productVersion) {
       return emptyVerification("mixed", "product-version-mismatch", manifest);
+    }
+    if (packagedProduct.macBuildNumber !== manifest.macBuildNumber) {
+      return emptyVerification("mixed", "mac-build-number-mismatch", manifest);
     }
     const bundleFiles = collectDesktopBundleFiles(dirname(root), manifest.target.platform);
     if (!sameFiles(bundleFiles, manifest.bundleFiles)) return emptyVerification("mixed", "resource-mismatch", manifest);
@@ -1119,6 +1155,7 @@ export function inspectDesktopArtifact(options: {
     artifactSha256: manifest.desktopArtifactId,
     sourceVersion: manifest.webFeedback.sourceVersion,
     productVersion: manifest.productVersion,
+    macBuildNumber: manifest.macBuildNumber,
     reason: "known",
     manifest,
   };

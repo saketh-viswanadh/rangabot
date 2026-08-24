@@ -33,6 +33,11 @@ import {
   DESKTOP_FINDER_VERIFICATION_BUILD_PROFILE,
 } from "../lib/desktop-launch-profile.ts";
 import { collectResponseFeedbackCandidateFiles } from "../lib/response-feedback-candidate.ts";
+import { createDesktopDependencyNotice } from "../lib/desktop-legal-notices.ts";
+import {
+  auditOllamaArm64RuntimePayload,
+  inspectOllamaRuntimeLegalNotice,
+} from "../lib/ollama-runtime-legal.ts";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 const outputRoot = resolve(projectRoot, "desktop", "out");
@@ -54,9 +59,32 @@ const OLLAMA_RUNTIME_SHA256 = Object.freeze({
   win32: "7b4f6ce09c1f2c3b21561b323779beaf3ca3c7012f8e4522605a13cbbb19f0b8",
 });
 const ELECTRON_WINDOWS_X64_SHA256 = "ef0709cfa719739acce73de6f9b684304baf38c6454376638a70d34a7cecffe0";
-const ELECTRON_MAS_SHA256 = Object.freeze({
-  arm64: "8037c385407a2efc9b85b0d1b39121735571e0bc6a00eb44d29c1873fbe1a9d3",
-  x64: "a51158c5bb802cd441049fd733bfe803b6b5581f01dd83bbfb5cee07b45626c4",
+const ELECTRON_MAS_ARM64_SHA256 = "8037c385407a2efc9b85b0d1b39121735571e0bc6a00eb44d29c1873fbe1a9d3";
+const ELECTRON_LICENSE_PAYLOAD = Object.freeze({
+  sourceName: "LICENSE",
+  destinationName: "ELECTRON_LICENSE",
+  bytes: 1_096,
+  sha256: "5154e165bd6c2cc0cfbcd8916498c7abab0497923bafcd5cb07673fe8480087d",
+});
+const ELECTRON_LEGAL_PAYLOAD = Object.freeze({
+  darwin: Object.freeze([
+    ELECTRON_LICENSE_PAYLOAD,
+    Object.freeze({
+      sourceName: "LICENSES.chromium.html",
+      destinationName: "ELECTRON_CHROMIUM_LICENSES.html",
+      bytes: 19_956_019,
+      sha256: "4fc0507a046b9ecd0738b2dd64119b5ec8bc29ac0221b63edb693fd5fd497c87",
+    }),
+  ]),
+  win32: Object.freeze([
+    ELECTRON_LICENSE_PAYLOAD,
+    Object.freeze({
+      sourceName: "LICENSES.chromium.html",
+      destinationName: "ELECTRON_CHROMIUM_LICENSES.html",
+      bytes: 20_313_957,
+      sha256: "b911161e6594ec76b872498b423c54406168f2974e0d407a847f7de1e5ff94dd",
+    }),
+  ]),
 });
 
 function parseTarget(arguments_: string[]): DesktopArtifactTarget {
@@ -64,8 +92,9 @@ function parseTarget(arguments_: string[]): DesktopArtifactTarget {
   const platforms = arguments_.filter((argument) => argument.startsWith("--platform=")).map((argument) => argument.slice(11));
   if (values.length !== 1 || platforms.length !== 1 || !["arm64", "x64"].includes(values[0])
     || !["darwin", "win32"].includes(platforms[0]) || arguments_.length !== 2
+    || (platforms[0] === "darwin" && values[0] !== "arm64")
     || (platforms[0] === "win32" && values[0] !== "x64")) {
-    throw new Error("Usage: npm run desktop:prepare -- --platform=darwin|win32 --arch=arm64|x64 (Windows is x64 only)");
+    throw new Error("Desktop preparation supports exactly macOS arm64 or Windows x64.");
   }
   return { platform: platforms[0], arch: values[0] } as DesktopArtifactTarget;
 }
@@ -115,16 +144,22 @@ function packageVersion(name: string) {
   return record.version;
 }
 
-function productVersion() {
+function productIdentity() {
   const record = JSON.parse(readFileSync(resolve(projectRoot, "package.json"), "utf8")) as {
     name?: unknown;
     version?: unknown;
+    desktopBuild?: { macBuildNumber?: unknown };
   };
   if (record.name !== "rangabot" || typeof record.version !== "string"
     || !/^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/u.test(record.version)) {
     throw new Error("The desktop product version in package.json is invalid.");
   }
-  return record.version;
+  const macBuildNumber = record.desktopBuild?.macBuildNumber;
+  if (typeof macBuildNumber !== "string"
+    || !/^[1-9]\d{0,3}(?:\.(?:0|[1-9]\d?)){0,2}$/u.test(macBuildNumber)) {
+    throw new Error("The Mac build number in package.json is invalid.");
+  }
+  return Object.freeze({ productVersion: record.version, macBuildNumber });
 }
 
 function copyDirectory(source: string, destination: string) {
@@ -139,6 +174,9 @@ function copyFile(source: string, destination: string) {
 }
 
 function stageManagedModelRuntime(target: DesktopArtifactTarget, resourceRoot: string) {
+  if (target.platform === "darwin" && target.arch !== "arm64") {
+    throw new Error("Desktop preparation supports exactly macOS arm64 or Windows x64.");
+  }
   const cacheRoot = resolve(outputRoot, "runtime-cache");
   const archiveName = target.platform === "darwin"
     ? `ollama-darwin-v${OLLAMA_RUNTIME_VERSION}.tgz`
@@ -165,7 +203,6 @@ function stageManagedModelRuntime(target: DesktopArtifactTarget, resourceRoot: s
     for (const forbidden of [resolve(destination, "models"), resolve(destination, ".ollama")]) {
       if (existsSync(forbidden)) throw new Error("The managed runtime archive unexpectedly contains model storage.");
     }
-    copyFile(resolve(projectRoot, "THIRD_PARTY_NOTICES.md"), resolve(resourceRoot, "THIRD_PARTY_NOTICES.md"));
     return;
   }
   const thinMachO = (directory: string) => {
@@ -200,7 +237,57 @@ function stageManagedModelRuntime(target: DesktopArtifactTarget, resourceRoot: s
   };
   removeDanglingLinks(destination);
   chmodSync(resolve(destination, "ollama"), 0o755);
+}
+
+function stageDesktopLegalPayload(
+  resourceRoot: string,
+  target: DesktopArtifactTarget,
+  includeManagedRuntime: boolean,
+) {
+  copyFile(resolve(projectRoot, "LICENSE"), resolve(resourceRoot, "LICENSE"));
   copyFile(resolve(projectRoot, "THIRD_PARTY_NOTICES.md"), resolve(resourceRoot, "THIRD_PARTY_NOTICES.md"));
+  const electron = ELECTRON_LEGAL_PAYLOAD[target.platform].map((entry) => {
+    const source = resolve(projectRoot, "node_modules", "electron", "dist", entry.sourceName);
+    const sourceStatus = lstatSync(source);
+    if (sourceStatus.isSymbolicLink() || !sourceStatus.isFile() || sourceStatus.nlink !== 1
+      || realpathSync(source) !== source || sourceStatus.size !== entry.bytes || sha256File(source) !== entry.sha256) {
+      throw new Error(`The pinned Electron ${entry.sourceName} legal payload is missing or changed.`);
+    }
+    const destination = resolve(resourceRoot, entry.destinationName);
+    copyFile(source, destination);
+    const destinationStatus = lstatSync(destination);
+    if (!destinationStatus.isFile() || destinationStatus.isSymbolicLink()
+      || destinationStatus.size !== entry.bytes || sha256File(destination) !== entry.sha256) {
+      throw new Error(`The staged Electron ${entry.sourceName} legal payload changed during copy.`);
+    }
+    return Object.freeze({ path: entry.destinationName, bytes: entry.bytes, sha256: entry.sha256 });
+  });
+  const dependencyNotice = createDesktopDependencyNotice({ projectRoot, resourceRoot });
+  writeFileSync(resolve(resourceRoot, "DEPENDENCY_NOTICES.md"), dependencyNotice.notice, {
+    encoding: "utf8",
+    mode: 0o444,
+    flag: "wx",
+  });
+  let ollamaRuntimeNotice = null;
+  if (includeManagedRuntime && target.platform === "darwin") {
+    if (target.arch !== "arm64") {
+      throw new Error("The managed macOS x64 Ollama runtime has no reviewed target-specific legal inventory.");
+    }
+    const source = resolve(projectRoot, "desktop", "legal", "OLLAMA_RUNTIME_NOTICES.md");
+    const reviewed = inspectOllamaRuntimeLegalNotice(source);
+    const destination = resolve(resourceRoot, "OLLAMA_RUNTIME_NOTICES.md");
+    copyFile(source, destination);
+    const staged = inspectOllamaRuntimeLegalNotice(destination);
+    if (JSON.stringify(staged) !== JSON.stringify(reviewed)) {
+      throw new Error("The staged Ollama runtime legal notice changed during copy.");
+    }
+    ollamaRuntimeNotice = Object.freeze({ path: "OLLAMA_RUNTIME_NOTICES.md", ...staged });
+  }
+  return Object.freeze({
+    dependencyNotice,
+    electron: Object.freeze(electron),
+    ollamaRuntimeNotice,
+  });
 }
 
 function removeGeneratedOutput(path: string) {
@@ -291,18 +378,21 @@ function prepareOfflineElectronZip(target: DesktopArtifactTarget) {
     if (sha256File(zipPath) !== ELECTRON_WINDOWS_X64_SHA256) throw new Error("The pinned Windows Electron archive checksum is invalid.");
     return zipPath;
   }
+  if (target.arch !== "arm64") {
+    throw new Error("Desktop preparation supports exactly macOS arm64 or Windows x64.");
+  }
   const distribution = process.env.RANGABOT_DESKTOP_DISTRIBUTION;
   if (distribution !== undefined && distribution !== "mas-development" && distribution !== "mas-distribution") {
     throw new Error("The desktop distribution is not recognized.");
   }
   if (distribution?.startsWith("mas-")) {
     const zipPath = resolve(zipRoot, `electron-v${electronVersion}-mas-${target.arch}.zip`);
-    if (!existsSync(zipPath) || sha256File(zipPath) !== ELECTRON_MAS_SHA256[target.arch]) {
+    if (!existsSync(zipPath) || sha256File(zipPath) !== ELECTRON_MAS_ARM64_SHA256) {
       rmSync(zipPath, { force: true });
       execFileSync("/usr/bin/curl", ["--fail", "--location", "--show-error", "--output", zipPath,
         `https://github.com/electron/electron/releases/download/v${electronVersion}/electron-v${electronVersion}-mas-${target.arch}.zip`], { stdio: "inherit" });
     }
-    if (sha256File(zipPath) !== ELECTRON_MAS_SHA256[target.arch]) {
+    if (sha256File(zipPath) !== ELECTRON_MAS_ARM64_SHA256) {
       throw new Error("The pinned Mac App Store Electron archive checksum is invalid.");
     }
     return zipPath;
@@ -311,8 +401,7 @@ function prepareOfflineElectronZip(target: DesktopArtifactTarget) {
   const executable = resolve(appPath, "Contents", "MacOS", "Electron");
   if (!existsSync(executable)) throw new Error("The exact installed Electron app is unavailable for offline packaging.");
   const reported = execFileSync("/usr/bin/lipo", ["-archs", executable], { encoding: "utf8" }).trim().split(/\s+/);
-  const expected = target.arch === "arm64" ? "arm64" : "x86_64";
-  if (reported.length !== 1 || reported[0] !== expected) {
+  if (reported.length !== 1 || reported[0] !== "arm64") {
     throw new Error(`The installed Electron app does not provide an exact ${target.arch} payload.`);
   }
   const zipPath = resolve(zipRoot, `electron-v${electronVersion}-darwin-${target.arch}.zip`);
@@ -386,6 +475,18 @@ function assertNoPrivatePayload(files: readonly DesktopArtifactFile[]) {
   if (forbidden) throw new Error(`Desktop resource payload contains a forbidden private/developer path: ${forbidden.path}.`);
 }
 
+function assertNoBrokenSharpPayload(files: readonly DesktopArtifactFile[]) {
+  const forbidden = files.find((file) => {
+    const lower = file.path.toLowerCase();
+    return /(^|\/)node_modules\/(?:sharp|@img)(?:\/|$)/.test(lower)
+      || /(^|\/)sharp[^/]*\.node$/.test(lower)
+      || /(^|\/)libvips[^/]*\.(?:dylib|so|dll)$/.test(lower);
+  });
+  if (forbidden) {
+    throw new Error(`Desktop standalone unexpectedly contains the disabled Sharp/libvips runtime: ${forbidden.path}.`);
+  }
+}
+
 const target = parseTarget(process.argv.slice(2));
 const { arch } = target;
 const desktopDistribution = process.env.RANGABOT_DESKTOP_DISTRIBUTION;
@@ -415,7 +516,7 @@ assertBaseline();
 const commits = sourceCommits();
 if (sourceDirty()) throw new Error("Desktop packaging requires an exact clean source commit.");
 const source = sourceManifest();
-const sourceProductVersion = productVersion();
+const sourceProductIdentity = productIdentity();
 const stagingBuildId = `desktop-stage-${source.sha256.slice(0, 16)}`;
 const electronZipPath = prepareOfflineElectronZip(target);
 const verification = launchProfile.kind === DESKTOP_FINDER_VERIFICATION_BUILD_PROFILE;
@@ -444,9 +545,18 @@ if (compilation.status !== 0 || compilation.signal) throw new Error("Electron sh
 mkdirSync(resourceRoot, { recursive: true, mode: 0o755 });
 stageStandalone(target, resourceRoot);
 if (!verification) stageManagedModelRuntime(target, resourceRoot);
+let ollamaRuntimeLegal: ReturnType<typeof auditOllamaArm64RuntimePayload> | null = null;
+if (!verification && target.platform === "darwin") {
+  if (target.arch !== "arm64") {
+    throw new Error("The managed macOS x64 Ollama runtime has no reviewed target-specific legal inventory.");
+  }
+  ollamaRuntimeLegal = auditOllamaArm64RuntimePayload(resolve(resourceRoot, "runtime", "ollama"));
+}
 materializeSafeStagedSymlinks(resourceRoot, resourceRoot);
+const legalPayload = stageDesktopLegalPayload(resourceRoot, target, !verification);
 const resources = collectDesktopArtifactFiles(resourceRoot);
 assertNoPrivatePayload(resources);
+assertNoBrokenSharpPayload(resources);
 const natives = resources.filter((file) => /\.(?:node|dylib|so|dll|exe)$/i.test(file.path));
 const confirmedCommits = sourceCommits();
 const confirmedSource = sourceManifest();
@@ -455,7 +565,7 @@ if (sourceDirty()
   || confirmedCommits.head !== commits.head
   || confirmedSource.sha256 !== source.sha256
   || JSON.stringify(confirmedSource.files) !== JSON.stringify(source.files)
-  || productVersion() !== sourceProductVersion) {
+  || JSON.stringify(productIdentity()) !== JSON.stringify(sourceProductIdentity)) {
   throw new Error("Desktop source identity changed during packaging preparation.");
 }
 const generatedAt = new Date().toISOString();
@@ -467,7 +577,8 @@ const manifest = createDesktopArtifactManifest({
   sourceManifestSha256: source.sha256,
   sourceFiles: source.files,
   packageLockSha256: sha256File(resolve(projectRoot, "package-lock.json")),
-  productVersion: sourceProductVersion,
+  productVersion: sourceProductIdentity.productVersion,
+  macBuildNumber: target.platform === "darwin" ? sourceProductIdentity.macBuildNumber : null,
   webFeedback: loadWebFeedback(),
   launchProfile,
   runtimeVersions: {
@@ -515,12 +626,24 @@ console.log(JSON.stringify({
   profilesBehaviorCommit: manifest.sourceBaselineCommit,
   packagingCommit: manifest.sourceCommit,
   productVersion: manifest.productVersion,
+  macBuildNumber: manifest.macBuildNumber,
   sourceDirty: manifest.sourceDirty,
   target: manifest.target,
   launchProfile: manifest.launchProfile,
   sourceManifestSha256: manifest.sourceManifestSha256,
   stagingBuildId,
   packageLockSha256: manifest.packageLockSha256,
+  dependencyNotice: {
+    dependencies: legalPayload.dependencyNotice.dependencies.length,
+    bytes: legalPayload.dependencyNotice.noticeBytes,
+    sha256: legalPayload.dependencyNotice.noticeSha256,
+  },
+  electronLegalPayload: legalPayload.electron,
+  ollamaRuntimeLegal: ollamaRuntimeLegal === null ? null : {
+    retainedFiles: ollamaRuntimeLegal.files,
+    executable: ollamaRuntimeLegal.executable,
+    notice: legalPayload.ollamaRuntimeNotice,
+  },
   resourceManifestSha256: manifest.resourceManifestSha256,
   nativeManifestSha256: manifest.nativeManifestSha256,
   resources: manifest.resources.length,
