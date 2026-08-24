@@ -270,7 +270,7 @@ context with verified-usage retrieval, and governed capability routing with
 truthful resource receipts, bounded mechanical Finish & Verify, goal-preserving
 turn recovery, authoritative conversation and local-resource binding guards,
 and the transparent assistant chat mark at commit
-`bd36c5352f72ff8e15ccd14c69bf1bc95d551e47`.
+`f5df9d75c0fbddeb1432aea009bf6b78367bc2b5`.
 The generated v3 manifest records
 the exact clean packaging HEAD as `sourceCommit`; the installed verifier uses
 that value as its commit identity and does not require `.git`.
