@@ -8,7 +8,7 @@ import type { ConversationMode } from "./conversation-turns.ts";
 import { classifyDirectMemoryRequest, declinesApprovedMemory, executeDirectMemoryRequest, type DirectMemoryRequest } from "./memories.ts";
 import { auditFinishedAnswer, deriveFinishVerificationPlan, deterministicArithmeticAnswer, finishVerificationReceipt } from "./finish-verification.ts";
 import { getAllowedRepository, type AllowedRepository } from "./repositories.ts";
-import { previewRepositoryFile, type CodePreview } from "./repository-search.ts";
+import { codePreviewSha256, previewRepositoryFile, type CodePreview } from "./repository-search.ts";
 import type { ChatMessage } from "./providers/types.ts";
 
 export type CoreChatDispatchInput = {
@@ -178,7 +178,11 @@ export async function dispatchCoreChat(input: CoreChatDispatchInput, dependencie
     }
     if (!repository) return { response: Response.json({ error: "That folder is no longer approved." }, { status: 400 }), localCodeContext, capabilityPlan, usedContexts, attemptedContexts, approvedMemoryAllowed };
     try {
-      localCodeContext = dependencies.formatContext(repository, dependencies.preview(repository, input.codeContext.path, input.codeContext.line));
+      const preview = dependencies.preview(repository, input.codeContext.path, input.codeContext.line);
+      if (input.codeContext.previewSha256 && codePreviewSha256(preview) !== input.codeContext.previewSha256) {
+        return { response: Response.json({ error: "The attached code excerpt changed. Review and attach it again." }, { status: 409 }), localCodeContext, capabilityPlan, usedContexts, attemptedContexts, approvedMemoryAllowed };
+      }
+      localCodeContext = dependencies.formatContext(repository, preview);
     } catch (error) {
       throw new CapabilityExecutionError(error, capabilityPlan, usedContexts, attemptedContexts);
     }

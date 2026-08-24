@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync } from "node:fs";
 import { extname, relative, resolve, sep } from "node:path";
 import { assertExternalFilesystemPathAccess } from "./desktop-external-filesystem-policy.ts";
@@ -5,6 +6,15 @@ import { validateAllowedRepositoryRoot, type AllowedRepository } from "./reposit
 
 export type CodeSearchResult = { path: string; line: number; excerpt: string };
 export type CodePreview = { path: string; startLine: number; focusLine: number; lines: string[] };
+
+export function codePreviewSha256(preview: CodePreview) {
+  return createHash("sha256").update(JSON.stringify({
+    path: preview.path,
+    startLine: preview.startLine,
+    focusLine: preview.focusLine,
+    lines: preview.lines,
+  })).digest("hex");
+}
 
 const ignoredDirectories = new Set([".git", ".next", ".turbo", ".venv", "__pycache__", "build", "coverage", "dist", "node_modules", "target", "vendor"]);
 const searchableExtensions = new Set([

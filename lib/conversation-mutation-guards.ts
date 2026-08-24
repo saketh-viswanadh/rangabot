@@ -1,4 +1,10 @@
-import { getConversationDatabase } from "./conversations.ts";
+import {
+  getConversation,
+  getConversationDatabase,
+  setConversationDataset,
+  setConversationProject,
+  type Conversation,
+} from "./conversations.ts";
 import {
   ConversationArtifactReferenceError,
   deleteConversationRecordWithArtifacts,
@@ -8,9 +14,90 @@ import {
   type ArtifactDirectoryStager,
   type StagedArtifactDeletion,
 } from "./conversation-artifacts.ts";
-import { recoverExpiredConversationTurns } from "./conversation-turns.ts";
+import {
+  conversationContextBinding,
+  recoverExpiredConversationTurns,
+  type ConversationContextBinding,
+} from "./conversation-turns.ts";
 
 export type GuardedDeleteResult = "deleted" | "deleted-cleanup-pending" | "not-found" | "turn-in-progress" | "artifact-cleanup-failed";
+export type GuardedConversationBindingUpdate =
+  | { kind: "updated"; conversation: Conversation }
+  | { kind: "not-found" }
+  | { kind: "stale-binding" }
+  | { kind: "turn-in-progress" };
+
+function sameConversationBinding(left: ConversationContextBinding, right: ConversationContextBinding) {
+  return left.projectId === right.projectId
+    && left.datasetId === right.datasetId
+    && left.datasetSha256 === right.datasetSha256
+    && left.contextMessageCount === right.contextMessageCount;
+}
+
+function updateConversationBindingWhenIdle(
+  id: string,
+  expectedBinding: ConversationContextBinding,
+  mutate: () => boolean,
+): GuardedConversationBindingUpdate {
+  recoverExpiredConversationTurns();
+  const database = getConversationDatabase();
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const before = getConversation(id);
+    if (!before) {
+      database.exec("ROLLBACK");
+      return { kind: "not-found" };
+    }
+    if (!sameConversationBinding(conversationContextBinding(before), expectedBinding)) {
+      database.exec("ROLLBACK");
+      return { kind: "stale-binding" };
+    }
+    const pending = database.prepare(`
+      SELECT 1 FROM conversation_turns
+      WHERE conversation_id = ? AND status = 'pending'
+      LIMIT 1
+    `).get(id);
+    if (pending) {
+      database.exec("ROLLBACK");
+      return { kind: "turn-in-progress" };
+    }
+    if (!mutate()) {
+      database.exec("ROLLBACK");
+      return { kind: "not-found" };
+    }
+    const conversation = getConversation(id);
+    if (!conversation) throw new Error("The updated conversation could not be read.");
+    database.exec("COMMIT");
+    return { kind: "updated", conversation };
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function setConversationDatasetWhenIdle(
+  id: string,
+  datasetId: string | null,
+  expectedBinding: ConversationContextBinding,
+): GuardedConversationBindingUpdate {
+  return updateConversationBindingWhenIdle(
+    id,
+    expectedBinding,
+    () => Boolean(setConversationDataset(id, datasetId)),
+  );
+}
+
+export function setConversationProjectWhenIdle(
+  id: string,
+  projectId: string | null,
+  expectedBinding: ConversationContextBinding,
+): GuardedConversationBindingUpdate {
+  return updateConversationBindingWhenIdle(
+    id,
+    expectedBinding,
+    () => Boolean(setConversationProject(id, projectId)),
+  );
+}
 
 function guardedDelete(checkPending: () => boolean, mutate: () => boolean): GuardedDeleteResult {
   recoverExpiredConversationTurns();

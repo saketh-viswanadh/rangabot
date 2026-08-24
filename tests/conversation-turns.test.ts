@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
@@ -8,7 +8,13 @@ import type { ConversationTurnOptions } from "../lib/conversation-turns.ts";
 import type { ChatMessage } from "../lib/providers/types.ts";
 
 const testDatabase = resolve("data/conversation-turns-test.db");
+const testDatasetRegistry = resolve("data/conversation-turns-datasets-test.json");
+const testDatasetContextRegistry = resolve("data/conversation-turns-dataset-context-test.json");
+const approvedDatasetId = "approved-local-fixture";
+const approvedDatasetSha256 = "a".repeat(64);
 for (const suffix of ["", "-shm", "-wal"]) rmSync(`${testDatabase}${suffix}`, { force: true });
+rmSync(testDatasetRegistry, { force: true });
+rmSync(testDatasetContextRegistry, { force: true });
 
 // Start with the pre-lifecycle shape to prove the additive schema migration does
 // not rewrite an existing transcript.
@@ -39,11 +45,39 @@ legacyDatabase.close();
 
 const conversations = await import("../lib/conversations.ts");
 const turns = await import("../lib/conversation-turns.ts");
+const datasets = await import("../lib/datasets.ts");
+const datasetContexts = await import("../lib/dataset-semantic-contexts.ts");
 conversations.setConversationDatabasePathForTests(testDatabase);
+datasets.setDatasetRegistryPathForTests(testDatasetRegistry);
+datasetContexts.setDatasetSemanticContextRegistryPathForTests(testDatasetContextRegistry);
+
+function writeApprovedDatasetFixture() {
+  writeFileSync(testDatasetRegistry, JSON.stringify([{
+    id: approvedDatasetId,
+    name: "approved.csv",
+    path: resolve("data/approved-local-fixture.csv"),
+    format: "csv",
+    sizeBytes: 1,
+    addedAt: "2026-01-01T00:00:00.000Z",
+    approvalVersion: 2,
+    fileIdentity: {
+      device: "1",
+      inode: "1",
+      sizeBytes: 1,
+      modifiedNs: "1",
+      changedNs: "1",
+      sha256: approvedDatasetSha256,
+    },
+  }]), { mode: 0o600 });
+}
 
 test.after(() => {
   conversations.closeConversationDatabaseForTests();
+  datasets.resetDatasetRegistryPathForTests();
+  datasetContexts.resetDatasetSemanticContextRegistryPathForTests();
   for (const suffix of ["", "-shm", "-wal"]) rmSync(`${testDatabase}${suffix}`, { force: true });
+  rmSync(testDatasetRegistry, { force: true });
+  rmSync(testDatasetContextRegistry, { force: true });
 });
 
 function begin(
@@ -112,19 +146,21 @@ test("a turn id is bound to the complete normalized request, including mode and 
 });
 
 test("first-turn idempotency binds project and dataset creation context", () => {
+  const projectA = conversations.createProject("Project A");
+  const projectB = conversations.createProject("Project B");
   const turnId = randomUUID();
   const first = turns.beginConversationTurn({
     id: turnId,
-    projectId: "project-a",
+    projectId: projectA.id,
     datasetId: null,
     userMessage: { role: "user", content: "Create this chat once." },
     options: { mode: "smart" },
   });
-  assert.equal(first.turn.options.projectId, "project-a");
+  assert.equal(first.turn.options.projectId, projectA.id);
   assert.throws(
     () => turns.beginConversationTurn({
       id: turnId,
-      projectId: "project-b",
+      projectId: projectB.id,
       datasetId: null,
       userMessage: { role: "user", content: "Create this chat once." },
       options: { mode: "smart" },
@@ -132,13 +168,99 @@ test("first-turn idempotency binds project and dataset creation context", () => 
     (error: unknown) => error instanceof turns.ConversationTurnError && error.code === "conflict",
   );
   conversations.deleteConversation(first.conversationId);
+  conversations.deleteProject(projectA.id);
+  conversations.deleteProject(projectB.id);
+});
+
+test("first-turn creation rejects a project deleted before atomic admission", () => {
+  const project = conversations.createProject("Deleted before send");
+  assert.equal(conversations.deleteProject(project.id), true);
+  const turnId = randomUUID();
+  const beforeCount = conversations.listConversations().length;
+  assert.throws(
+    () => turns.beginConversationTurn({
+      id: turnId,
+      projectId: project.id,
+      datasetId: null,
+      userMessage: { role: "user", content: "Do not create this chat in a deleted project." },
+      options: { mode: "smart" },
+    }),
+    (error: unknown) => error instanceof turns.ConversationTurnError && error.code === "conflict",
+  );
+  assert.equal(turns.getConversationTurn(turnId), null);
+  assert.equal(conversations.listConversations().length, beforeCount);
+});
+
+test("an existing-chat turn rejects a stale client-observed history binding before creation", () => {
+  const conversation = conversations.createConversation(legacyMessages);
+  const expectedConversationBinding = {
+    projectId: conversation.projectId,
+    datasetId: conversation.datasetId,
+    datasetSha256: null,
+    contextMessageCount: conversation.messages.length,
+  };
+  assert.throws(
+    () => turns.beginConversationTurn({
+      id: randomUUID(),
+      conversationId: conversation.id,
+      expectedConversationBinding: { ...expectedConversationBinding, contextMessageCount: legacyMessages.length - 1 },
+      userMessage: { role: "user", content: "Do not use unseen history." },
+      options: { mode: "smart" },
+    }),
+    (error: unknown) => error instanceof turns.ConversationTurnError && error.code === "conflict",
+  );
+  assert.equal(turns.listConversationTurns(conversation.id).length, 0);
+
+  const accepted = turns.beginConversationTurn({
+    id: randomUUID(),
+    conversationId: conversation.id,
+    expectedConversationBinding,
+    userMessage: { role: "user", content: "Use only the history I reviewed." },
+    options: { mode: "smart" },
+  });
+  assert.equal(accepted.turn.contextMessageCount, legacyMessages.length);
+  turns.cancelConversationTurn(accepted.turn.id);
+});
+
+test("a recovered request is admitted only against the exact current conversation context", () => {
+  const conversation = conversations.createConversation(legacyMessages, null, null);
+  const failed = begin(conversation.id, "Original failed goal.", { mode: "smart" });
+  turns.failConversationTurn(failed.turn.id, "timeout", "The original local request timed out.");
+  const recoveryBinding = {
+    sourceTurnId: failed.turn.id,
+    conversationId: conversation.id,
+    projectId: null,
+    datasetId: null,
+    datasetSha256: null,
+    contextMessageCount: legacyMessages.length,
+  };
+  const accepted = begin(conversation.id, "Continue the recovered goal.", { mode: "smart", recoveryBinding });
+  assert.equal(accepted.replayed, false);
+  turns.cancelConversationTurn(accepted.turn.id);
+
+  assert.throws(
+    () => begin(conversation.id, "Reject a forged recovery origin.", {
+      mode: "smart",
+      recoveryBinding: { ...recoveryBinding, sourceTurnId: randomUUID() },
+    }),
+    (error: unknown) => error instanceof turns.ConversationTurnError && error.code === "conflict",
+  );
+
+  assert.throws(
+    () => begin(conversation.id, "Do not attach stale context.", {
+      mode: "smart",
+      recoveryBinding: { ...recoveryBinding, contextMessageCount: legacyMessages.length + 2 },
+    }),
+    (error: unknown) => error instanceof turns.ConversationTurnError && error.code === "conflict",
+  );
 });
 
 test("a pre-project-hash turn upgrades only when its saved conversation binding matches", () => {
+  const legacyProject = conversations.createProject("Legacy project");
   const turnId = randomUUID();
   const input = {
     id: turnId,
-    projectId: "legacy-project",
+    projectId: legacyProject.id,
     datasetId: null,
     userMessage: { role: "user" as const, content: "Recover this ambiguous start safely." },
     options: { mode: "smart" as const },
@@ -159,9 +281,10 @@ test("a pre-project-hash turn upgrades only when its saved conversation binding 
   );
   const replay = turns.beginConversationTurn(input);
   assert.equal(replay.replayed, true);
-  assert.equal(replay.turn.options.projectId, "legacy-project");
+  assert.equal(replay.turn.options.projectId, legacyProject.id);
   assert.notEqual(replay.turn.requestHash, oldHash);
   conversations.deleteConversation(started.conversationId);
+  conversations.deleteProject(legacyProject.id);
 });
 
 test("claimed prompt context is bounded without losing the current request", () => {
@@ -269,6 +392,41 @@ test("cancelled and failed turns remain inspectable but never enter canonical mo
   assert.equal(conversations.listConversations({ query: "untrusted failed partial" }).length, 0);
 });
 
+test("failed and cancelled reopen projections never change the canonical binding count", () => {
+  const conversation = conversations.createConversation(legacyMessages);
+  const expectedConversationBinding = {
+    projectId: conversation.projectId,
+    datasetId: conversation.datasetId,
+    datasetSha256: null,
+    contextMessageCount: conversation.messages.length,
+  };
+  const cancelled = turns.beginConversationTurn({
+    id: randomUUID(),
+    conversationId: conversation.id,
+    expectedConversationBinding,
+    userMessage: { role: "user", content: "Cancelled request must remain display-only." },
+    options: { mode: "smart" },
+  });
+  turns.cancelConversationTurn(cancelled.turn.id, { role: "assistant", content: "Cancelled partial." });
+  const failed = turns.beginConversationTurn({
+    id: randomUUID(),
+    conversationId: conversation.id,
+    expectedConversationBinding,
+    userMessage: { role: "user", content: "Failed request must remain display-only." },
+    options: { mode: "smart" },
+  });
+  turns.failConversationTurn(failed.turn.id, "timeout", "Failed partial.", { role: "assistant", content: "Failed partial." });
+
+  const reopened = turns.getConversationTimeline(conversation.id);
+  const canonical = conversations.getConversation(conversation.id);
+  assert.equal(reopened?.messages.length, legacyMessages.length + 4);
+  assert.equal(reopened?.messages.some((message) => message.turn?.status === "cancelled"), true);
+  assert.equal(reopened?.messages.some((message) => message.turn?.status === "failed"), true);
+  assert.deepEqual(canonical?.messages, legacyMessages);
+  assert.equal(canonical?.messages.length, cancelled.turn.contextMessageCount);
+  assert.equal(canonical?.messages.length, failed.turn.contextMessageCount);
+});
+
 test("an explicit cancellation can be enriched by the server-observed stream partial", () => {
   const conversation = conversations.createConversation([]);
   const turnId = randomUUID();
@@ -297,19 +455,63 @@ test("competing terminal transitions preserve exactly one canonical outcome", as
 });
 
 test("first-turn creation is atomic and binds its private dataset snapshot", () => {
+  writeApprovedDatasetFixture();
   const turnId = randomUUID();
   const started = turns.beginConversationTurn({
     id: turnId,
     projectId: null,
-    datasetId: "approved-local-fixture",
+    datasetId: approvedDatasetId,
     userMessage: { role: "user", content: "Analyse the approved data." },
     options: { mode: "smart" },
   });
 
-  assert.equal(started.turn.options.datasetId, "approved-local-fixture");
+  assert.equal(started.turn.options.datasetId, approvedDatasetId);
+  assert.equal(started.turn.options.datasetSha256, approvedDatasetSha256);
   assert.equal(conversations.getConversation(started.conversationId)?.messages.length, 0);
-  assert.equal(conversations.getConversation(started.conversationId)?.datasetId, "approved-local-fixture");
+  assert.equal(conversations.getConversation(started.conversationId)?.datasetId, approvedDatasetId);
   assert.equal(conversations.deleteConversation(started.conversationId), true);
+});
+
+test("a revoked stored dataset reopens as an effective null binding and cannot enter a future turn", () => {
+  writeApprovedDatasetFixture();
+  const conversation = conversations.createConversation(legacyMessages, null, approvedDatasetId);
+  const beforeRevoke = turns.conversationContextBinding(conversation);
+  assert.equal(beforeRevoke.datasetId, approvedDatasetId);
+  assert.equal(beforeRevoke.datasetSha256, approvedDatasetSha256);
+
+  assert.equal(datasets.revokeDataset(approvedDatasetId), true);
+  const canonical = conversations.getConversation(conversation.id);
+  assert.equal(canonical?.datasetId, approvedDatasetId, "the stored row remains available for explicit reconciliation");
+  assert.ok(canonical);
+  if (!canonical) return;
+  const reopenedBinding = turns.conversationContextBinding(canonical);
+  assert.deepEqual(reopenedBinding, {
+    projectId: null,
+    datasetId: null,
+    datasetSha256: null,
+    contextMessageCount: legacyMessages.length,
+  });
+
+  assert.throws(
+    () => turns.beginConversationTurn({
+      id: randomUUID(),
+      conversationId: conversation.id,
+      expectedConversationBinding: beforeRevoke,
+      userMessage: { role: "user", content: "Do not inherit the revoked dataset." },
+      options: { mode: "smart" },
+    }),
+    (error: unknown) => error instanceof turns.ConversationTurnError && error.code === "conflict",
+  );
+  const started = turns.beginConversationTurn({
+    id: randomUUID(),
+    conversationId: conversation.id,
+    expectedConversationBinding: reopenedBinding,
+    userMessage: { role: "user", content: "Continue without the revoked dataset." },
+    options: { mode: "smart" },
+  });
+  assert.equal(started.turn.options.datasetId, null);
+  assert.equal(started.turn.options.datasetSha256, null);
+  turns.cancelConversationTurn(started.turn.id);
 });
 
 test("a failed atomic completion leaves no canonical pair and can be terminalized", () => {

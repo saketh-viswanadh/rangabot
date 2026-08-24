@@ -4,8 +4,11 @@ import { formatCodeContext, isCodeContextRequest } from "../lib/code-context.ts"
 
 test("validates explicit code context references", () => {
   assert.equal(isCodeContextRequest({ repositoryId: "repo-1", path: "src/math.ts", line: 12 }), true);
+  assert.equal(isCodeContextRequest({ repositoryId: "repo-1", path: "src/math.ts", line: 12, previewSha256: "a".repeat(64) }), true);
   assert.equal(isCodeContextRequest({ repositoryId: "repo-1", path: "", line: 12 }), false);
   assert.equal(isCodeContextRequest({ repositoryId: "repo-1", path: "src/math.ts", line: 0 }), false);
+  assert.equal(isCodeContextRequest({ repositoryId: "repo-1", path: "src/math.ts", line: 12, previewSha256: "A".repeat(64) }), false);
+  assert.equal(isCodeContextRequest({ repositoryId: "repo-1", path: "src/math.ts", line: 12, extra: true }), false);
 });
 
 test("formats only the bounded preview with line numbers", () => {

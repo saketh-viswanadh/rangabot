@@ -119,7 +119,14 @@ export function revokeDataset(id: string) {
   const next = datasets.filter((dataset) => dataset.id !== id);
   if (next.length === datasets.length) return false;
   writeRegistry(next);
-  removeDatasetSemanticMemory(id);
+  try {
+    removeDatasetSemanticMemory(id);
+  } catch (error) {
+    // Restore the approval so a retry can still remove both private records;
+    // do not strand semantic context behind a permanent not-found response.
+    writeRegistry(datasets);
+    throw error;
+  }
   return true;
 }
 

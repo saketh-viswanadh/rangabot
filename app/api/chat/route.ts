@@ -5,6 +5,7 @@ import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatal
 import { generateGroundedTeacherAnswer } from "@/lib/knowledge-grounding";
 import { buildTeacherMessages, formatKnowledgeContext } from "@/lib/teacher-mode";
 import { isCodeContextRequest } from "@/lib/code-context";
+import { getApprovedDataset } from "@/lib/datasets";
 import { buildConversationSummaryFallback, buildWordConversationPrompt, buildWordDraftPrompt, buildWordSourceTranscript, createWordArtifact, isWordConversationSummaryRequest, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, removeWordArtifact, validateWordDraftForBrief, type WordDocumentBrief } from "@/lib/word-documents";
 import { findStoryPack } from "@/lib/story-packs";
 import { buildKnowledgeSearchQuery } from "@/lib/knowledge-query-planning";
@@ -68,6 +69,7 @@ type ChatGenerationInput = {
   mode?: unknown;
   codeContext?: unknown;
   datasetId?: unknown;
+  datasetSha256?: unknown;
   conversationId?: unknown;
 };
 
@@ -76,7 +78,14 @@ async function generateChatResponse(body: ChatGenerationInput, signal?: AbortSig
       return NextResponse.json({ error: "The attached code reference is invalid." }, { status: 400 });
     }
     if (body.datasetId !== undefined && (typeof body.datasetId !== "string" || body.datasetId.length < 1 || body.datasetId.length > 120 || body.datasetId !== body.datasetId.trim())) return NextResponse.json({ error: "The attached dataset reference is invalid." }, { status: 400 });
+    if (body.datasetSha256 !== undefined && (typeof body.datasetSha256 !== "string" || !/^[a-f0-9]{64}$/.test(body.datasetSha256))) return NextResponse.json({ error: "The attached dataset identity is invalid." }, { status: 400 });
     if (body.conversationId !== undefined && (typeof body.conversationId !== "string" || body.conversationId.length < 1 || body.conversationId.length > 120)) return NextResponse.json({ error: "The conversation reference is invalid." }, { status: 400 });
+    if (typeof body.datasetId === "string" && typeof body.datasetSha256 === "string") {
+      const dataset = getApprovedDataset(body.datasetId);
+      if (!dataset || dataset.fileIdentity.sha256 !== body.datasetSha256) {
+        return NextResponse.json({ error: "The attached dataset changed after this request was saved. Review and attach it again.", code: "dataset-changed" }, { status: 409 });
+      }
+    }
 
     const mode: ConversationMode = body.mode === "smart" || body.mode === "teach" || body.mode === "codex" ? body.mode : "local";
     let core: Awaited<ReturnType<typeof dispatchCoreChat>>;
@@ -423,6 +432,7 @@ async function handleVersionedChat(request: Request, body: VersionedChatBody) {
       mode: claim.turn.options.mode,
       ...(claim.turn.options.codeContext ? { codeContext: claim.turn.options.codeContext } : {}),
       ...(claim.turn.options.datasetId ? { datasetId: claim.turn.options.datasetId } : {}),
+      ...(claim.turn.options.datasetSha256 ? { datasetSha256: claim.turn.options.datasetSha256 } : {}),
       conversationId: body.conversationId,
     }, turnSignal);
     if (!response.ok) return await recordFailedTurnResponse(response, callbacks, turnSignal);

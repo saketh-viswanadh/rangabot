@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import { isCodeContextRequest } from "@/lib/code-context";
 import {
   CONVERSATION_TURN_PROTOCOL_VERSION,
+  type ConversationContextBinding,
   ConversationTurnError,
   beginConversationTurn,
   cancelConversationTurn,
+  isValidConversationContextBinding,
   isValidConversationMode,
+  isValidRecoveryTurnBinding,
   isValidConversationTurnId,
   isValidTurnUserMessage,
 } from "@/lib/conversation-turns";
@@ -29,19 +32,23 @@ export async function POST(request: Request) {
   try {
     return await withProfileRequest(request, { kind: "database-mutation", label: "conversation turn creation" }, async () => {
       const body = (await request.json()) as Record<string, unknown>;
-      if (!Object.keys(body).every((key) => ["protocolVersion", "turnId", "conversationId", "projectId", "datasetId", "message", "options"].includes(key))
+      if (!Object.keys(body).every((key) => ["protocolVersion", "turnId", "conversationId", "projectId", "datasetId", "expectedConversationBinding", "message", "options"].includes(key))
         || body.protocolVersion !== CONVERSATION_TURN_PROTOCOL_VERSION
         || !isValidConversationTurnId(body.turnId)
         || !isValidTurnUserMessage(body.message)
         || (body.conversationId !== undefined && (typeof body.conversationId !== "string" || !body.conversationId || body.conversationId.length > 120))
         || (body.projectId !== undefined && body.projectId !== null && (typeof body.projectId !== "string" || !body.projectId || body.projectId.length > 120))
         || (body.datasetId !== undefined && body.datasetId !== null && (typeof body.datasetId !== "string" || !body.datasetId || body.datasetId.length > 120))
+        || (body.conversationId !== undefined && !isValidConversationContextBinding(body.expectedConversationBinding))
+        || (body.conversationId === undefined && body.expectedConversationBinding !== undefined)
         || !body.options || typeof body.options !== "object" || Array.isArray(body.options)) {
         return NextResponse.json({ error: "A valid versioned local turn is required.", code: "invalid" }, { status: 400 });
       }
       const options = body.options as Record<string, unknown>;
-      if (!Object.keys(options).every((key) => key === "mode" || key === "codeContext")
+      if (!Object.keys(options).every((key) => key === "mode" || key === "codeContext" || key === "datasetSha256" || key === "recoveryBinding")
         || !isValidConversationMode(options.mode)
+        || (options.datasetSha256 !== undefined && (typeof options.datasetSha256 !== "string" || !/^[a-f0-9]{64}$/.test(options.datasetSha256)))
+        || (options.recoveryBinding !== undefined && !isValidRecoveryTurnBinding(options.recoveryBinding))
         || (options.codeContext !== undefined && !isCodeContextRequest(options.codeContext))) {
         return NextResponse.json({ error: "The local turn options are invalid.", code: "invalid" }, { status: 400 });
       }
@@ -56,10 +63,15 @@ export async function POST(request: Request) {
         ...(typeof body.conversationId === "string" ? { conversationId: body.conversationId } : {}),
         ...(body.projectId === null || typeof body.projectId === "string" ? { projectId: body.projectId } : {}),
         ...(body.datasetId === null || typeof body.datasetId === "string" ? { datasetId: body.datasetId } : {}),
+        ...(typeof body.conversationId === "string"
+          ? { expectedConversationBinding: body.expectedConversationBinding as ConversationContextBinding }
+          : {}),
         userMessage: body.message,
         options: {
           mode: options.mode,
           ...(options.codeContext ? { codeContext: options.codeContext } : {}),
+          ...(typeof options.datasetSha256 === "string" ? { datasetSha256: options.datasetSha256 } : {}),
+          ...(options.recoveryBinding ? { recoveryBinding: options.recoveryBinding } : {}),
         },
       });
       if (request.signal.aborted) {
@@ -69,6 +81,12 @@ export async function POST(request: Request) {
       return NextResponse.json({
         conversationId: result.conversationId,
         turn: { id: result.turn.id, status: result.turn.status, replayed: result.replayed },
+        conversationBinding: {
+          projectId: result.turn.options.projectId,
+          datasetId: result.turn.options.datasetId,
+          datasetSha256: result.turn.options.datasetSha256 ?? null,
+          contextMessageCount: result.turn.contextMessageCount,
+        },
       }, { status: result.replayed ? 200 : 201 });
     });
   } catch (error) {

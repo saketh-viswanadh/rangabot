@@ -60,6 +60,8 @@ test("uses the expressive mark for identity and the compact mark only for assist
   assert.match(brandComponent, /chat-brand-mark/);
   assert.match(styles, /\.chat-brand-mark[^}]*rangabot-chat-mark-light\.svg/);
   assert.match(styles, /\[data-appearance="dark"\] \.chat-brand-mark[^}]*rangabot-chat-mark-dark\.svg/);
+  assert.match(styles, /\.chat-brand-mark\.avatar\s*\{[^}]*background-color:\s*transparent/);
+  assert.doesNotMatch(styles, /\.avatar\s*\{[^}]*background-color:\s*var\(--accent\)/);
   assert.doesNotMatch(styles, /\/ranga\/ranga-idle\.png/);
 });
 

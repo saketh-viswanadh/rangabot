@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import {
+  getConversation,
   getConversationDatabase,
-  setConversationDataset,
   setConversationPinned,
-  setConversationProject,
 } from "@/lib/conversations";
-import { getConversationTimeline, recoverExpiredConversationTurns } from "@/lib/conversation-turns";
-import { deleteConversationWhenIdle } from "@/lib/conversation-mutation-guards";
+import {
+  conversationContextBinding,
+  getConversationTimeline,
+  isValidConversationContextBinding,
+  type ConversationContextBinding,
+} from "@/lib/conversation-turns";
+import {
+  deleteConversationWhenIdle,
+  setConversationDatasetWhenIdle,
+  setConversationProjectWhenIdle,
+} from "@/lib/conversation-mutation-guards";
 import { getApprovedDataset } from "@/lib/datasets";
 import { listConversationResponseFeedback } from "@/lib/response-feedback";
 import { profileBindingFromRequest, StaleProfileRequestError, withProfileRequest } from "@/lib/profile-request";
@@ -15,45 +23,18 @@ export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-type DatasetBindingUpdate =
-  | { kind: "updated"; conversation: NonNullable<ReturnType<typeof setConversationDataset>> }
-  | { kind: "not-found" }
-  | { kind: "turn-in-progress" };
-
-function setConversationDatasetWhenIdle(id: string, datasetId: string | null): DatasetBindingUpdate {
-  recoverExpiredConversationTurns();
-  const database = getConversationDatabase();
-  database.exec("BEGIN IMMEDIATE");
-  try {
-    const activeTurn = database.prepare(`
-      SELECT 1 FROM conversation_turns
-      WHERE conversation_id = ? AND status = 'pending'
-      LIMIT 1
-    `).get(id);
-    if (activeTurn) {
-      database.exec("ROLLBACK");
-      return { kind: "turn-in-progress" };
-    }
-
-    const conversation = setConversationDataset(id, datasetId);
-    database.exec("COMMIT");
-    return conversation ? { kind: "updated", conversation } : { kind: "not-found" };
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  }
-}
-
 export async function GET(request: Request, context: RouteContext) {
   try {
     const id = (await context.params).id;
     profileBindingFromRequest(request);
-    const conversation = getConversationTimeline(id);
-    const dataset = conversation?.datasetId ? getApprovedDataset(conversation.datasetId) : null;
-    return conversation
+    const canonicalConversation = getConversation(id);
+    const conversation = canonicalConversation ? getConversationTimeline(id) : null;
+    const dataset = canonicalConversation?.datasetId ? getApprovedDataset(canonicalConversation.datasetId) : null;
+    return conversation && canonicalConversation
       ? NextResponse.json({
         conversation,
         attachedDataset: dataset ? { id: dataset.id, name: dataset.name, format: dataset.format, sizeBytes: dataset.sizeBytes } : null,
+        conversationBinding: conversationContextBinding(canonicalConversation),
         responseFeedback: listConversationResponseFeedback(getConversationDatabase(), conversation.id),
       })
       : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
@@ -98,16 +79,33 @@ export async function DELETE(request: Request, context: RouteContext) {
 export async function PATCH(request: Request, context: RouteContext) {
   try {
     return await withProfileRequest(request, { kind: "database-mutation", label: "conversation update" }, async () => {
-      const body = (await request.json()) as { pinned?: unknown; datasetId?: unknown; projectId?: unknown };
+      const body = (await request.json()) as { pinned?: unknown; datasetId?: unknown; projectId?: unknown; expectedConversationBinding?: unknown };
       const id = (await context.params).id;
       if (Object.prototype.hasOwnProperty.call(body, "projectId")) {
         if (body.projectId !== null && typeof body.projectId !== "string") {
           return NextResponse.json({ error: "Project must be an existing project id or All chats." }, { status: 400 });
         }
-        const conversation = setConversationProject(id, body.projectId as string | null);
-        return conversation
-          ? NextResponse.json({ conversation })
-          : NextResponse.json({ error: "Conversation or project not found." }, { status: 404 });
+        if (!isValidConversationContextBinding(body.expectedConversationBinding)) {
+          return NextResponse.json({ error: "Reload this chat before changing its project binding.", code: "invalid-binding" }, { status: 400 });
+        }
+        const update = setConversationProjectWhenIdle(id, body.projectId as string | null, body.expectedConversationBinding as ConversationContextBinding);
+        if (update.kind === "stale-binding") {
+          return NextResponse.json({
+            error: "This chat changed in another local window. Nothing was updated; reopen it before trying again.",
+            code: "stale-binding",
+          }, { status: 409 });
+        }
+        if (update.kind === "turn-in-progress") {
+          return NextResponse.json({
+            error: "Stop or finish the active turn before changing its project binding.",
+            code: "turn-in-progress",
+          }, { status: 409 });
+        }
+        if (update.kind !== "updated") return NextResponse.json({ error: "Conversation or project not found." }, { status: 404 });
+        const canonicalConversation = getConversation(id);
+        return canonicalConversation
+          ? NextResponse.json({ conversation: update.conversation, conversationBinding: conversationContextBinding(canonicalConversation) })
+          : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
       }
       if (Object.prototype.hasOwnProperty.call(body, "datasetId")) {
         if (body.datasetId !== null && typeof body.datasetId !== "string") {
@@ -116,23 +114,35 @@ export async function PATCH(request: Request, context: RouteContext) {
         if (typeof body.datasetId === "string" && !getApprovedDataset(body.datasetId)) {
           return NextResponse.json({ error: "That dataset is no longer approved." }, { status: 400 });
         }
-        const update = setConversationDatasetWhenIdle(id, body.datasetId as string | null);
+        if (!isValidConversationContextBinding(body.expectedConversationBinding)) {
+          return NextResponse.json({ error: "Reload this chat before changing its dataset binding.", code: "invalid-binding" }, { status: 400 });
+        }
+        const update = setConversationDatasetWhenIdle(id, body.datasetId as string | null, body.expectedConversationBinding as ConversationContextBinding);
+        if (update.kind === "stale-binding") {
+          return NextResponse.json({
+            error: "This chat changed in another local window. Nothing was updated; reopen it before trying again.",
+            code: "stale-binding",
+          }, { status: 409 });
+        }
         if (update.kind === "turn-in-progress") {
           return NextResponse.json({
             error: "Stop or finish the active turn before changing its dataset binding.",
             code: "turn-in-progress",
           }, { status: 409 });
         }
-        return update.kind === "updated"
-          ? NextResponse.json({ conversation: update.conversation })
+        if (update.kind !== "updated") return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+        const canonicalConversation = getConversation(id);
+        return canonicalConversation
+          ? NextResponse.json({ conversation: update.conversation, conversationBinding: conversationContextBinding(canonicalConversation) })
           : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
       }
       if (typeof body.pinned !== "boolean") {
         return NextResponse.json({ error: "A pin, project, or dataset update is required." }, { status: 400 });
       }
       const conversation = setConversationPinned(id, body.pinned);
-      return conversation
-        ? NextResponse.json({ conversation })
+      const canonicalConversation = conversation ? getConversation(id) : null;
+      return conversation && canonicalConversation
+        ? NextResponse.json({ conversation, conversationBinding: conversationContextBinding(canonicalConversation) })
         : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
     });
   } catch (error) {

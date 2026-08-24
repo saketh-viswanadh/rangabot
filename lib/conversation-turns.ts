@@ -3,6 +3,7 @@ import { isValidChatMessage, MAX_CHAT_MESSAGES, MAX_CHAT_MESSAGE_CHARS, MAX_CHAT
 import type { CodeContextRequest } from "./code-context.ts";
 import { CONVERSATION_TURN_PROTOCOL_VERSION } from "./conversation-turn-contract.ts";
 import { getConversation, getConversationDatabase, titleFromMessages, type Conversation } from "./conversations.ts";
+import { getApprovedDataset } from "./datasets.ts";
 import type { ExpertPackFailureCode } from "./expert-packs.ts";
 import type { ChatMessage, ConversationTurnStatus, ProviderFailureCode } from "./providers/types.ts";
 import { getRuntimeResponseFeedbackCandidate } from "./response-feedback-candidate.ts";
@@ -16,12 +17,49 @@ export const CONVERSATION_TURN_STALE_MS = 16 * 60 * 1000;
 export type ConversationMode = "local" | "smart" | "teach" | "codex";
 export type ConversationTurnFailureCode = ProviderFailureCode | ExpertPackFailureCode | "invalid-request" | "internal" | "interrupted";
 
+export type RecoveryTurnBinding = {
+  sourceTurnId: string;
+  conversationId: string;
+  projectId: string | null;
+  datasetId: string | null;
+  datasetSha256: string | null;
+  contextMessageCount: number;
+};
+
+export type ConversationContextBinding = {
+  projectId: string | null;
+  datasetId: string | null;
+  datasetSha256: string | null;
+  contextMessageCount: number;
+};
+
+/**
+ * A stored dataset id is only an executable conversation binding while its
+ * exact approval still exists. Keep the row for explicit user reconciliation,
+ * but never advertise or inherit a revoked approval into a new turn.
+ */
+export function conversationContextBinding(conversation: Conversation): ConversationContextBinding {
+  const dataset = conversation.datasetId ? getApprovedDataset(conversation.datasetId) : null;
+  return {
+    projectId: conversation.projectId,
+    datasetId: dataset ? conversation.datasetId : null,
+    datasetSha256: dataset?.fileIdentity.sha256 ?? null,
+    contextMessageCount: conversation.messages.length,
+  };
+}
+
 export type ConversationTurnOptions = {
   mode: ConversationMode;
   codeContext?: CodeContextRequest;
+  datasetSha256?: string;
+  recoveryBinding?: RecoveryTurnBinding;
 };
 
-type StoredTurnOptions = ConversationTurnOptions & { datasetId: string | null; projectId: string | null };
+export type StoredConversationTurnOptions = Omit<ConversationTurnOptions, "datasetSha256" | "recoveryBinding"> & {
+  datasetId: string | null;
+  datasetSha256?: string | null;
+  projectId: string | null;
+};
 
 export type ConversationTurn = {
   id: string;
@@ -30,7 +68,7 @@ export type ConversationTurn = {
   status: ConversationTurnStatus;
   requestHash: string;
   userMessage: ChatMessage;
-  options: StoredTurnOptions;
+  options: StoredConversationTurnOptions;
   assistantMessage: ChatMessage | null;
   failureCode: string | null;
   failureMessage: string | null;
@@ -64,6 +102,7 @@ export type BeginConversationTurnInput = {
   conversationId?: string;
   projectId?: string | null;
   datasetId?: string | null;
+  expectedConversationBinding?: ConversationContextBinding;
   userMessage: ChatMessage;
   options: ConversationTurnOptions;
 };
@@ -97,6 +136,33 @@ export function isValidConversationTurnId(value: unknown): value is string {
 
 export function isValidConversationMode(value: unknown): value is ConversationMode {
   return value === "local" || value === "smart" || value === "teach" || value === "codex";
+}
+
+export function isValidRecoveryTurnBinding(value: unknown): value is RecoveryTurnBinding {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const binding = value as Record<string, unknown>;
+  if (!Object.keys(binding).every((key) => ["sourceTurnId", "conversationId", "projectId", "datasetId", "datasetSha256", "contextMessageCount"].includes(key))
+    || Object.keys(binding).length !== 6
+    || !isValidConversationTurnId(binding.sourceTurnId) || !isValidConversationTurnId(binding.conversationId)
+    || binding.projectId !== null && (typeof binding.projectId !== "string" || !binding.projectId || binding.projectId.length > 120)
+    || binding.datasetId !== null && (typeof binding.datasetId !== "string" || !binding.datasetId || binding.datasetId.length > 120)
+    || !Number.isSafeInteger(binding.contextMessageCount) || Number(binding.contextMessageCount) < 0) return false;
+  return binding.datasetId === null
+    ? binding.datasetSha256 === null
+    : typeof binding.datasetSha256 === "string" && /^[a-f0-9]{64}$/.test(binding.datasetSha256);
+}
+
+export function isValidConversationContextBinding(value: unknown): value is ConversationContextBinding {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const binding = value as Record<string, unknown>;
+  if (Object.keys(binding).length !== 4
+    || !Object.keys(binding).every((key) => ["projectId", "datasetId", "datasetSha256", "contextMessageCount"].includes(key))
+    || binding.projectId !== null && (typeof binding.projectId !== "string" || !binding.projectId || binding.projectId.length > 120)
+    || binding.datasetId !== null && (typeof binding.datasetId !== "string" || !binding.datasetId || binding.datasetId.length > 120)
+    || !Number.isSafeInteger(binding.contextMessageCount) || Number(binding.contextMessageCount) < 0) return false;
+  return binding.datasetId === null
+    ? binding.datasetSha256 === null
+    : typeof binding.datasetSha256 === "string" && /^[a-f0-9]{64}$/.test(binding.datasetSha256);
 }
 
 export function isValidTurnUserMessage(value: unknown): value is ChatMessage {
@@ -137,20 +203,26 @@ function normalizeUserMessage(message: ChatMessage): ChatMessage {
   };
 }
 
-function normalizeOptions(options: ConversationTurnOptions, datasetId: string | null, projectId: string | null): StoredTurnOptions {
+function normalizeOptions(options: ConversationTurnOptions, datasetId: string | null, projectId: string | null): StoredConversationTurnOptions {
+  const dataset = datasetId ? getApprovedDataset(datasetId) : null;
+  if (options.datasetSha256 && dataset?.fileIdentity.sha256 !== options.datasetSha256) {
+    throw new ConversationTurnError("conflict", "The attached dataset changed after recovery. Review and attach it again before sending.");
+  }
   return {
     mode: options.mode,
     ...(options.codeContext ? { codeContext: {
       repositoryId: options.codeContext.repositoryId,
       path: options.codeContext.path,
       line: options.codeContext.line,
+      ...(options.codeContext.previewSha256 ? { previewSha256: options.codeContext.previewSha256 } : {}),
     } } : {}),
-    datasetId,
+    datasetId: dataset ? datasetId : null,
+    datasetSha256: dataset?.fileIdentity.sha256 ?? null,
     projectId,
   };
 }
 
-function requestHash(message: ChatMessage, options: unknown) {
+export function conversationTurnRequestHash(message: ChatMessage, options: unknown) {
   return createHash("sha256").update(JSON.stringify({ message, options })).digest("hex");
 }
 
@@ -158,7 +230,7 @@ function parseTurn(row: TurnRow): ConversationTurn {
   return {
     ...row,
     userMessage: JSON.parse(row.userMessage) as ChatMessage,
-    options: JSON.parse(row.requestOptions) as StoredTurnOptions,
+    options: JSON.parse(row.requestOptions) as StoredConversationTurnOptions,
     assistantMessage: row.assistantMessage ? JSON.parse(row.assistantMessage) as ChatMessage : null,
   };
 }
@@ -205,7 +277,14 @@ function withImmediateTransaction<T>(run: () => T): T {
 }
 
 export function beginConversationTurn(input: BeginConversationTurnInput): { turn: ConversationTurn; conversationId: string; replayed: boolean } {
-  if (!isValidConversationTurnId(input.id) || !isValidTurnUserMessage(input.userMessage) || !isValidConversationMode(input.options.mode)) {
+  if (!isValidConversationTurnId(input.id) || !isValidTurnUserMessage(input.userMessage) || !isValidConversationMode(input.options.mode)
+    || (input.options.recoveryBinding !== undefined && !isValidRecoveryTurnBinding(input.options.recoveryBinding))
+    // The HTTP admission boundary requires this receipt for every existing
+    // conversation. Keeping it optional here preserves the lower-level
+    // lifecycle API used by migrations and isolated persistence tests, while
+    // any supplied receipt is still compared inside the same transaction.
+    || (input.expectedConversationBinding !== undefined && !isValidConversationContextBinding(input.expectedConversationBinding))
+    || (input.conversationId === undefined && input.expectedConversationBinding !== undefined)) {
     throw new ConversationTurnError("invalid", "A valid turn id, user message, and mode are required.");
   }
   const userMessage = normalizeUserMessage(input.userMessage);
@@ -217,14 +296,21 @@ export function beginConversationTurn(input: BeginConversationTurnInput): { turn
       let turn = parseTurn(existing);
       const boundConversation = getConversation(turn.conversationId);
       if (!boundConversation) throw new ConversationTurnError("integrity", "The turn's conversation is missing.");
-      const requestedDataset = input.conversationId ? boundConversation.datasetId : input.datasetId ?? null;
+      const boundConversationBinding = conversationContextBinding(boundConversation);
+      const requestedDataset = input.conversationId ? boundConversationBinding.datasetId : input.datasetId ?? null;
       const requestedProject = input.conversationId ? boundConversation.projectId : input.projectId ?? null;
       const normalizedOptions = normalizeOptions(input.options, requestedDataset, requestedProject);
-      const hash = requestHash(userMessage, normalizedOptions);
+      const hash = conversationTurnRequestHash(userMessage, normalizedOptions);
       const storedOptions = JSON.parse(existing.requestOptions) as Record<string, unknown>;
-      const canUpgradeLegacyHash = !Object.prototype.hasOwnProperty.call(storedOptions, "projectId")
+      const compatibleOptions = { ...normalizedOptions } as Record<string, unknown>;
+      const missingDatasetReceipt = !Object.prototype.hasOwnProperty.call(storedOptions, "datasetSha256");
+      if (missingDatasetReceipt) delete compatibleOptions.datasetSha256;
+      if (!Object.prototype.hasOwnProperty.call(storedOptions, "projectId")) delete compatibleOptions.projectId;
+      const canUpgradeLegacyHash = turn.status === "pending"
+        && (!missingDatasetReceipt || normalizedOptions.datasetId === null)
         && requestedProject === boundConversation.projectId
-        && existing.requestHash === requestHash(userMessage, { ...normalizedOptions, projectId: undefined });
+        && normalizedOptions.datasetId === boundConversationBinding.datasetId
+        && existing.requestHash === conversationTurnRequestHash(userMessage, compatibleOptions);
       if ((input.conversationId && input.conversationId !== turn.conversationId) || (hash !== turn.requestHash && !canUpgradeLegacyHash)) {
         throw new ConversationTurnError("conflict", "That turn id is already bound to a different request.");
       }
@@ -243,6 +329,9 @@ export function beginConversationTurn(input: BeginConversationTurnInput): { turn
     const now = new Date().toISOString();
     if (conversationId && !conversation) throw new ConversationTurnError("not-found", "Conversation not found.");
     if (!conversation) {
+      if (input.projectId && !database.prepare("SELECT 1 FROM projects WHERE id = ?").get(input.projectId)) {
+        throw new ConversationTurnError("conflict", "The selected project no longer exists. Nothing was sent; choose a current project and try again.");
+      }
       conversationId = randomUUID();
       database.prepare(`
         INSERT INTO conversations (id, title, messages, project_id, dataset_id, pinned, created_at, updated_at)
@@ -251,13 +340,43 @@ export function beginConversationTurn(input: BeginConversationTurnInput): { turn
       conversation = getConversation(conversationId);
     }
     if (!conversationId || !conversation) throw new ConversationTurnError("integrity", "Could not create the local conversation.");
+    const currentBinding = conversationContextBinding(conversation);
+
+    if (input.expectedConversationBinding) {
+      const binding = input.expectedConversationBinding;
+      if (binding.projectId !== currentBinding.projectId
+        || binding.datasetId !== currentBinding.datasetId
+        || binding.datasetSha256 !== currentBinding.datasetSha256
+        || binding.contextMessageCount !== currentBinding.contextMessageCount) {
+        throw new ConversationTurnError("conflict", "This chat changed in another local window. Nothing was sent; reload the conversation before trying again.");
+      }
+    }
+
+    if (input.options.recoveryBinding) {
+      const binding = input.options.recoveryBinding;
+      const sourceTurn = getConversationTurn(binding.sourceTurnId);
+      if (!sourceTurn || sourceTurn.conversationId !== conversationId
+        || (sourceTurn.status !== "failed" && sourceTurn.status !== "cancelled")
+        || !Object.prototype.hasOwnProperty.call(sourceTurn.options, "projectId")
+        || (sourceTurn.options.projectId ?? null) !== binding.projectId
+        || (sourceTurn.options.datasetId ?? null) !== binding.datasetId
+        || (sourceTurn.options.datasetSha256 ?? null) !== binding.datasetSha256
+        || sourceTurn.contextMessageCount !== binding.contextMessageCount
+        || binding.conversationId !== conversationId
+        || binding.projectId !== currentBinding.projectId
+        || binding.datasetId !== currentBinding.datasetId
+        || binding.datasetSha256 !== currentBinding.datasetSha256
+        || binding.contextMessageCount !== currentBinding.contextMessageCount) {
+        throw new ConversationTurnError("conflict", "This chat or its local data changed after recovery. Nothing was sent; review the current conversation and try again.");
+      }
+    }
 
     const pending = database.prepare("SELECT id FROM conversation_turns WHERE conversation_id = ? AND status = 'pending' LIMIT 1").get(conversationId) as { id: string } | undefined;
     if (pending) throw new ConversationTurnError("turn-in-progress", "This conversation already has a turn in progress.");
 
     const sequenceRow = database.prepare("SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence FROM conversation_turns WHERE conversation_id = ?").get(conversationId) as { sequence: number };
-    const options = normalizeOptions(input.options, conversation.datasetId, conversation.projectId);
-    const hash = requestHash(userMessage, options);
+    const options = normalizeOptions(input.options, currentBinding.datasetId, currentBinding.projectId);
+    const hash = conversationTurnRequestHash(userMessage, options);
     database.prepare(`
       INSERT INTO conversation_turns (
         id, conversation_id, sequence, status, request_hash, user_message, request_options,

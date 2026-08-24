@@ -9,10 +9,16 @@ const startRoute = readFileSync("app/api/conversation-turns/route.ts", "utf8");
 const conversationRoute = readFileSync("app/api/conversations/[id]/route.ts", "utf8");
 const cancelRoute = readFileSync("app/api/conversation-turns/[id]/cancel/route.ts", "utf8");
 const turnContract = readFileSync("lib/conversation-turn-contract.ts", "utf8");
+const recoveryCard = readFileSync("app/components/turn-recovery-card.tsx", "utf8");
 const cancellationFlow = page.slice(page.indexOf("async function requestTurnCancellation"), page.indexOf("function parseTurnStartResult"));
 const turnStartFlow = page.slice(page.indexOf("async function startConversationTurn"), page.indexOf("function parseBookWelcomeHistory"));
+const reconcileFlow = page.slice(page.indexOf("const reconcileTurnFromServer"), page.indexOf("const closeMemoryPanel"));
+const removeProjectFlow = page.slice(page.indexOf("async function removeProject"), page.indexOf("async function openConversation"));
 const openFlow = page.slice(page.indexOf("async function openConversation"), page.indexOf("async function attachDatasetToChat"));
+const attachDatasetFlow = page.slice(page.indexOf("async function attachDatasetToChat"), page.indexOf("async function removeConversation"));
+const moveConversationFlow = page.slice(page.indexOf("async function moveConversation"), page.indexOf("function beginConversationDrag"));
 const sendFlow = page.slice(page.indexOf("async function sendMessage"), page.indexOf("function stopGenerating"));
+const ambiguousStartFlow = sendFlow.slice(sendFlow.indexOf("if (!turnStarted && !startReceiptObserved)"));
 const stopFlow = page.slice(page.indexOf("async function stopGenerating"), page.indexOf("function startNewChat"));
 
 test("the browser starts one versioned turn and never replaces a whole transcript", () => {
@@ -31,22 +37,81 @@ test("the browser starts one versioned turn and never replaces a whole transcrip
 });
 
 test("client ownership survives cancellation and navigation races", () => {
-  assert.match(cancellationFlow, /return response\.ok/);
-  assert.match(cancellationFlow, /return false/);
+  assert.match(cancellationFlow, /value\?\.conversationId !== turn\.conversationId/);
+  assert.match(cancellationFlow, /status !== "completed" && status !== "cancelled" && status !== "failed"/);
+  assert.match(cancellationFlow, /return status/);
+  assert.match(cancellationFlow, /return null/);
   assert.match(stopFlow, /authoritativeStatus === "pending"/);
+  assert.match(stopFlow, /const authoritativeStatus = reconciledStatus \?\? cancellationStatus/);
+  assert.match(stopFlow, /cancellationStatus === "completed"/);
+  assert.doesNotMatch(stopFlow, /cancellationConfirmed/);
   assert.match(stopFlow, /setAdoptedPendingTurn\(activeTurn\)/);
-  assert.match(sendFlow, /authoritativeStatus === null && \(!stopped \|\| !cancellationConfirmed\)/);
+  assert.match(sendFlow, /const authoritativeStatus = reconciledStatus \?\? cancellationStatus/);
+  assert.match(sendFlow, /const shouldRetainOwnership = authoritativeStatus === "pending"[\s\S]*?\|\| authoritativeStatus === null/);
+  assert.match(sendFlow, /authoritativeStatus === "completed"[\s\S]*?saved answer could not be refreshed/);
   assert.match(openFlow, /conversationLoadingRef\.current = true/);
   assert.match(openFlow, /setReplyTo\(null\)/);
   assert.match(sendFlow, /conversationLoadingRef\.current/);
+  assert.match(sendFlow, /sendComposerRevision === composerMutationRef\.current/);
+  assert.match(sendFlow, /if \(composerUnchanged && allowPreStartComposerRestore\) \{[\s\S]*?setInput\(content\);[\s\S]*?setAttachedCodeContext\(codeContextForRequest\)/);
+  assert.match(cancellationFlow, /replayAmbiguousTurnStart[\s\S]*startConversationTurn\(payload, expectedTurnId, timeout\.signal\)/);
+  assert.doesNotMatch(cancellationFlow, /response\.status === 404/);
+  assert.match(ambiguousStartFlow, /if \(!turnStarted && !startReceiptObserved\)/);
+  assert.match(ambiguousStartFlow, /replayAmbiguousTurnStart\(startPayload, turnId\)/);
+  assert.match(ambiguousStartFlow, /quarantinedAmbiguousStart = true/);
+  assert.match(ambiguousStartFlow, /\(stopped \|\| quarantinedAmbiguousStart\)[\s\S]*requestTurnCancellation/);
+  assert.ok(ambiguousStartFlow.indexOf("replayAmbiguousTurnStart") < ambiguousStartFlow.indexOf("requestTurnCancellation"));
+  assert.ok(ambiguousStartFlow.indexOf("requestTurnCancellation") < ambiguousStartFlow.indexOf("reconcileTurnFromServer"));
+  assert.match(ambiguousStartFlow, /canRestoreTerminalDraft = authoritativeStatus === "cancelled" \|\| authoritativeStatus === "failed"/);
+  assert.match(ambiguousStartFlow, /if \(!turnPresented\)[\s\S]*current\.some\(\(message\) => message\.turn\?\.id === turnId\)[\s\S]*userMessage, assistantMessage/);
+  assert.doesNotMatch(ambiguousStartFlow, /startingNewConversation/);
+  assert.match(reconcileFlow, /parseConversationContextBinding\(data\.conversationBinding\)/);
+  assert.match(reconcileFlow, /expectedEpoch === conversationOpenEpochRef\.current[\s\S]*activeConversationIdRef\.current === conversationId/);
+  assert.match(reconcileFlow, /activeConversationBindingRef\.current = conversationBinding/);
+  assert.ok(reconcileFlow.indexOf("setMessages((current)") < reconcileFlow.indexOf("responseFeedbackBindingMatches("));
   assert.match(page, /ADOPTED_TURN_POLL_ATTEMPTS/);
   assert.match(page, /turnStatus && turnStatus !== "pending"/);
+  assert.match(attachDatasetFlow, /Promise<boolean>/);
+  assert.match(attachDatasetFlow, /const expectedConversationBinding = activeConversationBindingRef\.current/);
+  assert.match(attachDatasetFlow, /JSON\.stringify\(\{ datasetId: dataset\?\.id \?\? null, expectedConversationBinding \}\)/);
+  assert.match(attachDatasetFlow, /data\?\.code === "stale-binding"[\s\S]*throw new Error/);
+  assert.match(attachDatasetFlow, /reconcileOpenConversationBindings\(targetConversationId, targetEpoch\)/);
+  assert.match(attachDatasetFlow, /conversationBinding\.datasetId !== \(dataset\?\.id \?\? null\)/);
+  assert.match(attachDatasetFlow, /activeConversationBindingRef\.current\?\.datasetId === \(dataset\?\.id \?\? null\)/);
+  assert.match(moveConversationFlow, /const openConversationBinding = changesOpenConversation && activeConversationBindingRef\.current/);
+  assert.match(moveConversationFlow, /bindingData\.conversation\.projectId !== conversation\.projectId/);
+  assert.match(moveConversationFlow, /JSON\.stringify\(\{ projectId, expectedConversationBinding \}\)/);
+  assert.match(moveConversationFlow, /data\?\.code === "stale-binding"[\s\S]*throw new Error/);
+  assert.match(removeProjectFlow, /deletionConfirmed[\s\S]*reconcileOpenConversationBindings\(targetConversationId, targetEpoch\)/);
+  assert.doesNotMatch(removeProjectFlow, /activeConversationBindingRef\.current = \{ \.\.\.activeConversationBindingRef\.current, projectId: null \}/);
 });
 
-test("terminal request recovery describes its text-only behavior honestly", () => {
-  assert.match(page, /function copyTurnRequestText/);
-  assert.match(page, />Copy request text<\/span>/);
-  assert.doesNotMatch(page, />Reuse request<\/span>/);
+test("terminal request recovery revalidates context and waits for an explicit send", () => {
+  assert.match(page, /async function restoreTurnRequest/);
+  assert.match(page, /parseTurnRecoveryDraft/);
+  assert.match(page, /verifyTurnRecoveryDraftHash/);
+  assert.match(page, /recoveryBinding:\s*recoveryBindingForRequest/);
+  assert.match(page, /shouldRetainRecoveryBindingAfterStartFailure\(responseFailureCode\)/);
+  assert.match(page, /excerpt:\s*replyTo\.content\.slice\(0, 500\)/);
+  assert.match(page, /const recoveryComposerRevision = composerMutationRef\.current/);
+  assert.match(page, /composerMutationRef\.current !== recoveryComposerRevision/);
+  assert.match(page, /conversationOpenEpochRef\.current !== recoveryEpoch/);
+  assert.match(page, /turnRecoveryAbortRef\.current\?\.abort\(\)/);
+  assert.match(page, /signal:\s*recoveryController\.signal/);
+  assert.match(openFlow, /cancelTurnRecoveryPreparation\(\)/);
+  assert.match(page.slice(page.indexOf("function startNewChat"), page.indexOf("async function restoreTurnRequest")), /cancelTurnRecoveryPreparation\(\)/);
+  assert.match(page, /enqueueSerialMutation\(conversationMutationTailRef/);
+  assert.match(page, /datasetBindingPendingRef\.current > 0/);
+  assert.match(page, /Wait for the chat's dataset or project update to finish before restoring this request/);
+  assert.match(page, /conversationBindingUncertainRef\.current[\s\S]*Reopen this chat to reload its local bindings before restoring this request/);
+  assert.match(page, /busy=\{sending \|\| conversationLoading \|\| datasetBindingChanging \|\| projectBindingChanging \|\| conversationBindingUncertain \|\| Boolean\(turnRecoveryPreparing\)\}/);
+  assert.match(page, /datasetBindingChanging[\s\S]{0,160}profileWorkspaceBlocked/);
+  assert.match(page, /targetEpoch === conversationOpenEpochRef\.current[\s\S]*?activeConversationIdRef\.current === targetConversationId/);
+  assert.match(page, /targetEpoch === conversationOpenEpochRef\.current && activeConversationIdRef\.current === conversation\.id[\s\S]*?setActiveProjectId\(projectId\);[\s\S]*?setRecoveredTurnBinding\(null\)/);
+  assert.match(page, /Review the composer, then press Send/);
+  assert.match(recoveryCard, /Nothing runs automatically/);
+  assert.doesNotMatch(page, /copyTurnRequestText|>Reuse request<\/span>/);
+  assert.doesNotMatch(recoveryCard, /submit|location\.reload/);
 });
 
 test("the server owns history, options, replay, and terminal settlement", () => {
