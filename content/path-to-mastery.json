@@ -1771,7 +1771,7 @@
               "evidence": [
                 "pr-63"
               ],
-              "note": "v0.1.0 trails current main."
+              "note": "The 1.2.0 source release is prepared here; this criterion stays failed until the exact public tag is published and independently reconciled."
             },
             {
               "id": "release-management-3",
@@ -1790,7 +1790,7 @@
                 "pr-93",
                 "pr-100"
               ],
-              "note": "PR #100 passed dependency, privacy, build, and required Ubuntu/Windows validation. This criterion does not represent core-conversation or blind-human quality; a current tagged public release remains blocked separately by release-management-2."
+              "note": "PR #100 passed dependency, privacy, build, and required Ubuntu/Windows validation. This criterion does not represent core-conversation or blind-human quality; an exact tagged 1.2.0 source release and independent reconciliation remain separate gates."
             }
           ],
           "backlog": "Prepare the next evidence-backed public release",

@@ -43,6 +43,10 @@ const { assertWindowsPeCertificateTableAbsent } = require("../desktop/electron/w
     embeddedPeCertificateTable: "absent";
   }>;
 };
+const { assertMacOSInfoPlistProductVersion, readMacOSInfoPlist } = require("../desktop/electron/macos-plist-policy.cjs") as {
+  assertMacOSInfoPlistProductVersion(plist: Record<string, unknown>, productVersion: string): void;
+  readMacOSInfoPlist(path: string): Record<string, unknown>;
+};
 
 function parseArguments(arguments_: string[]) {
   const archValues = arguments_.filter((value) => value.startsWith("--arch=")).map((value) => value.slice(7));
@@ -288,6 +292,7 @@ async function finalizeWindows(output: string, target: DesktopArtifactTarget) {
     sourceManifestSha256: staged.sourceManifestSha256,
     sourceFiles: staged.sourceFiles,
     packageLockSha256: staged.packageLockSha256,
+    productVersion: staged.productVersion,
     webFeedback: staged.webFeedback,
     launchProfile: staged.launchProfile,
     runtimeVersions: staged.runtimeVersions,
@@ -456,6 +461,7 @@ async function finalize(output: string, target: DesktopArtifactTarget) {
   const manifestPath = join(runtimeResourceRoot, "desktop", "manifest.json");
   const staged = parseDesktopArtifactManifest(JSON.parse(readFileSync(manifestPath, "utf8")));
   if (!staged || staged.target.platform !== "darwin" || staged.target.arch !== arch) throw new Error("The staged desktop provenance manifest is missing or mismatched.");
+  assertMacOSInfoPlistProductVersion(readMacOSInfoPlist(join(contentsRoot, "Info.plist")), staged.productVersion);
   const relativeManifest = manifestRelativePath(artifactRoot, manifestPath);
   const unsignedResources = collectDesktopArtifactFiles(artifactRoot, [relativeManifest]);
   assertRequiredResources(unsignedResources);
@@ -494,6 +500,7 @@ async function finalize(output: string, target: DesktopArtifactTarget) {
     sourceManifestSha256: staged.sourceManifestSha256,
     sourceFiles: staged.sourceFiles,
     packageLockSha256: staged.packageLockSha256,
+    productVersion: staged.productVersion,
     webFeedback: staged.webFeedback,
     launchProfile: staged.launchProfile,
     runtimeVersions: staged.runtimeVersions,
@@ -577,6 +584,7 @@ for (const output of outputs) {
     sourceBaseCommit: result.manifest.sourceBaseCommit,
     profilesBehaviorCommit: result.manifest.sourceBaselineCommit,
     packagingCommit: result.manifest.sourceCommit,
+    productVersion: result.manifest.productVersion,
     fusePolicyName: DESKTOP_FUSE_POLICY_NAME,
     fuseWire: String.fromCharCode(...result.manifest.packagingTooling.fuseWireStates),
     browserSnapshotCompatibility: result.browserSnapshotCompatibility,

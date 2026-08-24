@@ -72,7 +72,7 @@ function windowsNativeModules(): DesktopNativeModuleVersion[] {
   ];
 }
 
-function createSyntheticFinalizedApplication(root: string) {
+function createSyntheticFinalizedApplication(root: string, productVersion = "1.2.0") {
   const appRoot = join(root, "RangaBot-win32-x64");
   const resourceRoot = join(appRoot, "resources");
   const manifestRelativePath = "rangabot-resources/desktop/manifest.json";
@@ -91,6 +91,7 @@ function createSyntheticFinalizedApplication(root: string) {
   writeFixtureFile(resourceRoot, "app.asar.unpacked/node_modules/@duckdb/node-bindings-win32-x64/duckdb.dll", syntheticPeX64());
   writeFixtureFile(resourceRoot, "app.asar.unpacked/node_modules/sqlite-vec-windows-x64/vec0.dll", syntheticPeX64());
   writeFixtureFile(resourceRoot, "rangabot-resources/runtime/ollama/ollama.exe", syntheticPeX64());
+  writeFixtureFile(resourceRoot, "rangabot-resources/package.json", JSON.stringify({ name: "rangabot", version: productVersion }));
   const resources = collectDesktopArtifactFiles(resourceRoot, [manifestRelativePath]);
   const natives = resources.filter((file) => /\.(?:node|dll|exe)$/iu.test(file.path));
   const bundleFiles = collectDesktopBundleFiles(appRoot, "win32");
@@ -106,6 +107,7 @@ function createSyntheticFinalizedApplication(root: string) {
     sourceManifestSha256: deriveDesktopSourceManifestSha256(sourceFiles),
     sourceFiles,
     packageLockSha256: sha("2"),
+    productVersion,
     webFeedback: {
       state: "known",
       candidateBuildId: sha("3"),
@@ -628,9 +630,25 @@ test("full verifier reconciles every stored/compressed/empty source with AppxBlo
   assert.equal(result.distributionTrust, "unsigned-candidate");
   assert.equal(result.zipFormat, "zip64-makeappx");
   assert.equal(result.desktopArtifactId, application.manifest.desktopArtifactId);
+  assert.equal(result.productVersion, "1.2.0");
+  assert.equal(result.manifestIdentity.version, "1.2.0.0");
   assert.equal(result.verifiedFileCount, result.sourceFileCount);
   assert.ok(result.blockMapBlockCount > 0);
   assert.ok(result.blockMapFileHashCount > 0);
+});
+
+test("full verifier rejects an AppxManifest version that differs from the bound desktop product version", async () => {
+  const root = temporaryDirectory();
+  const application = createSyntheticFinalizedApplication(root, "1.2.1");
+  const msixPath = writeSyntheticMsix({ root, appRoot: application.appRoot });
+  await assert.rejects(() => verifyUnsignedMsix({
+    msixPath,
+    applicationRoot: application.appRoot,
+    manifestPath: join(msixRoot, "AppxManifest.xml"),
+    assetsRoot: join(msixRoot, "assets"),
+    checkedOutCommit: sourceCommit,
+    expectedSourceSha: sourceCommit,
+  }), /package identity does not match/u);
 });
 
 test("full verifier rejects bad hashes and wrong compressed/stored Block Size semantics", async () => {

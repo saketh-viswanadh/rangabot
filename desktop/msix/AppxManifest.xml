@@ -7,7 +7,7 @@
   <Identity
     Name="RangaBot.InternalCandidate"
     Publisher="CN=RangaBot Internal Candidate, OID.2.25.311729368913984317654407730594956997722=1"
-    Version="0.1.0.0"
+    Version="1.2.0.0"
     ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>RangaBot Internal Candidate</DisplayName>

@@ -111,6 +111,7 @@ function createResourceFixture(arch: DesktopArtifactArch = "arm64") {
   const contentsRoot = join(cleanupRoot, "Contents");
   const root = join(contentsRoot, "Resources");
   writeFixtureFile(root, "app.asar", "synthetic packaged app\n");
+  writeFixtureFile(root, "rangabot-resources/package.json", JSON.stringify({ name: "rangabot", version: "1.2.0" }));
   writeFixtureFile(root, `app.asar.unpacked/node_modules/@duckdb/node-bindings-darwin-${arch}/duckdb.node`, "synthetic DuckDB binding\n");
   writeFixtureFile(root, `app.asar.unpacked/node_modules/@duckdb/node-bindings-darwin-${arch}/libduckdb.dylib`, "synthetic DuckDB library\n");
   writeFixtureFile(root, `app.asar.unpacked/node_modules/sqlite-vec-darwin-${arch}/vec0.dylib`, "synthetic sqlite-vec library\n");
@@ -127,6 +128,7 @@ function createWindowsResourceFixture() {
   const cleanupRoot = mkdtempSync(join(tmpdir(), "rangabot-desktop-win32-identity-"));
   const root = join(cleanupRoot, "resources");
   writeFixtureFile(root, "app.asar", "synthetic packaged app\n");
+  writeFixtureFile(root, "rangabot-resources/package.json", JSON.stringify({ name: "rangabot", version: "1.2.0" }));
   writeFixtureFile(root, "app.asar.unpacked/node_modules/@duckdb/node-bindings-win32-x64/duckdb.node", syntheticPeX64());
   writeFixtureFile(root, "app.asar.unpacked/node_modules/@duckdb/node-bindings-win32-x64/duckdb.dll", syntheticPeX64());
   writeFixtureFile(root, "app.asar.unpacked/node_modules/sqlite-vec-windows-x64/vec0.dll", syntheticPeX64());
@@ -189,6 +191,7 @@ function manifestInput(
     sourceManifestSha256: deriveDesktopSourceManifestSha256(sourceFiles),
     sourceFiles,
     packageLockSha256: sha("2"),
+    productVersion: "1.2.0",
     webFeedback: {
       state: "known",
       candidateBuildId: sha("3"),
@@ -254,6 +257,13 @@ test("desktop identity canonicalizes inventories and excludes generatedAt from i
       fixture.natives,
       { sourceCommit: "a".repeat(40) },
     ));
+    const otherProductVersion = createDesktopArtifactManifest(manifestInput(
+      fixture.arch,
+      fixture.bundleFiles,
+      fixture.resources,
+      fixture.natives,
+      { productVersion: "1.2.1" },
+    ));
     const reverse = createDesktopArtifactManifest(manifestInput(
       fixture.arch,
       fixture.bundleFiles,
@@ -271,6 +281,7 @@ test("desktop identity canonicalizes inventories and excludes generatedAt from i
     ));
     assert.equal(forward.desktopArtifactId, reverse.desktopArtifactId);
     assert.notEqual(forward.desktopArtifactId, otherPackagingCommit.desktopArtifactId);
+    assert.notEqual(forward.desktopArtifactId, otherProductVersion.desktopArtifactId);
     assert.equal(forward.schemaVersion, DESKTOP_ARTIFACT_SCHEMA_VERSION);
     assert.equal(forward.fuses.policyName, DESKTOP_FUSE_POLICY_NAME);
     assert.equal(forward.resourceManifestSha256, reverse.resourceManifestSha256);
@@ -331,7 +342,10 @@ test("installed verification is known without Git or cwd discovery and exposes a
     assert.equal(verified.artifactSha256, manifest.desktopArtifactId);
     assert.equal(verified.manifestSha256, manifest.sourceManifestSha256);
     assert.equal(verified.baseCommit, manifest.sourceCommit);
-    assert.equal(verified.build, `0.1.0+desktop.darwin.${fixture.arch}.${manifest.desktopArtifactId.slice(0, 12)}`);
+    assert.equal(verified.build, `1.2.0+desktop.darwin.${fixture.arch}.${manifest.desktopArtifactId.slice(0, 12)}`);
+    assert.equal(verified.productVersion, "1.2.0");
+    assert.equal(verified.sourceVersion, "0.1.0");
+    assert.equal(verified.manifest?.webFeedback.sourceVersion, "0.1.0");
     assert.deepEqual(requireKnownDesktopArtifact({
       resourceRoot: fixture.root,
       manifestPath,
@@ -342,6 +356,31 @@ test("installed verification is known without Git or cwd discovery and exposes a
       manifestPath,
       runtime: runtimeEvidence(fixture.arch),
     }).state, "unknown");
+  } finally {
+    rmSync(fixture.cleanupRoot, { recursive: true, force: true });
+  }
+});
+
+test("installed verification rejects a manifest product version that differs from packaged package.json", () => {
+  const fixture = createResourceFixture();
+  const manifestPath = join(fixture.root, "rangabot-desktop-artifact.json");
+  try {
+    const manifest = createDesktopArtifactManifest(manifestInput(
+      fixture.arch,
+      fixture.bundleFiles,
+      fixture.resources,
+      fixture.natives,
+      { productVersion: "1.2.1" },
+    ));
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const verified = inspectDesktopArtifact({
+      resourceRoot: fixture.root,
+      manifestPath,
+      runtime: runtimeEvidence(fixture.arch),
+    });
+    assert.equal(verified.state, "mixed");
+    assert.equal(verified.reason, "product-version-mismatch");
+    assert.equal(verified.productVersion, null);
   } finally {
     rmSync(fixture.cleanupRoot, { recursive: true, force: true });
   }
@@ -551,6 +590,9 @@ test("manifest creation and parsing reject unsafe, duplicate, incomplete, and mi
     const wrongIdentity = { ...valid, desktopArtifactId: sha("f") };
     assert.equal(parseDesktopArtifactManifest(wrongIdentity), null);
     assert.equal(parseDesktopArtifactManifest({ ...valid, schemaVersion: 1 }), null);
+    const { productVersion: _productVersion, ...missingProductVersion } = valid;
+    assert.equal(parseDesktopArtifactManifest(missingProductVersion), null);
+    assert.equal(parseDesktopArtifactManifest({ ...valid, productVersion: "bad version" }), null);
     const missingPackagingCommit = { ...valid } as Record<string, unknown>;
     delete missingPackagingCommit.sourceCommit;
     assert.equal(parseDesktopArtifactManifest(missingPackagingCommit), null);

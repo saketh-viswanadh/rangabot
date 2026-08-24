@@ -24,6 +24,7 @@ import {
   inspectPinnedMakeAppx,
   makeAppxPowerShellAttestationInvocation,
   makeAppxPackArguments,
+  msixIdentityVersionForProductVersion,
   parseMakeAppxPowerShellAttestation,
   PINNED_WINDOWS_SDK_VERSION,
   readExpectedMsixManifestIdentity,
@@ -208,13 +209,19 @@ test("approved manifest has the exact single-app full-trust identity", () => {
   assert.deepEqual(readExpectedMsixManifestIdentity(path), {
     name: "RangaBot.InternalCandidate",
     publisher: "CN=RangaBot Internal Candidate, OID.2.25.311729368913984317654407730594956997722=1",
-    version: "0.1.0.0",
+    version: "1.2.0.0",
     architecture: "x64",
     applicationId: "RangaBotInternalCandidate",
     executable: "RangaBot.exe",
     entryPoint: "Windows.FullTrustApplication",
     capabilities: ["runFullTrust"],
   });
+});
+
+test("MSIX identity version is derived from the bounded desktop product version", () => {
+  assert.equal(msixIdentityVersionForProductVersion("1.2.0"), "1.2.0.0");
+  assert.throws(() => msixIdentityVersionForProductVersion("1.2.0-beta.1"), /cannot be represented/u);
+  assert.throws(() => msixIdentityVersionForProductVersion("1.70000.0"), /cannot be represented/u);
 });
 
 test("source inventory includes exact manifest, brand assets, app, and desktop identity", () => {
@@ -323,6 +330,28 @@ test("builder invokes exact MakeAppx argv without a shell and leaves signature u
   assert.deepEqual(invocation?.options, { stdio: "inherit", windowsHide: true });
   assert.equal(built.packageSignature, "unverified");
   assert.equal(built.distributionTrust, "unsigned-candidate");
+  assert.equal(built.applicationIdentity.productVersion, "1.2.0");
+  assert.equal(built.applicationIdentity.msixIdentityVersion, "1.2.0.0");
+});
+
+test("builder rejects an AppxManifest version that differs from the bound desktop product version", () => {
+  const root = temporaryDirectory();
+  const application = createSyntheticFinalizedWindowsApplication(join(root, "inputs"), "1.2.1");
+  const toolPath = join(root, "tool", "MakeAppx.exe");
+  mkdirSync(resolve(toolPath, ".."), { recursive: true });
+  const makeAppx = syntheticMakeAppx(toolPath);
+  assert.throws(() => buildUnsignedMsix({
+    applicationRoot: application.appRoot,
+    manifestPath: join(msixRoot, "AppxManifest.xml"),
+    assetsRoot: join(msixRoot, "assets"),
+    generatedRoot: root,
+    checkedOutCommit: SYNTHETIC_WINDOWS_SOURCE_COMMIT,
+    expectedSourceSha: SYNTHETIC_WINDOWS_SOURCE_COMMIT,
+    mappingPath: join(root, "outputs", "mapping.txt"),
+    outputPath: join(root, "outputs", "candidate.msix"),
+    makeAppx,
+    run() { throw new Error("must not run"); },
+  }), /package identity does not match/u);
 });
 
 test("builder rejects mapping or package output inside immutable inputs", () => {

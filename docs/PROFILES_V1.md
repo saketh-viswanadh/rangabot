@@ -1,8 +1,9 @@
 # RangaBot Profiles v1
 
-Status: local implementation candidate only. Profiles v1 is not released, is
-not a statement about the governed current build, and has not yet received
-independent Sentinel, Guardian, or CUO verification.
+Status: included in the 1.2.0 source release. This source status is not a claim
+that a signed desktop package or the governed current build contains Profiles
+v1, and independent Sentinel, Guardian, and CUO release verification remains a
+separate gate.
 
 Profiles are local workspaces. They are not accounts, sandboxes, encryption
 boundaries, or operating-system security boundaries. Their purpose is to keep
@@ -270,8 +271,8 @@ context with verified-usage retrieval, and governed capability routing with
 truthful resource receipts, bounded mechanical Finish & Verify, goal-preserving
 turn recovery, authoritative conversation and local-resource binding guards,
 and the transparent assistant chat mark at commit
-`f5df9d75c0fbddeb1432aea009bf6b78367bc2b5`.
-The generated v3 manifest records
+`61dd223297ec492730483e4979b3139fbaa752c5`.
+The generated v4 manifest records
 the exact clean packaging HEAD as `sourceCommit`; the installed verifier uses
 that value as its commit identity and does not require `.git`.
 

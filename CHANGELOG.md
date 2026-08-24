@@ -7,6 +7,8 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ## Unreleased
 
+## 1.2.0 - 2026-08-24
+
 ### Added
 
 - Added goal-preserving failed-turn recovery. A visible, user-triggered recovery
@@ -81,6 +83,13 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Changed
 
+- Prepared 1.2.0 as an evidence-backed source release. The release intentionally
+  excludes ad-hoc macOS and unsigned Windows packages; supported desktop
+  downloads remain gated on platform signing and clean-machine acceptance.
+- Kept the production dependency audit at zero reported advisories. Known
+  transitive advisories in the development-only Electron Forge packaging chain
+  remain disclosed in `SECURITY.md`; an unsafe forced Forge downgrade was not
+  used to manufacture a clean audit.
 - Replaced automatic session issuance on a loopback page visit with a fresh,
   purpose-separated startup capability. The launcher prints a fragment-bound
   URL, the browser removes the fragment before an exact same-origin exchange,
@@ -866,5 +875,6 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 - Source licensing and release-readiness gaps discovered during the open-source
   rehearsal.
 
-[Unreleased]: https://github.com/saketh-viswanadh/rangabot/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/saketh-viswanadh/rangabot/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/saketh-viswanadh/rangabot/compare/v0.1.0...v1.2.0
 [0.1.0]: https://github.com/saketh-viswanadh/rangabot/releases/tag/v0.1.0

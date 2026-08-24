@@ -53,6 +53,7 @@ export function buildWindowsMsix() {
     sourceCommit: source.checkedOutCommit,
     expectedSourceSha: source.expectedSourceSha,
     desktopArtifactId: built.applicationIdentity.desktopArtifactId,
+    productVersion: built.applicationIdentity.productVersion,
     applicationIdentity: built.applicationIdentity,
     msixPath: relative(projectRoot, outputPath).replaceAll("\\", "/"),
     msixBytes: built.output.bytes,
@@ -66,6 +67,7 @@ export function buildWindowsMsix() {
     state: "STRUCTURAL_VERIFICATION_PENDING",
     evidencePath: relative(projectRoot, evidencePath).replaceAll("\\", "/"),
     msixPath: relative(projectRoot, outputPath).replaceAll("\\", "/"),
+    productVersion: built.applicationIdentity.productVersion,
     msixBytes: built.output.bytes,
     msixSha256: built.output.sha256,
   }, null, 2));

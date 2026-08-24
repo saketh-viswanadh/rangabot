@@ -260,6 +260,7 @@ test("tampered launch rejection leaves every path outside the disposable app cop
         manifestSha256: null,
         artifactSha256: null,
         sourceVersion: null,
+        productVersion: null,
         reason: "resource-mismatch",
         manifest: null,
       };
@@ -270,6 +271,37 @@ test("tampered launch rejection leaves every path outside the disposable app cop
   assert.equal(existsSync(join(userDataPath, "private-data")), false);
   assert.equal(existsSync(join(userDataPath, "private-data", "tmp")), false);
   assert.deepEqual(snapshotOutsideApp(), before);
+});
+
+test("desktop startup reports a dedicated product-version mismatch before private runtime mutation", () => {
+  const testFixture = fixture();
+  const stages: string[] = [];
+  assert.throws(() => verifyDesktopResourcesBeforeMutation({
+    resourcesPath: testFixture.resourcesPath,
+    isPackaged: true,
+    reportStage(stage) { stages.push(stage); },
+    verifyArtifact() {
+      return {
+        state: "mixed",
+        candidateBuildId: null,
+        build: null,
+        baseCommit: null,
+        manifestSha256: null,
+        artifactSha256: null,
+        sourceVersion: null,
+        productVersion: null,
+        reason: "product-version-mismatch",
+        manifest: null,
+      };
+    },
+  }), /product-version-mismatch/);
+  assert.deepEqual(stages, [
+    "A10_RESOURCE_BOUNDARY",
+    "A20_RUNTIME_EVIDENCE",
+    "A30_ARTIFACT_INSPECTION",
+    "A46_PRODUCT_VERSION_MISMATCH",
+  ]);
+  assert.equal(existsSync(join(testFixture.userDataPath, "private-data")), false);
 });
 
 test("packaged resource boundary rejects overrides, symlinks and non-files", () => {

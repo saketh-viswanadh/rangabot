@@ -1,5 +1,19 @@
 # Daily progress
 
+## 2026-08-24 — Version 1.2 source-release preparation
+
+- Unified the source, macOS package metadata, Windows package identity, release
+  notes, and public documentation on version 1.2.0. The Windows candidate
+  workflow now runs on merged `main` as well as pull requests, removing its
+  dependency on a deleted integration branch.
+- Kept historical evaluator, Analytics-pack, response-feedback candidate, and
+  0.1.0 release records intact instead of relabelling old evidence. Desktop
+  product versioning is bound separately to 1.2.0 while the frozen feedback
+  candidate retains its original 0.1.0 evidence identity.
+- The GitHub release is source-only. Ad-hoc macOS and unsigned Windows packages
+  remain internal evidence and are excluded from public downloads until signing
+  and clean-machine install, update, and uninstall acceptance pass.
+
 ## 2026-08-24 — Goal-preserving recovery and local-context integrity
 
 - Added a manual failed-turn recovery card that reconstructs the stored request,

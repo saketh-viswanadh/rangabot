@@ -12,6 +12,7 @@ import {
   MAXIMUM_MSIX_BYTES_EXCLUSIVE,
   MAXIMUM_MSIX_SOURCE_BYTES_EXCLUSIVE,
   MSIX_DESKTOP_MANIFEST_PACKAGE_PATH,
+  msixIdentityVersionForProductVersion,
   readExpectedMsixManifestIdentity,
   type MsixSourceEntry,
 } from "./windows-msix.ts";
@@ -1141,6 +1142,9 @@ export async function verifyUnsignedMsix(input: Readonly<{
     || (input.expectedSourceSha !== null && input.expectedSourceSha !== input.checkedOutCommit)) {
     throw new Error("Desktop provenance manifest does not bind the exact unsigned win32/x64 source.");
   }
+  if (manifestIdentity.version !== msixIdentityVersionForProductVersion(desktopManifest.productVersion)) {
+    throw new Error("MSIX package identity does not match the bound desktop product version.");
+  }
   const unpackedIdentity = inspectDesktopArtifact({
     resourceRoot: resolve(input.applicationRoot, "resources"),
     manifestPath: desktopManifestSource.sourcePath,
@@ -1279,6 +1283,7 @@ export async function verifyUnsignedMsix(input: Readonly<{
       contentTypeDefaultCount: contentTypes.defaults.length,
       contentTypeOverrideCount: contentTypes.overrides.length,
       desktopArtifactId: desktopManifest.desktopArtifactId,
+      productVersion: desktopManifest.productVersion,
       sourceCommit: desktopManifest.sourceCommit,
       checkedOutCommit: input.checkedOutCommit,
       expectedSourceSha: input.expectedSourceSha,

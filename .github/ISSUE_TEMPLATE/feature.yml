@@ -1,7 +1,7 @@
 name: Feature proposal
 description: Propose a focused improvement and explain its privacy impact.
 title: "[Proposal]: "
-labels: [proposal]
+labels: [enhancement]
 body:
   - type: textarea
     id: benefit

@@ -28,9 +28,9 @@ const {
   readdirSync,
 } = identityFilesystem;
 
-export const DESKTOP_ARTIFACT_SCHEMA_VERSION = 3;
+export const DESKTOP_ARTIFACT_SCHEMA_VERSION = 4;
 export const DESKTOP_SOURCE_BASE_COMMIT = "8b161635f79ac6a572524ba22e3af7364fe08a5b";
-export const DESKTOP_SOURCE_BASELINE_COMMIT = "f5df9d75c0fbddeb1432aea009bf6b78367bc2b5";
+export const DESKTOP_SOURCE_BASELINE_COMMIT = "61dd223297ec492730483e4979b3139fbaa752c5";
 export const DESKTOP_FUSE_POLICY_NAME = "electron-43-hardened-v2";
 
 const sha256Pattern = /^[0-9a-f]{64}$/;
@@ -149,7 +149,7 @@ export type DesktopArtifactTarget = {
 };
 
 export type DesktopArtifactManifest = {
-  schemaVersion: 3;
+  schemaVersion: 4;
   /** Founder-approved source merge from which Profiles v1 was developed. */
   sourceBaseCommit: string;
   desktopArtifactId: string;
@@ -161,6 +161,9 @@ export type DesktopArtifactManifest = {
   sourceManifestSha256: string;
   sourceFiles: DesktopArtifactFile[];
   packageLockSha256: string;
+  /** Product version shipped by package.json and the platform package. */
+  productVersion: string;
+  /** Historical web-feedback evidence; its source version is intentionally independent. */
   webFeedback: DesktopWebFeedbackIdentity;
   launchProfile: DesktopLaunchProfile;
   runtimeVersions: DesktopRuntimeVersions;
@@ -210,9 +213,11 @@ export type DesktopArtifactVerificationReason =
   | "identity-mismatch"
   | "runtime-mismatch"
   | "resource-mismatch"
+  | "product-version-mismatch"
   | "distribution-unsigned";
 
 export type DesktopArtifactVerification = ResponseFeedbackCandidateInspection & {
+  productVersion: string | null;
   reason: DesktopArtifactVerificationReason;
   manifest: DesktopArtifactManifest | null;
 };
@@ -534,6 +539,7 @@ function desktopIdentityPayload(manifest: Omit<DesktopArtifactManifest, "desktop
     sourceDirty: manifest.sourceDirty,
     sourceManifestSha256: manifest.sourceManifestSha256,
     packageLockSha256: manifest.packageLockSha256,
+    productVersion: manifest.productVersion,
     webFeedback: manifest.webFeedback,
     launchProfile: manifest.launchProfile,
     runtimeVersions: manifest.runtimeVersions,
@@ -555,15 +561,15 @@ export function deriveDesktopArtifactId(manifest: DesktopArtifactManifest) {
 }
 
 export function desktopArtifactBuildName(
-  sourceVersion: string,
+  productVersion: string,
   target: DesktopArtifactArch | DesktopArtifactTarget,
   desktopArtifactId: string,
 ) {
-  if (!versionPattern.test(sourceVersion) || !sha256Pattern.test(desktopArtifactId)) {
-    throw new Error("Cannot name a desktop build without valid source and artifact identities.");
+  if (!versionPattern.test(productVersion) || !sha256Pattern.test(desktopArtifactId)) {
+    throw new Error("Cannot name a desktop build without valid product and artifact identities.");
   }
   const targetName = typeof target === "string" ? target : `${target.platform}.${target.arch}`;
-  return `${sourceVersion}+desktop.${targetName}.${desktopArtifactId.slice(0, 12)}`;
+  return `${productVersion}+desktop.${targetName}.${desktopArtifactId.slice(0, 12)}`;
 }
 
 export function createDesktopArtifactManifest(input: DesktopArtifactManifestInput): DesktopArtifactManifest {
@@ -578,6 +584,7 @@ export function createDesktopArtifactManifest(input: DesktopArtifactManifestInpu
   }
   if (typeof input.sourceDirty !== "boolean" || !sha256Pattern.test(input.sourceManifestSha256)
     || !sha256Pattern.test(input.packageLockSha256)) throw new Error("Desktop source identity is incomplete.");
+  if (!versionPattern.test(input.productVersion)) throw new Error("Desktop product version is invalid.");
   if ((input.target.platform !== "darwin" && input.target.platform !== "win32")
     || (input.target.arch !== "arm64" && input.target.arch !== "x64")
     || (input.target.platform === "win32" && input.target.arch !== "x64")) {
@@ -616,6 +623,7 @@ export function createDesktopArtifactManifest(input: DesktopArtifactManifestInpu
     sourceManifestSha256: input.sourceManifestSha256,
     sourceFiles,
     packageLockSha256: input.packageLockSha256,
+    productVersion: input.productVersion,
     webFeedback,
     launchProfile,
     runtimeVersions,
@@ -637,7 +645,7 @@ export function createDesktopArtifactManifest(input: DesktopArtifactManifestInpu
 export function parseDesktopArtifactManifest(value: unknown): DesktopArtifactManifest | null {
   if (!isRecord(value) || !exactKeys(value, [
     "schemaVersion", "sourceBaseCommit", "desktopArtifactId", "sourceBaselineCommit", "sourceCommit", "sourceDirty", "sourceManifestSha256",
-    "sourceFiles", "packageLockSha256", "webFeedback", "launchProfile", "runtimeVersions", "target", "fuses", "packagingTooling", "bundleManifestSha256",
+    "sourceFiles", "packageLockSha256", "productVersion", "webFeedback", "launchProfile", "runtimeVersions", "target", "fuses", "packagingTooling", "bundleManifestSha256",
     "resourceManifestSha256", "nativeManifestSha256", "bundleFiles", "resources", "natives", "generatedAt",
   ]) || value.schemaVersion !== DESKTOP_ARTIFACT_SCHEMA_VERSION
     || value.sourceBaseCommit !== DESKTOP_SOURCE_BASE_COMMIT
@@ -647,6 +655,7 @@ export function parseDesktopArtifactManifest(value: unknown): DesktopArtifactMan
     || typeof value.sourceDirty !== "boolean"
     || typeof value.sourceManifestSha256 !== "string" || !sha256Pattern.test(value.sourceManifestSha256)
     || typeof value.packageLockSha256 !== "string" || !sha256Pattern.test(value.packageLockSha256)
+    || typeof value.productVersion !== "string" || !versionPattern.test(value.productVersion)
     || typeof value.bundleManifestSha256 !== "string" || !sha256Pattern.test(value.bundleManifestSha256)
     || typeof value.resourceManifestSha256 !== "string" || !sha256Pattern.test(value.resourceManifestSha256)
     || typeof value.nativeManifestSha256 !== "string" || !sha256Pattern.test(value.nativeManifestSha256)
@@ -678,6 +687,7 @@ export function parseDesktopArtifactManifest(value: unknown): DesktopArtifactMan
     sourceManifestSha256: value.sourceManifestSha256,
     sourceFiles,
     packageLockSha256: value.packageLockSha256,
+    productVersion: value.productVersion,
     webFeedback,
     launchProfile,
     runtimeVersions,
@@ -1005,6 +1015,7 @@ function emptyVerification(state: "unknown" | "dirty" | "mixed", reason: Desktop
     manifestSha256: null,
     artifactSha256: null,
     sourceVersion: null,
+    productVersion: null,
     reason,
     manifest,
   };
@@ -1033,6 +1044,15 @@ function runtimeMatches(manifest: DesktopArtifactManifest, runtime: DesktopRunti
     }
   }
   return true;
+}
+
+function packagedProductVersion(artifactRoot: string) {
+  const packagePath = join(artifactRoot, "rangabot-resources", "package.json");
+  const record = JSON.parse(readManifestFile(packagePath)) as { name?: unknown; version?: unknown };
+  if (record.name !== "rangabot" || typeof record.version !== "string" || !versionPattern.test(record.version)) {
+    throw new Error("Packaged product metadata is invalid.");
+  }
+  return record.version;
 }
 
 /**
@@ -1076,6 +1096,9 @@ export function inspectDesktopArtifact(options: {
   try {
     const resources = collectDesktopArtifactFiles(root, [relativeManifest]);
     if (!sameFiles(resources, manifest.resources)) return emptyVerification("mixed", "resource-mismatch", manifest);
+    if (packagedProductVersion(root) !== manifest.productVersion) {
+      return emptyVerification("mixed", "product-version-mismatch", manifest);
+    }
     const bundleFiles = collectDesktopBundleFiles(dirname(root), manifest.target.platform);
     if (!sameFiles(bundleFiles, manifest.bundleFiles)) return emptyVerification("mixed", "resource-mismatch", manifest);
   } catch {
@@ -1090,11 +1113,12 @@ export function inspectDesktopArtifact(options: {
   return {
     state: "known",
     candidateBuildId: manifest.desktopArtifactId,
-    build: desktopArtifactBuildName(manifest.webFeedback.sourceVersion, manifest.target, manifest.desktopArtifactId),
+    build: desktopArtifactBuildName(manifest.productVersion, manifest.target, manifest.desktopArtifactId),
     baseCommit: manifest.sourceCommit,
     manifestSha256: manifest.sourceManifestSha256,
     artifactSha256: manifest.desktopArtifactId,
     sourceVersion: manifest.webFeedback.sourceVersion,
+    productVersion: manifest.productVersion,
     reason: "known",
     manifest,
   };

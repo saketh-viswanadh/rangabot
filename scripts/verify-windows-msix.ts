@@ -20,6 +20,7 @@ type BuildEvidence = Readonly<{
   sourceCommit?: unknown;
   expectedSourceSha?: unknown;
   desktopArtifactId?: unknown;
+  productVersion?: unknown;
   msixPath?: unknown;
   msixBytes?: unknown;
   msixSha256?: unknown;
@@ -124,6 +125,7 @@ export async function verifyWindowsMsix() {
     || buildEvidence.sourceCommit !== verified.sourceCommit
     || buildEvidence.expectedSourceSha !== source.expectedSourceSha
     || buildEvidence.desktopArtifactId !== verified.desktopArtifactId
+    || buildEvidence.productVersion !== verified.productVersion
     || buildEvidence.msixPath !== MSIX_OUTPUT_RELATIVE_PATH
     || buildEvidence.msixBytes !== verified.msixBytes
     || buildEvidence.msixSha256 !== verified.msixSha256
@@ -146,6 +148,7 @@ export async function verifyWindowsMsix() {
     state: "STRUCTURAL_CANDIDATE_PASS",
     release: "HOLD",
     packageSignature: verified.packageSignature,
+    productVersion: verified.productVersion,
     cleanVmAcceptance: "NOT_RUN",
     evidencePath: relative(projectRoot, evidencePath).replaceAll("\\", "/"),
     msixBytes: verified.msixBytes,

@@ -3,7 +3,7 @@ name: Windows desktop candidate
 on:
   workflow_dispatch:
   push:
-    branches: [agent/windows-desktop-package-main-2026-08-16]
+    branches: [main]
     paths:
       - ".github/workflows/windows-desktop-candidate.yml"
       - "desktop/**"

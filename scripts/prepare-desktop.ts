@@ -115,6 +115,18 @@ function packageVersion(name: string) {
   return record.version;
 }
 
+function productVersion() {
+  const record = JSON.parse(readFileSync(resolve(projectRoot, "package.json"), "utf8")) as {
+    name?: unknown;
+    version?: unknown;
+  };
+  if (record.name !== "rangabot" || typeof record.version !== "string"
+    || !/^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/u.test(record.version)) {
+    throw new Error("The desktop product version in package.json is invalid.");
+  }
+  return record.version;
+}
+
 function copyDirectory(source: string, destination: string) {
   if (!existsSync(source) || !lstatSync(source).isDirectory()) throw new Error(`Required desktop resource is missing: ${relative(projectRoot, source)}.`);
   cpSync(source, destination, { recursive: true, dereference: true, preserveTimestamps: false });
@@ -403,6 +415,7 @@ assertBaseline();
 const commits = sourceCommits();
 if (sourceDirty()) throw new Error("Desktop packaging requires an exact clean source commit.");
 const source = sourceManifest();
+const sourceProductVersion = productVersion();
 const stagingBuildId = `desktop-stage-${source.sha256.slice(0, 16)}`;
 const electronZipPath = prepareOfflineElectronZip(target);
 const verification = launchProfile.kind === DESKTOP_FINDER_VERIFICATION_BUILD_PROFILE;
@@ -441,7 +454,8 @@ if (sourceDirty()
   || confirmedCommits.base !== commits.base
   || confirmedCommits.head !== commits.head
   || confirmedSource.sha256 !== source.sha256
-  || JSON.stringify(confirmedSource.files) !== JSON.stringify(source.files)) {
+  || JSON.stringify(confirmedSource.files) !== JSON.stringify(source.files)
+  || productVersion() !== sourceProductVersion) {
   throw new Error("Desktop source identity changed during packaging preparation.");
 }
 const generatedAt = new Date().toISOString();
@@ -453,6 +467,7 @@ const manifest = createDesktopArtifactManifest({
   sourceManifestSha256: source.sha256,
   sourceFiles: source.files,
   packageLockSha256: sha256File(resolve(projectRoot, "package-lock.json")),
+  productVersion: sourceProductVersion,
   webFeedback: loadWebFeedback(),
   launchProfile,
   runtimeVersions: {
@@ -499,6 +514,7 @@ console.log(JSON.stringify({
   sourceBaseCommit: manifest.sourceBaseCommit,
   profilesBehaviorCommit: manifest.sourceBaselineCommit,
   packagingCommit: manifest.sourceCommit,
+  productVersion: manifest.productVersion,
   sourceDirty: manifest.sourceDirty,
   target: manifest.target,
   launchProfile: manifest.launchProfile,

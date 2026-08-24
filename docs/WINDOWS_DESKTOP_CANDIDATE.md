@@ -12,9 +12,10 @@ unsigned executable MSIX testing to Windows 11 with an elevated
 `Add-AppxPackage -AllowUnsigned` command. Windows 10 and ordinary-user install
 acceptance require a trusted, timestamped signature.
 
-Current evidence state: source tests pass on macOS, but the direct MSIX has not
-yet been produced or inspected on the pinned Windows SDK. Installation,
-launch, close, relaunch, upgrade and uninstall are **NOT RUN**. The workflow
+Current evidence state: pull-request CI produces and structurally verifies the
+direct unsigned MSIX on the pinned Windows SDK. That is package-integrity
+evidence, not installability or distribution approval. Signed installation,
+launch, close, relaunch, upgrade and uninstall remain **NOT RUN**. The workflow
 retains only public-safe JSON evidence; it does not upload MSIX or ZIP bytes.
 
 ## Why the installer changed
@@ -28,7 +29,8 @@ Direct MSIX avoids a custom downloader and gives Windows a block map for the
 complete package. The verifier independently streams the ZIP container,
 rejects unsafe or colliding Windows paths, reconciles every application file
 with `AppxBlockMap.xml` SHA-256 evidence, proves that the exact finalized
-desktop artifact and provenance manifest are inside, and requires the unsigned
+desktop artifact and provenance manifest are inside, requires the four-part
+MSIX identity version to match the bound desktop product version, and requires the unsigned
 container to contain no package-signature file. Structural verification is not
 installability or release evidence.
 
@@ -69,7 +71,7 @@ npm run desktop:msix:verify
 
 Successful source-level packaging produces:
 
-- `out/make/msix/win32/x64/RangaBot-win32-x64-0.1.0.msix`
+- `out/make/msix/win32/x64/RangaBot-win32-x64-1.2.0.msix`
 - `desktop/out/windows-msix-build-win32-x64.json`
 - `desktop/out/windows-msix-win32-x64.json`
 - the existing platform-qualified desktop artifact evidence

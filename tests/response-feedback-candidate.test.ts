@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import packageMetadata from "../package.json" with { type: "json" };
 import {
   deriveResponseFeedbackCandidate,
   deriveResponseFeedbackBuildArtifact,
@@ -113,6 +114,21 @@ test("candidate inspection fails closed for changed, mixed, unknown, and spoofed
   }
 });
 
+test("runtime product version is independent from historical feedback evidence", () => {
+  const previous = { ...process.env };
+  try {
+    Object.assign(process.env, responseFeedbackCandidateEnvironment({}));
+    const inspection = getRuntimeResponseFeedbackCandidate();
+    assert.equal(inspection.productVersion, packageMetadata.version);
+    if (inspection.state === "known") {
+      assert.equal(inspection.sourceVersion, responseFeedbackCandidateManifestForTests()?.sourceVersion);
+    }
+  } finally {
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
+    Object.assign(process.env, previous);
+  }
+});
+
 test("build and runtime wiring fail closed around the exact candidate", () => {
   const buildScript = readFileSync("scripts/build.ts", "utf8");
   const devScript = readFileSync("scripts/start-dev.ts", "utf8");
@@ -127,6 +143,8 @@ test("build and runtime wiring fail closed around the exact candidate", () => {
   assert.match(devScript, /responseFeedbackCandidateEnvironment/);
   assert.match(startScript, /requireBuildArtifact: true/);
   assert.match(buildScript, /writeResponseFeedbackBuildArtifactManifest/);
+  assert.match(runtimeRoute, /sourceVersion: candidate\.sourceVersion/);
+  assert.match(runtimeRoute, /productVersion: candidate\.productVersion/);
   assert.doesNotMatch(runtimeRoute, /files|path/);
 });
 
