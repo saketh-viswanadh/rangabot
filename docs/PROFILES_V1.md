@@ -267,8 +267,10 @@ and whole-file BlockMap verification, plus the sandboxed Mac App Store source
 candidate, timestamp-sized Mach-O seal binding, schema-grounded SQL planning,
 cross-platform Mac security test correction, profile-local dataset semantic
 context with verified-usage retrieval, and governed capability routing with
-truthful resource receipts and bounded mechanical Finish & Verify at commit
-`cea0fe344934a218f44e4f31ee00783271eb0771`.
+truthful resource receipts, bounded mechanical Finish & Verify, goal-preserving
+turn recovery, authoritative conversation and local-resource binding guards,
+and the transparent assistant chat mark at commit
+`bd36c5352f72ff8e15ccd14c69bf1bc95d551e47`.
 The generated v3 manifest records
 the exact clean packaging HEAD as `sourceCommit`; the installed verifier uses
 that value as its commit identity and does not require `.git`.
