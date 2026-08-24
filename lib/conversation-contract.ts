@@ -14,6 +14,7 @@ export type AnswerContract = {
   noBullets: boolean;
   exactLiteral?: string;
   forbiddenTerms: string[];
+  forbiddenWords: string[];
   currentLanguage?: string;
   currentTone?: string;
   allowedLiterals?: string[];
@@ -85,7 +86,11 @@ export function compileAnswerContract(messages: ChatMessage[]): AnswerContract {
   const inferredListBudget = listCount && listCount <= 5 && listStyle !== "outline" ? listCount * 25 : undefined;
   const maxWords = explicitMaxWords ?? qualitativeMax ?? (sentenceCount === 1 ? 35 : inferredListBudget);
   const exactLiteral = latestRequest.match(/(?:reply|respond|answer)(?:\s+with)?\s+exactly\s+one\s+word\s*:\s*([\p{L}\p{N}_-]+)[.!?]*$/iu)?.[1];
-  const forbiddenTerms = [...latestRequest.matchAll(/(?:do not|don't)\s+(?:use|include|mention)\s+(?:the\s+word\s+)?["']?([\p{L}\p{N}_-]+)["']?/giu)].map((match) => match[1]);
+  const forbiddenMatches = [...latestRequest.matchAll(/(?:do not|don't)\s+(?:use|include|mention)\s+(?:(?:the\s+)?(?:exact\s+)?(word|phrase)\s+)?(?:["“]([^"”\r\n]{1,200})["”]|'([^'\r\n]{1,200})'|([\p{L}\p{N}_-]+))/giu)];
+  const forbiddenTerms = forbiddenMatches.map((match) => match[2] ?? match[3] ?? match[4]);
+  const forbiddenWords = forbiddenMatches
+    .filter((match) => match[1]?.toLowerCase() === "word" || (!match[1] && !/\s/u.test(match[2] ?? match[3] ?? match[4])))
+    .map((match) => match[2] ?? match[3] ?? match[4]);
   const currentLanguage = lower.match(/\buse\s+(python|sql|javascript|typescript|pyspark|r|java)\b/)?.[1];
   const currentTone = taskFrame?.tone?.toLowerCase() ?? lower.match(/\b(sober|formal|friendly|playful|professional|technical|warm|concise|brief)\b/)?.[1];
   const choiceMatch = latestRequest.match(/(?:answer|reply)(?:\s+with)?\s+only\s+([\p{L}\p{N}_-]+)\s+or\s+([\p{L}\p{N}_-]+)\s*:/iu);
@@ -104,6 +109,7 @@ export function compileAnswerContract(messages: ChatMessage[]): AnswerContract {
     noBullets: /\b(?:no|without) bullets?\b/.test(lower),
     ...(exactLiteral ? { exactLiteral } : {}),
     forbiddenTerms,
+    forbiddenWords,
     ...(currentLanguage ? { currentLanguage } : {}),
     ...(currentTone ? { currentTone } : {}),
     ...(choiceMatch ? { allowedLiterals: [choiceMatch[1], choiceMatch[2]] } : {}),
@@ -268,11 +274,121 @@ export function applySelectedMemoryToContract(contract: AnswerContract, memories
 
 export type UnavailableCapability = "email-send" | "calendar-write" | "web-browse" | "financial-transaction" | "local-command";
 
+function requestedMessageBody(question: string) {
+  return (question.match(/\b(?:saying|that|with (?:the )?message|message\s*(?:is|:))\s+([\s\S]{1,500})$/i)?.[1]
+    ?? question.match(/:\s*([\s\S]{1,500})$/)?.[1])
+    ?.trim().replace(/[.!?\s]+$/, "");
+}
+
+function emailDraftContinuation(question: string) {
+  const recipientMatch = question.match(/\bto\s+(?:(?:my|our)\s+)?([\p{L}][\p{L}'-]{0,60}|[\w.+-]+@[\w.-]+)\b/iu)
+    ?? question.match(/\b(?:email|mail|message)\s+(?:(?:my|our)\s+)?([\p{L}][\p{L}'-]{0,60}|[\w.+-]+@[\w.-]+)\b/iu)
+    ?? question.match(/\b(?:send|forward|deliver)\s+(?:(?:my|our)\s+)?([\p{L}][\p{L}'-]{0,60})\s+(?:an?|the|this|that|my|our)\s+[\p{L}][\p{L}'-]{1,60}\b/iu)
+    ?? question.match(/\b(?:send|forward|deliver)\s+(?:(?:my|our)\s+)?([\p{L}][\p{L}'-]{0,60})\s+(?:(?:an?|the)\s+)?(?:note|update|reply|message|email|mail)\b/iu);
+  const recipient = recipientMatch?.[1];
+  const requestedMessage = requestedMessageBody(question);
+  const boundary = "I can't send email because no approved email connection is enabled. Nothing was sent.";
+  if (!requestedMessage) return `${boundary} Tell me the recipient, subject, and what the message should say, and I can draft it here for review.`;
+  const body = `${requestedMessage[0]?.toUpperCase() ?? ""}${requestedMessage.slice(1)}.`;
+  return `${boundary}\n\n**Draft for review**\n\n${recipient ? `Hi ${recipient},` : "Hello,"}\n\n${body}\n\nBest,\n[Your name]`;
+}
+
+function calendarContinuation(question: string) {
+  const requestedMessage = requestedMessageBody(question);
+  const boundary = "I can't change your calendar or notify attendees because no approved calendar or messaging connection is enabled. Nothing was scheduled or sent.";
+  if (!requestedMessage) return `${boundary} I can draft the exact calendar change or attendee note here for you to review.`;
+  const body = `${requestedMessage[0]?.toUpperCase() ?? ""}${requestedMessage.slice(1)}.`;
+  return `${boundary}\n\n**Attendee note for review**\n\nHello,\n\n${body}\n\nBest,\n[Your name]`;
+}
+
+function actionIsDeclined(question: string, action: RegExp) {
+  return question.split(/[.;\n]|\bbut\b/i).some((clause) => /\b(?:cannot|can't|do not|don't|dont|never|without|will not|won't)\b/i.test(clause) && action.test(clause));
+}
+
+function actionDecisionText(question: string) {
+  const actionIndex = question.search(/\b(?:send|forward|deliver|email|mail|message|transfer|pay|run|execute|delete|cancel|move|reschedule|schedule|create|book|browse|search|check|look\s+up)\b/i);
+  if (actionIndex < 0) return question;
+  const afterAction = question.slice(actionIndex);
+  const bodyMarker = afterAction.search(/\b(?:saying|that|with\s+(?:the\s+)?message|message\s*(?:is|:))\b|:\s*/i);
+  return bodyMarker > 0 ? question.slice(0, actionIndex + bodyMarker) : question;
+}
+
+function asksForActionAdviceOrInstruction(question: string) {
+  const assistantDirectedExecution = /^\s*(?:hey[,!]?\s+)?(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:send|forward|deliver|email|mail|message|transfer|pay|run|execute|delete|cancel|move|reschedule|schedule|create|book|browse|search|check|look\s+up)\b/i.test(question);
+  if (assistantDirectedExecution) return false;
+  return /^\s*(?:who|what|when|where|why|how)\b/i.test(question)
+    || /\bshould\s+(?:i|we|you)\b|\b(?:can|could|may|would|will)\s+(?:i|we)\b|\b(?:am\s+i|are\s+we)\b|\bhow\s+(?:do|can|should|would)\s+i\b/i.test(question)
+    || /\b(?:is\s+it|would\s+it\s+be)\s+(?:okay|ok|safe|wise|advisable|a\s+good\s+idea)\s+to\b/i.test(question)
+    || /\b(?:do\s+you\s+think|would\s+you\s+recommend)\b[\s\S]{0,60}\bshould\b/i.test(question)
+    || /\bwhat\s+(?:happens|would\s+happen)\s+if\b/i.test(question)
+    || /\bwhat(?:['’]s|\s+is)\s+(?:the\s+)?(?:best|right|safest|easiest)\s+(?:way|approach)\s+to\b/i.test(question)
+    || /\bwhat\s+(?:are|would\s+be)\s+(?:the\s+)?(?:steps|instructions)\b/i.test(question)
+    || /\b(?:give|show|list)\s+(?:me\s+)?(?:the\s+)?(?:steps|instructions)\s+(?:for|to)\b/i.test(question)
+    || /\bwalk\s+me\s+through\b/i.test(question)
+    || /\b(?:explain|tell\s+me|advise|help\s+me\s+decide)\b[\s\S]{0,90}\b(?:whether|if|how|should)\b/i.test(question);
+}
+
+function isLikelyRecipientToken(value: string) {
+  const token = value.replace(/[,:;.!?]+$/, "");
+  return /^[\w.+-]+@[\w.-]+$/u.test(token)
+    || /^[\p{Lu}][\p{L}'-]{1,60}$/u.test(token)
+    || /^(?:him|her|them|me|us|boss|manager|client|customer|team|attendees|participants|owner|group)$/iu.test(token);
+}
+
+function startsWithDirectEmailRecipient(question: string) {
+  const match = question.match(/^\s*(?:hey[,!]?\s+)?(?:email|mail|message)\s+(?:(my|our)\s+)?(\S{1,120})(?:\s+([\s\S]{1,120}))?/iu);
+  if (!match) return false;
+  const token = match[2].replace(/[,:;.!?]+$/, "");
+  const trailing = match[3] ?? "";
+  return isLikelyRecipientToken(token)
+    || Boolean(match[1] && /^[\p{L}][\p{L}'-]{1,60}$/u.test(token))
+    || /^(?:an?|the|this|that|my|our)\s+[\p{L}\p{N}]/iu.test(trailing)
+    || /^the$/i.test(token) && /^\s*(?:hey[,!]?\s+)?(?:email|mail|message)\s+the\s+(?:team|attendees|participants|client|customer|manager|owner|group)\b/iu.test(question)
+    || /\b(?:saying|that|about|regarding|with\s+(?:the\s+)?(?:subject|message))\b/i.test(question);
+}
+
+function hasExplicitRecipientDelivery(question: string) {
+  const recipientFirst = question.match(/\b(?:send|forward|deliver)\s+(?:(my|our)\s+)?(\S{1,120})\s+([\s\S]{1,120})/iu);
+  const hasRecipientFirst = recipientFirst
+    && (isLikelyRecipientToken(recipientFirst[2]) || Boolean(recipientFirst[1] && /^[\p{L}][\p{L}'-]{1,60}$/u.test(recipientFirst[2])))
+    && (/^(?:an?|the|this|that|my|our)\s+[\p{L}\p{N}]/iu.test(recipientFirst[3])
+      || /^(?:note|update|reply|message|email|mail)\b/iu.test(recipientFirst[3]));
+  if (hasRecipientFirst) return true;
+  const payloadFirst = question.match(/\b(?:send|forward|deliver)\s+(?:(?:an?|the|this|that|my|our)\s+)?[\p{L}][\p{L}'-]{1,60}(?:\s+[\p{L}][\p{L}'-]{1,60}){0,2}\s+to\s+(?:(my|our)\s+)?(\S{1,120})/iu);
+  const payloadFirstRecipient = payloadFirst?.[2]?.replace(/[,:;.!?]+$/, "") ?? "";
+  return Boolean(payloadFirst
+    && (isLikelyRecipientToken(payloadFirst[2]) || Boolean(payloadFirst[1] && /^[\p{L}][\p{L}'-]{1,60}$/u.test(payloadFirstRecipient))));
+}
+
 export function answerUnavailableAction(question: string): { capability: UnavailableCapability; answer: string } | null {
-  if (/\b(?:send|email|mail)\b[\s\S]{0,80}\b(?:email|mail|message|this|it|them|him|her|[A-Z][a-z]+)\b/.test(question)) return { capability: "email-send", answer: "I can't send email because no approved email connection is enabled. I can draft a ready-to-review message here." };
-  if (/\b(?:delete|cancel|move|reschedule|create|book)\b[\s\S]{0,60}\b(?:calendar|meeting|appointment|event)\b/i.test(question)) return { capability: "calendar-write", answer: "I can't change your calendar because no approved calendar connection is enabled. I can help draft the exact change for you to review." };
-  if (/\b(?:browse|search|check|look up)\b[\s\S]{0,50}\b(?:web|internet|online|today'?s?\s+(?:news|headline))\b/i.test(question)) return { capability: "web-browse", answer: "I can't browse the web because web access is not enabled. I can answer from local knowledge or help you define an approved search." };
-  if (/\b(?:transfer|send|pay)\b[\s\S]{0,40}(?:[$₹€£]\s*\d|\b(?:money|funds|payment)\b)/i.test(question)) return { capability: "financial-transaction", answer: "I can't transfer money or access a payment account. I can help you review the amount, recipient, and safe steps before you make the payment yourself." };
-  if (/\b(?:run|execute)\b[\s\S]{0,80}\b(?:rm\s|sudo\s|del\s|erase|delete\s+(?:a\s+)?file)/i.test(question)) return { capability: "local-command", answer: "I can't execute commands through this chat. I can explain the command and help you review a safe version, but I won't claim it ran." };
+  const decisionText = actionDecisionText(question);
+  const asksForAdvice = asksForActionAdviceOrInstruction(decisionText);
+  const emailAction = /\b(?:send|forward|deliver|email|mail|message)\b/i;
+  const emailInstruction = /\b(?:explain|teach|teaching|show|guide|tutorial|describe|create|write)\b[\s\S]{0,100}\bhow\s+to\s+(?:send|forward|deliver|email|mail|message)\b/i;
+  const explicitPoliteEmail = /^\s*(?:hey[,!]?\s+)?(?:(?:please)\s+|(?:can|could|would|will)\s+you\s+(?:please\s+)?)(?:email|mail|message)\s+\S/iu.test(question);
+  const directEmailRecipient = startsWithDirectEmailRecipient(question);
+  const requestsEmailExecution = /\b(?:send|forward|deliver)\b[\s\S]{0,100}\b(?:email|mail|message|this|it)\b/i.test(question)
+    || explicitPoliteEmail
+    || directEmailRecipient
+    || hasExplicitRecipientDelivery(question)
+    || /\bsend\s+this\b/i.test(question);
+  if (requestsEmailExecution && !asksForAdvice && !emailInstruction.test(decisionText) && !actionIsDeclined(decisionText, emailAction)) {
+    return { capability: "email-send", answer: emailDraftContinuation(question) };
+  }
+  const writesMeetingContent = /\b(?:notes|minutes|agenda|summary|word|docx|document)\b/i.test(question);
+  const calendarAction = /\b(?:delete|cancel|move|reschedule|schedule|create|book)\b[\s\S]{0,60}\b(?:calendar|meeting|appointment|event)\b/i;
+  const calendarInstruction = /\b(?:explain|teach|show|tell\s+me|guide|tutorial|describe)\b[\s\S]{0,70}\bhow\s+to\s+(?:delete|cancel|move|reschedule|schedule|create|book)\b/i;
+  if (!writesMeetingContent && calendarAction.test(question) && !asksForAdvice && !calendarInstruction.test(decisionText) && !actionIsDeclined(decisionText, calendarAction)) {
+    return { capability: "calendar-write", answer: calendarContinuation(question) };
+  }
+  const webAction = /\b(?:browse|search|check|look\s+up)\b[\s\S]{0,50}\b(?:web|internet|online|today'?s?\s+(?:news|headline))\b/i;
+  const webInstruction = /\b(?:explain|teach|show|guide|tutorial|describe|create|write)\b[\s\S]{0,90}\bhow\s+to\s+(?:browse|search|check|look\s+up)\b/i;
+  if (webAction.test(question) && !asksForAdvice && !webInstruction.test(decisionText) && !actionIsDeclined(decisionText, webAction)) return { capability: "web-browse", answer: "I can't browse the web because web access is not enabled. I can answer from local knowledge or help you define an approved search." };
+  const financialAction = /\b(?:transfer|send|pay)\b/i;
+  if (!asksForAdvice && !actionIsDeclined(decisionText, financialAction)
+    && /\b(?:transfer|send|pay)\b[\s\S]{0,40}(?:[$₹€£]\s*\d|\b(?:money|funds|payment)\b)/i.test(question)) return { capability: "financial-transaction", answer: "I can't transfer money or access a payment account. I can help you review the amount, recipient, and safe steps before you make the payment yourself." };
+  const localCommandAction = /\b(?:run|execute)\b/i;
+  if (!asksForAdvice && !actionIsDeclined(decisionText, localCommandAction)
+    && /\b(?:run|execute)\b[\s\S]{0,80}\b(?:rm\s|sudo\s|del\s|erase|delete\s+(?:a\s+)?file)/i.test(question)) return { capability: "local-command", answer: "I can't execute commands through this chat. I can explain the command and help you review a safe version, but I won't claim it ran." };
   return null;
 }

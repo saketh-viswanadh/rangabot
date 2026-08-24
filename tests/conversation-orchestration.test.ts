@@ -68,8 +68,10 @@ test("unavailable email execution is answered deterministically", () => {
   assert.equal(answerUnavailableExternalAction("Explain how email delivery works"), null);
 });
 
-test("exact literal constraints bypass probabilistic generation", () => {
+test("exact literal and narrowly supported arithmetic constraints bypass probabilistic generation", () => {
   assert.equal(answerDeterministicConversationRequest([{ role: "user", content: "Reply with exactly one word: ready." }]), "ready");
+  assert.equal(answerDeterministicConversationRequest([{ role: "user", content: "Calculate 10% of 250" }]), "The verified result is 25.");
+  assert.equal(answerDeterministicConversationRequest([{ role: "user", content: "Calculate 10% of 250. Explain your reasoning." }]), null);
 });
 
 test("applies the same core precedence contract to transformed scholar prompts", () => {

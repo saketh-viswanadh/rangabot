@@ -15,6 +15,7 @@ import { completeJsonWithOllama } from "./providers/ollama.ts";
 import { ProviderError, type ChatMessage, type GenerationOptions } from "./providers/types.ts";
 import { resolveSchemaGroundedPhaseOnePlan } from "./schema-grounded-phase-one.ts";
 import { applyAnalyticalSemanticContext, type AnalyticalSemanticContext } from "./analytical-semantic-context.ts";
+import { verifiedSqlUsage } from "./dataset-semantic-contexts.ts";
 import { focusDatabaseSchema, type SqlProposal } from "./sql-proposals.ts";
 import { executeReadOnlySql, inspectDatasetIdentity, inspectDatasetSchema, SqlRuntimeError, type DatasetColumn, type DatasetFileIdentity, type SqlExecutionResult } from "./sql-runtime.ts";
 
@@ -52,6 +53,7 @@ export type AnalyticsPackOutcome = {
     plan: Record<string, unknown>;
     proposal: SqlProposal;
     execution?: SqlExecutionResult;
+    contextUsage?: { tables: string[]; columns: string[] };
     narration?: {
       disposition: "trusted-renderer";
       narrative: VerifiedAnalyticalNarration;
@@ -441,6 +443,7 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
       packVersion: manifest.version,
       ...(usage.model ? { modelMode: request.modelAssignment.mode, modelId: configuredModel } : {}),
     };
+    const contextUsage = verifiedSqlUsage(proposal.query, inspectedColumns);
     return checkedOutcome(request, {
       requestId: request.requestId,
       packId: manifest.id,
@@ -469,7 +472,7 @@ export async function runAnalyticsExpertPack(value: unknown, dependencies: Analy
       modelBackgroundClaims: [],
       warnings,
       receipt: receipt(usage),
-    }, trace, { plan: semanticPlan, proposal, execution: result, narration: { disposition: "trusted-renderer", narrative, audit: narrativeAudit } });
+    }, trace, { plan: semanticPlan, proposal, execution: result, contextUsage, narration: { disposition: "trusted-renderer", narrative, audit: narrativeAudit } });
   } catch (error) {
     return mappedFailure(request, error, phase, usage, options.signal);
   }

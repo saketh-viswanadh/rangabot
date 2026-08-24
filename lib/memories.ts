@@ -30,6 +30,7 @@ export type RelevantMemoryContext = {
   titles: string[];
   memories: LocalMemory[];
 };
+export type DirectMemoryRequest = "preferred-name" | "all-memories";
 
 export const maxMemoryImportBytes = 300_000;
 export const maxMemoryImportItems = 200;
@@ -204,8 +205,51 @@ function relevanceScore(memory: LocalMemory, question: string) {
   return score;
 }
 
+const approvedMemoryOptOutSubject = /\b(?:(?:(?:my|saved|local|approved|prior|previous|stored)\s+)?(?:memory|memories|profile|context)|(?:my|saved|local|approved|prior|previous|stored)\s+(?:preferences?|instructions?|facts?)|preferences?\s+(?:you(?:'ve| have)\s+)?saved|(?:what|anything|everything)\s+(?:you|rangabot)\s+(?:remember|know|recall)s?\s+about\s+me|personal\s+context|personali[sz]ation)\b/i;
+const conceptualMemoryOpening = /^(?:what|why|when|where|who|which|how|should\s+(?:i|we)|can(?!\s+you\b)|could(?!\s+you\b)|would(?!\s+you\b)|is|are|do(?!\s+not\b)|does|did)\b/i;
+const explicitMemoryDirectiveOpening = /^(?:please\b|(?:can|could|would|will)\s+you\b|(?:for|in)\s+this\s+(?:answer|response|chat|turn)\b|this\s+time\b|i\s+(?:do not|don't|dont|never|want|need|prefer)\b)/i;
+const conceptualMemoryAdvice = /\b(?:explain|tell\s+me|advise|help\s+me\s+decide)\b[\s\S]{0,70}\b(?:whether|why|when|if|how|should)\b/i;
+const conceptualMemoryFraming = /^(?:(?:please\s+)?(?:explain|define|interpret|summari[sz]e)\s+(?:the\s+)?(?:phrase|sentence|words?|wording|meaning)\b|(?:discuss|debate)\b[\s\S]{0,80}\b(?:whether|why|when|if)\b|write\b[\s\S]{0,70}\b(?:essay|article|paragraph)\b[\s\S]{0,70}\b(?:about|why|whether)\b)/i;
+const memoryKeepDirective = /\b(?:do not|don't|dont|never)\s+(?:ever\s+)?(?:forget|stop|avoid|quit|cease|ignore|skip)\b|\b(?:do not|don't|dont|never)\s+(?:answer|respond|continue|proceed)\b[\s\S]{0,60}\bwithout\b/i;
+const memoryIgnoreDirective = /\b(?:(?:do not|don't|dont|never)\s+(?:use|apply|consult|read|load|include|access|remember|recall)|(?:do not|don't|dont)\s+want\s+(?:you\s+)?to\s+(?:use|apply|consult|read|load|include|access|remember|recall)|ignore|skip|forget|without|not\s+(?:use|using|from|with)|no\s+(?:personali[sz]ation|personal\s+context))\b|\b(?:use|using|with)\s+no\s+(?:(?:saved|prior|previous|personal|stored)\s+)?(?:memory|memories|preferences?|instructions?|facts?|context|personali[sz]ation|profile)\b|^\s*(?:please\s+)?no\s+(?:personali[sz]ation|personal\s+context)\b|\b(?:do not|don't|dont|never)\s+personali[sz]e\b|\btreat\s+me\s+(?:like|as)\s+(?:a\s+)?new\s+user\b/i;
+const memoryUseDirective = /\b(?:use|using|apply|consult|read|load|include|access|remember|recall|personali[sz]e|with)\b/i;
+const genericMemoryNegative = /^\s*(?:(?:actually|instead|rather|now|then|on\s+second\s+thought)\s*,?\s*)*(?:no(?:\s+thanks)?|(?:do not|don't|dont|never|ignore|skip|forget|cancel|stop)(?:\s+(?:it|that|this|them))?|never\s+mind|changed\s+my\s+mind)\s*[!.]*\s*$/i;
+const genericMemoryPositive = /^\s*(?:(?:actually|instead|rather|now|then|on\s+second\s+thought)\s*,?\s*)*(?:(?:use|apply|consult|read|load|include|access|remember|recall)\s+(?:it|that|this|them)|yes|do\s+(?:use|access|remember|recall)\s+(?:it|that|this|them))\s*[!.]*\s*$/i;
+
+function memoryRequestSegments(value: string) {
+  return value.split(
+    /[.;?!\n]+|,\s*(?=(?:actually|instead|rather|now|then|no|do not|don't|dont|never|ignore|skip|forget|without|not|use|apply|consult|read|load|include|access|remember|recall|cancel|stop)\b)|\bbut\b|\band\s+(?=(?:(?:actually|instead|rather|now|then)\s+)*(?:no|do not|don't|dont|never|ignore|skip|forget|without|not|use|apply|consult|read|load|include|access|remember|recall|cancel|stop)\b)/i,
+  ).map((segment) => segment.trim()).filter(Boolean);
+}
+
+export function declinesApprovedMemory(question: string) {
+  const normalized = question.trim().replace(/[’]/g, "'");
+  const withoutQuotedMentions = normalized
+    .replace(/["“][^"”\n]{2,}["”]/gu, " ")
+    .replace(/(?:^|\s)'[^'\n]{2,}'(?=\s|[.,!?]|$)/gu, " ")
+    .trim();
+  if (!withoutQuotedMentions || /^(?:translate|quote)\b/i.test(normalized)) return false;
+
+  let seenMemory = false;
+  let preference: "use" | "ignore" | "unspecified" = "unspecified";
+  for (const segment of memoryRequestSegments(withoutQuotedMentions)) {
+    const mentionsMemory = approvedMemoryOptOutSubject.test(segment) || classifyDirectMemoryRequest(segment) !== null
+      || /\btreat\s+me\s+(?:like|as)\s+(?:a\s+)?new\s+user\b|\b(?:do not|don't|dont|never)\s+personali[sz]e\b/i.test(segment);
+    const genericNegative = seenMemory && !mentionsMemory && genericMemoryNegative.test(segment);
+    const genericPositive = seenMemory && !mentionsMemory && genericMemoryPositive.test(segment);
+    if (!mentionsMemory && !genericNegative && !genericPositive) continue;
+    if (mentionsMemory) seenMemory = true;
+    if (mentionsMemory && (conceptualMemoryFraming.test(segment) || conceptualMemoryAdvice.test(segment)
+      || conceptualMemoryOpening.test(segment) && !explicitMemoryDirectiveOpening.test(segment))) continue;
+    if (memoryKeepDirective.test(segment)) preference = "use";
+    else if (genericNegative || memoryIgnoreDirective.test(segment)) preference = "ignore";
+    else if (genericPositive || memoryUseDirective.test(segment)) preference = "use";
+  }
+  return preference === "ignore";
+}
+
 export function selectRelevantMemoriesFrom(memories: LocalMemory[], question: string, limit = 6, contract?: AnswerContract): LocalMemory[] {
-  if (!question.trim()) return [];
+  if (!question.trim() || declinesApprovedMemory(question)) return [];
   const seenSubjects = new Set<string>();
   const newestPerSubject = [...memories]
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -252,29 +296,43 @@ function savedName(memories: LocalMemory[]) {
   return null;
 }
 
-export function directMemoryTitles(question: string): string[] {
+const preferredNameQuestion = /^(?:what(?:'s| is) my name|do you (?:know|remember) my name|who am i)[?.!]*$/i;
+const allMemoriesQuestion = /^(?:what do you remember about me|show (?:me )?(?:my |your )?(?:saved )?memories|what have i asked you to remember)[?.!]*$/i;
+
+export function classifyDirectMemoryRequest(question: string): DirectMemoryRequest | null {
   const normalized = question.trim().toLowerCase().replace(/[’]/g, "'");
-  if (/^(?:what(?:'s| is) my name|do you (?:know|remember) my name|who am i)[?.!]*$/i.test(normalized)) return ["Preferred name"];
-  if (/^(?:what do you remember about me|show (?:me )?(?:my |your )?(?:saved )?memories|what have i asked you to remember)[?.!]*$/i.test(normalized)) {
-    return [...new Set(listMemories().map(memoryTitle))].sort((a, b) => a.localeCompare(b));
+  if (preferredNameQuestion.test(normalized)) return "preferred-name";
+  if (allMemoriesQuestion.test(normalized)) return "all-memories";
+  return null;
+}
+
+export function executeDirectMemoryRequest(request: DirectMemoryRequest): { answer: string; titles: string[] } {
+  const memories = listMemories();
+  if (request === "preferred-name") {
+    const name = savedName(memories);
+    return {
+      answer: name
+        ? `Your name is ${name}. You explicitly saved that in Local memory.`
+        : "You haven't saved your name in Local memory yet, so I won't guess.",
+      titles: ["Preferred name"],
+    };
   }
-  return [];
+  return {
+    answer: memories.length
+      ? `You have approved these Local memories:\n${memories.map((memory) => `- **${memory.kind}:** ${memory.content}`).join("\n")}`
+      : "You haven't approved any Local memory yet.",
+    titles: [...new Set(memories.map(memoryTitle))].sort((a, b) => a.localeCompare(b)),
+  };
+}
+
+export function directMemoryTitles(question: string): string[] {
+  const request = classifyDirectMemoryRequest(question);
+  return request ? executeDirectMemoryRequest(request).titles : [];
 }
 
 export function answerDirectMemoryQuestion(question: string): string | null {
-  const normalized = question.trim().toLowerCase().replace(/[’]/g, "'");
-  const memories = listMemories();
-  if (/^(?:what(?:'s| is) my name|do you (?:know|remember) my name|who am i)[?.!]*$/i.test(normalized)) {
-    const name = savedName(memories);
-    return name
-      ? `Your name is ${name}. You explicitly saved that in Local memory.`
-      : "You haven't saved your name in Local memory yet, so I won't guess.";
-  }
-  if (/^(?:what do you remember about me|show (?:me )?(?:my |your )?(?:saved )?memories|what have i asked you to remember)[?.!]*$/i.test(normalized)) {
-    if (!memories.length) return "You haven't approved any Local memory yet.";
-    return `You have approved these Local memories:\n${memories.map((memory) => `- **${memory.kind}:** ${memory.content}`).join("\n")}`;
-  }
-  return null;
+  const request = classifyDirectMemoryRequest(question);
+  return request ? executeDirectMemoryRequest(request).answer : null;
 }
 
 export function exportMemoriesJson(exportedAt = new Date().toISOString()): string {

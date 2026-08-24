@@ -4,6 +4,7 @@ import test from "node:test";
 
 const page = readFileSync("app/page.tsx", "utf8");
 const chatRoute = readFileSync("app/api/chat/route.ts", "utf8");
+const chatCore = readFileSync("lib/chat-core-dispatch.ts", "utf8");
 const startRoute = readFileSync("app/api/conversation-turns/route.ts", "utf8");
 const conversationRoute = readFileSync("app/api/conversations/[id]/route.ts", "utf8");
 const cancelRoute = readFileSync("app/api/conversation-turns/[id]/cancel/route.ts", "utf8");
@@ -60,6 +61,40 @@ test("the server owns history, options, replay, and terminal settlement", () => 
   assert.match(chatRoute, /wrapSuccessfulTurnResponse\(response, callbacks, turnSignal\)/);
   assert.doesNotMatch(chatRoute, /handleLegacyChat|isValidChatMessages/);
   assert.match(chatRoute, /A valid versioned conversation turn is required/);
+});
+
+test("bounded finish verification runs in the production response path", () => {
+  assert.match(chatRoute, /deriveFinishVerificationPlan\(answerContract\)/);
+  assert.match(chatRoute, /auditFinishedAnswer\(generated, finishPlan, answerContract\)/);
+  assert.match(chatRoute, /buildFinishRepairMessages\(messages, generated, issues\)/);
+  assert.match(chatRoute, /chooseFinishedAnswer/);
+  const finishPath = chatRoute.slice(chatRoute.indexOf("if (finishPlan.shouldVerify)"), chatRoute.indexOf("const stream = await streamChatWithOllama"));
+  assert.ok(finishPath.indexOf("enforceReasoningInvariants") < finishPath.indexOf("auditFinishedAnswer"));
+  assert.doesNotMatch(finishPath.slice(finishPath.indexOf("const selection = chooseFinishedAnswer")), /enforceReasoningInvariants/);
+  assert.match(chatRoute, /"X-Rangabot-Finish": encodeURIComponent\(JSON\.stringify\(receipt\)\)/);
+  assert.doesNotMatch(chatRoute, /buildSemanticRepairMessages|chooseSemanticRepair/);
+  assert.match(chatCore, /deterministicArithmeticAnswer\(finishPlan\)/);
+  assert.match(chatCore, /"X-Rangabot-Finish"/);
+  assert.match(page, /Mechanical checks passed/);
+  assert.match(page, /Formatting repaired/);
+  assert.match(page, /Manual check needed/);
+  assert.match(page, /confirm sentence count around an initialism/);
+  assert.match(page, /issueCount === 20 \? "at least 20"/);
+  assert.match(page, /exact quoted text/);
+  assert.match(page, /complete code fence/);
+});
+
+test("one capability plan is selected before execution and its receipt survives the browser path", () => {
+  assert.match(chatRoute, /core = await dispatchCoreChat/);
+  assert.match(chatRoute, /const activeCapabilityPlan = core\.capabilityPlan/);
+  assert.match(chatRoute, /new Set<CapabilityContext>\(core\.usedContexts\)/);
+  assert.doesNotMatch(chatRoute, /\n\s*activeCapabilityPlan\s*=/);
+  assert.match(chatRoute, /"X-Rangabot-Capability"/);
+  assert.match(chatRoute, /activeCapabilityPlan\.route === "word-document"/);
+  assert.match(chatRoute, /activeCapabilityPlan\.route === "knowledge-vault"/);
+  assert.match(page, /parseCapabilityReceiptHeader/);
+  assert.match(page, /How Rangabot handled this/);
+  assert.match(page, /responseCapabilityReceipt\?\.status === "clarify"/);
 });
 
 test("request aborts cannot cancel replayed turns and timeout setup remains terminalizable", () => {

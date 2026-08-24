@@ -74,3 +74,15 @@ test("uses semantic context for schema linking without merging it into user inte
   assert.doesNotMatch(plan.selected?.query ?? "", /delete/i);
   assert.ok(plan.focusedFields.includes("txn.amt"));
 });
+
+test("maps single-file CSV and Parquet schemas through the stable dataset relation", () => {
+  const applied = applyAnalyticalSemanticContext([{ name: "amount", type: "DOUBLE" }, { name: "region", type: "VARCHAR" }], {
+    version: 1,
+    tables: [{ table: "dataset", description: "One row per sale." }],
+    columns: [{ table: "dataset", column: "amount", aliases: ["revenue"] }],
+  });
+  assert.equal(applied.columns[0]?.table, undefined);
+  assert.equal(applied.columns[0]?.semantic?.tableDescription, "One row per sale.");
+  assert.deepEqual(applied.columns[0]?.semantic?.aliases, ["revenue"]);
+  assert.match(applied.prompt, /TABLE "dataset"/);
+});

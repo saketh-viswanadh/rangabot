@@ -37,7 +37,7 @@ import type { DesktopPreferences } from "@/lib/desktop-preferences";
 import type { OnboardingState } from "@/lib/onboarding-contract";
 import { mergeResponseFeedbackRead, responseFeedbackBindingMatches } from "@/lib/response-feedback-client-state";
 import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
-import { parseAnalysisTraceHeader, parsePackWarningCodesHeader } from "@/lib/chat-validation";
+import { parseAnalysisTraceHeader, parseCapabilityReceiptHeader, parseFinishVerificationHeader, parsePackWarningCodesHeader } from "@/lib/chat-validation";
 import {
   knowledgeImportFailureMessage as formatKnowledgeImportFailureMessage,
   knowledgeImportMessage as formatKnowledgeImportMessage,
@@ -98,6 +98,57 @@ const TURN_CANCELLATION_TIMEOUT_MS = 2_500;
 const ADOPTED_TURN_POLL_INTERVAL_MS = 2_000;
 const ADOPTED_TURN_POLL_ATTEMPTS = 480;
 const PUBLIC_DEMO_MODES = new Set(["knowledge", "welcome"]);
+
+const finishCheckLabels: Record<NonNullable<ChatMessage["finishVerification"]>["checks"][number], string> = {
+  requirements: "requirements",
+  arithmetic: "calculation",
+  "code-structure": "complete code fence",
+  preservation: "exact quoted text",
+  completion: "completeness",
+};
+const capabilityRouteLabels: Record<NonNullable<ChatMessage["capabilityReceipt"]>["route"], string> = {
+  "safe-continuation": "Safe local continuation",
+  "deterministic-answer": "Deterministic answer",
+  "direct-memory": "Direct memory recall",
+  analytics: "Local analysis",
+  "word-document": "Word document",
+  "knowledge-vault": "Knowledge Vault",
+  "repository-context": "Repository context",
+  conversation: "Local conversation",
+  clarification: "Focused clarification",
+  unavailable: "Unavailable boundary",
+};
+const capabilityContextLabels: Record<NonNullable<ChatMessage["capabilityReceipt"]>["contexts"][number], string> = {
+  dataset: "attached dataset",
+  repository: "attached repository excerpt",
+  "knowledge-vault": "local Knowledge Vault",
+  "approved-memory": "approved local memory",
+};
+
+const capabilityReasonLabels: Record<NonNullable<ChatMessage["capabilityReceipt"]>["reasons"][number], string> = {
+  "external-action-unavailable": "the requested external action is not connected, so a local next step was returned",
+  "deterministic-contract": "the request had an exact deterministic answer contract",
+  "explicit-memory-recall": "the user explicitly asked for approved Local memory",
+  "attached-data-analysis": "the request called for analysis of the attached dataset",
+  "missing-required-dataset": "the request needs data, but no approved dataset was attached",
+  "explicit-word-artifact": "the user explicitly requested a Word document",
+  "explicit-vault-request": "the user explicitly requested local Knowledge Vault evidence",
+  "teacher-mode": "Teacher mode selected the local Knowledge Vault",
+  "smart-vault-match": "Smart mode selected a relevant local Knowledge Vault lookup",
+  "attached-repository-context": "the request explicitly selected an attached code excerpt",
+  "ordinary-conversation": "no specialized local capability was required",
+  "multiple-material-capabilities": "the request named more than one material capability",
+  "cloud-handoff-disabled": "external Codex handoff is disabled",
+};
+
+function capabilityResourceSummary(receipt: NonNullable<ChatMessage["capabilityReceipt"]>) {
+  const attempted = receipt.attemptedContexts ?? receipt.contexts;
+  const incomplete = attempted.filter((context) => !receipt.contexts.includes(context));
+  const parts: string[] = [];
+  if (receipt.contexts.length) parts.push(`Used ${receipt.contexts.map((context) => capabilityContextLabels[context]).join(" · ")}.`);
+  if (incomplete.length) parts.push(`Attempted local access to ${incomplete.map((context) => capabilityContextLabels[context]).join(" · ")}; completed use was not confirmed.`);
+  return parts.join(" ") || "No attached resource was supplied to a capability.";
+}
 
 function displayMessagesFromTimeline(messages: ChatMessage[]): DisplayMessage[] {
   const display: DisplayMessage[] = [];
@@ -1113,6 +1164,8 @@ export default function Home() {
     let responseAnalysisTrace: ChatMessage["analysisTrace"];
     let responseAnswerDisposition: ChatMessage["answerDisposition"];
     let responsePackWarnings: ChatMessage["packWarnings"];
+    let responseFinishVerification: ChatMessage["finishVerification"];
+    let responseCapabilityReceipt: ChatMessage["capabilityReceipt"];
 
     // Release the composer immediately. A failed start restores only fields the
     // user has not already replaced while the idempotent request was in flight.
@@ -1163,6 +1216,7 @@ export default function Home() {
           turnId,
         }),
       });
+      responseCapabilityReceipt = parseCapabilityReceiptHeader(response.headers.get("X-Rangabot-Capability")) ?? undefined;
       if (!response.ok) {
         const data = (await response.json()) as { error?: unknown; code?: unknown };
         if (typeof data.code === "string") responseFailureCode = data.code;
@@ -1183,11 +1237,25 @@ export default function Home() {
         responseAnalysisTrace = parseAnalysisTraceHeader(encodedAnalysis) ?? undefined;
       }
       responsePackWarnings = parsePackWarningCodesHeader(response.headers.get("X-Rangabot-Pack-Warnings")) ?? undefined;
+      responseFinishVerification = parseFinishVerificationHeader(response.headers.get("X-Rangabot-Finish")) ?? undefined;
+      if (responseCapabilityReceipt?.status === "clarify" && codeContextForRequest) {
+        setAttachedCodeContext((current) => current ?? codeContextForRequest);
+      }
       responseAnswerDisposition = responsePackWarnings?.length ? "verified-fallback" : undefined;
       if (!responseAnalysisTrace?.packId) responseAnswerDisposition = undefined;
       if (responseAnalysisTrace) {
         setMessages((current) => current.map((message) => message.id === assistantId
           ? { ...message, analysisTrace: responseAnalysisTrace, ...(responseAnswerDisposition ? { answerDisposition: responseAnswerDisposition, packWarnings: responsePackWarnings } : {}) }
+          : message));
+      }
+      if (responseFinishVerification) {
+        setMessages((current) => current.map((message) => message.id === assistantId
+          ? { ...message, finishVerification: responseFinishVerification }
+          : message));
+      }
+      if (responseCapabilityReceipt) {
+        setMessages((current) => current.map((message) => message.id === assistantId
+          ? { ...message, capabilityReceipt: responseCapabilityReceipt }
           : message));
       }
       if (responseArtifactIntent || responseWordArtifact) {
@@ -1253,7 +1321,7 @@ export default function Home() {
           if (message.id !== assistantId) return { ...message, turn };
           return stopped
             ? { ...message, content: message.content || "No response was generated.", active: false, stopped: true, turn }
-            : { ...message, content: message.content || failureMessage, error: true, source: undefined, active: false, turn };
+            : { ...message, content: message.content || failureMessage, ...(responseCapabilityReceipt ? { capabilityReceipt: responseCapabilityReceipt } : {}), error: true, source: undefined, active: false, turn };
         }));
         const authoritativeStatus = conversationId
           ? await reconcileTurnFromServer(conversationId, turnId)
@@ -1286,7 +1354,7 @@ export default function Home() {
         if (codeContextForRequest) setAttachedCodeContext((current) => current ?? codeContextForRequest);
         setMessages((current) => [...current,
           { ...userMessage, turn: undefined },
-          { ...assistantMessage, turn: undefined, active: false, error: true, source: undefined, content: error instanceof Error ? error.message : "The request failed." },
+          { ...assistantMessage, ...(responseCapabilityReceipt ? { capabilityReceipt: responseCapabilityReceipt } : {}), turn: undefined, active: false, error: true, source: undefined, content: error instanceof Error ? error.message : "The request failed." },
         ]);
       }
       if (!stopped) void refreshStatus();
@@ -1793,6 +1861,8 @@ export default function Home() {
                   ? <MarkdownMessage content={message.content} />
                   : <p>{message.content}</p>)}
                 {message.answerDisposition === "verified-fallback" && <div className="answer-disposition" role="status"><CraftIcon name="shield" size={13} /><span><strong>Verified result fallback</strong>Rangabot answered directly from the checked local calculation.</span></div>}
+                {message.finishVerification && <div className={`finish-verification ${message.finishVerification.status}`} role="status"><CraftIcon name="shield" size={13} /><span><strong>{message.finishVerification.status === "repaired" ? "Formatting repaired" : message.finishVerification.status === "warning" ? "Manual check needed" : "Mechanical checks passed"}</strong>{message.finishVerification.checks.map((check) => finishCheckLabels[check]).join(" · ")}{message.finishVerification.manualReview === "ambiguous-sentence-boundary" ? " · confirm sentence count around an initialism" : ""}{message.finishVerification.issueCount ? ` · ${message.finishVerification.issueCount === 20 ? "at least 20" : message.finishVerification.issueCount} unresolved` : ""}</span></div>}
+                {message.capabilityReceipt && <details className="capability-receipt"><summary><CraftIcon name="analysis" size={13} />How Rangabot handled this</summary><div><strong>{capabilityRouteLabels[message.capabilityReceipt.route]}</strong><span>{capabilityResourceSummary(message.capabilityReceipt)}</span><small>Why: {message.capabilityReceipt.reasons.map((reason) => capabilityReasonLabels[reason]).join(" · ")}.</small><small>{message.capabilityReceipt.status === "clarify" ? "Rangabot paused before choosing between material capabilities." : message.capabilityReceipt.status === "unavailable" ? "No external handoff or action occurred." : "Selected locally from bounded request signals."}</small></div></details>}
                 {message.analysisTrace && <details className="analysis-trace"><summary><CraftIcon name="analysis" size={14} />How this was calculated</summary><div><span><strong>{message.analysisTrace.dataset}</strong>{message.analysisTrace.returnedRows} verified row{message.analysisTrace.returnedRows === 1 ? "" : "s"} · {message.analysisTrace.durationMs} ms{message.analysisTrace.truncated ? " · bounded result" : ""}</span><pre><code>{message.analysisTrace.query}</code></pre><small>Input {message.analysisTrace.inputSha256.slice(0, 12)}… · Query {message.analysisTrace.querySha256.slice(0, 12)}… · local DuckDB{message.analysisTrace.packId ? ` · ${message.analysisTrace.packId} pack ${message.analysisTrace.packVersion ?? ""}` : ""}{message.analysisTrace.modelId ? ` · ${message.analysisTrace.modelMode ?? "general"} model ${message.analysisTrace.modelId}` : ""}</small></div></details>}
                 {message.role === "assistant" && message.turn?.status === "completed"
                   && activeConversationId && !publicDemo

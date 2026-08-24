@@ -13,6 +13,14 @@ after(() => {
   for (const suffix of ["", "-shm", "-wal"]) if (existsSync(`${testDatabase}${suffix}`)) unlinkSync(`${testDatabase}${suffix}`);
 });
 
+test("classifies direct-memory intent without opening or creating SQLite", () => {
+  assert.equal(existsSync(testDatabase), false);
+  assert.equal(memories.classifyDirectMemoryRequest("What is my name?"), "preferred-name");
+  assert.equal(memories.classifyDirectMemoryRequest("What do you remember about me?"), "all-memories");
+  assert.equal(memories.classifyDirectMemoryRequest("Explain memory allocation."), null);
+  assert.equal(existsSync(testDatabase), false);
+});
+
 test("creates, lists, edits and deletes explicit local memories", () => {
   const created = memories.createMemory("Prefer concise technical explanations", "preference");
   assert.equal(created.origin, "user-approved");
@@ -95,6 +103,87 @@ test("selects only memories relevant to the current request", () => {
   memories.deleteMemory(concise.id);
   memories.deleteMemory(python.id);
   memories.deleteMemory(city.id);
+});
+
+test("current-turn memory opt-out selects nothing", () => {
+  const preference = { id: "style", kind: "preference" as const, origin: "user-approved" as const, confidence: 1 as const, content: "Prefer concise answers", createdAt: "2026-08-01T00:00:00.000Z", updatedAt: "2026-08-01T00:00:00.000Z" };
+  for (const request of [
+    "Do not use saved memory. Explain recursion.",
+    "Ignore my local memory and explain recursion concisely.",
+    "Do not use my saved preferences. Explain recursion.",
+    "Ignore what you remember about me; explain recursion concisely.",
+    "For this answer, forget my prior preferences and explain recursion.",
+    "Use no personal context; explain recursion concisely.",
+    "Could you answer without personalization?",
+    "Do not use my profile. Explain recursion.",
+    "Please do not personalize this answer.",
+    "No personalization. Explain recursion.",
+    "No personal context, please.",
+    "Treat me as a new user for this answer.",
+    "Do not apply saved instructions.",
+    "Do not use my saved facts.",
+    "Do not use stored context.",
+    "Do not use what you recall about me.",
+    "I don’t want you to use saved memory.",
+    "Please don’t access my saved memory.",
+    "Please don’t remember my preferences for this answer.",
+  ]) {
+    assert.equal(memories.declinesApprovedMemory(request), true, request);
+    assert.deepEqual(memories.selectRelevantMemoriesFrom([preference], request), [], request);
+  }
+});
+
+test("conceptual memory questions and keep directives are not treated as opt-outs", () => {
+  const preference = { id: "style", kind: "preference" as const, origin: "user-approved" as const, confidence: 1 as const, content: "Prefer concise answers", createdAt: "2026-08-01T00:00:00.000Z", updatedAt: "2026-08-01T00:00:00.000Z" };
+  for (const request of [
+    "How does saved memory work?",
+    "Should I ignore saved preferences?",
+    "What does personal context mean?",
+    "Why might someone forget prior preferences?",
+    "Can memory be ignored for one answer?",
+    "Please explain why I should ignore saved preferences.",
+    "Tell me whether to ignore what you remember about me.",
+    "Can you explain how to answer without saved memory?",
+    "Don't forget my saved preferences.",
+    "Do not ignore my local memory.",
+    "Translate 'ignore saved memory' into French.",
+    "Quote the sentence 'Do not use saved memory'.",
+    "Summarize: 'Do not use saved memory in this app.'",
+    "Please explain the phrase 'do not use saved memory'.",
+    "Discuss whether to ignore saved preferences.",
+    "Write an essay about why people ignore saved preferences.",
+    "Do not stop using saved preferences.",
+    "Do not avoid using memory.",
+    "Do not answer without memory.",
+    "Never respond without my saved preferences.",
+  ]) {
+    assert.equal(memories.declinesApprovedMemory(request), false, request);
+    assert.deepEqual(memories.selectRelevantMemoriesFrom([preference], request).map((memory) => memory.id), ["style"], request);
+  }
+});
+
+test("the last applicable memory instruction wins without opening storage", () => {
+  const preference = { id: "style", kind: "preference" as const, origin: "user-approved" as const, confidence: 1 as const, content: "Prefer concise answers", createdAt: "2026-08-01T00:00:00.000Z", updatedAt: "2026-08-01T00:00:00.000Z" };
+  for (const request of [
+    "Use my saved memory; actually do not.",
+    "Use my saved preferences; actually, no.",
+    "What do you remember about me? Do not use memory.",
+    "What is my name? Actually, no.",
+  ]) {
+    assert.equal(memories.declinesApprovedMemory(request), true, request);
+    assert.deepEqual(memories.selectRelevantMemoriesFrom([preference], request), [], request);
+  }
+  for (const request of [
+    "Do not use saved memory; actually use it.",
+    "Ignore my saved preferences; actually use them.",
+    "Use no saved memory; actually use my saved preferences.",
+    "I don’t want you to use saved memory; actually use it.",
+    "Please don’t access my saved memory; actually access it.",
+    "Please don’t remember my preferences; actually remember them.",
+  ]) {
+    assert.equal(memories.declinesApprovedMemory(request), false, request);
+    assert.deepEqual(memories.selectRelevantMemoriesFrom([preference], request).map((memory) => memory.id), ["style"], request);
+  }
 });
 
 test("current-turn constraints exclude conflicting approved memories", () => {

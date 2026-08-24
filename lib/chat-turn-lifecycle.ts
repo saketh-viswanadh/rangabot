@@ -1,4 +1,4 @@
-import { isValidChatMessage, parseAnalysisTraceHeader, parsePackWarningCodesHeader } from "./chat-validation.ts";
+import { isValidChatMessage, parseAnalysisTraceHeader, parseCapabilityReceiptHeader, parseFinishVerificationHeader, parsePackWarningCodesHeader } from "./chat-validation.ts";
 import { expertPackFailureCodes } from "./expert-packs.ts";
 import { ProviderError, type ChatMessage } from "./providers/types.ts";
 import { ConversationTurnError, type ConversationTurnFailureCode } from "./conversation-turns.ts";
@@ -44,6 +44,8 @@ export function assistantMessageFromResponse(content: string, headers: Headers):
   const memoryHeader = headers.get("X-Rangabot-Memory");
   const memoryUse = memoryHeader === "direct" ? "direct" as const : memoryHeader === "used" ? "context" as const : undefined;
   const memoryTitles = memoryUse ? parseMemoryTitles(headers.get("X-Rangabot-Memory-Titles")) : undefined;
+  const finishVerification = parseFinishVerificationHeader(headers.get("X-Rangabot-Finish")) ?? undefined;
+  const capabilityReceipt = parseCapabilityReceiptHeader(headers.get("X-Rangabot-Capability")) ?? undefined;
   return {
     role: "assistant",
     content,
@@ -56,6 +58,8 @@ export function assistantMessageFromResponse(content: string, headers: Headers):
     ...(headers.get("X-Rangabot-Knowledge") === "used" ? { knowledgeUsed: true as const } : {}),
     ...(memoryUse ? { memoryUse } : {}),
     ...(memoryTitles?.length ? { memoryTitles } : {}),
+    ...(finishVerification ? { finishVerification } : {}),
+    ...(capabilityReceipt ? { capabilityReceipt } : {}),
   };
 }
 
@@ -74,12 +78,21 @@ export function responseFromCompletedAssistant(message: ChatMessage) {
   if (message.knowledgeUsed || message.retrievalMode) headers.set("X-Rangabot-Knowledge", "used");
   if (message.memoryUse) headers.set("X-Rangabot-Memory", message.memoryUse === "direct" ? "direct" : "used");
   if (message.memoryTitles?.length) headers.set("X-Rangabot-Memory-Titles", encodeURIComponent(JSON.stringify(message.memoryTitles)));
+  if (message.finishVerification) headers.set("X-Rangabot-Finish", encodeURIComponent(JSON.stringify(message.finishVerification)));
+  if (message.capabilityReceipt) headers.set("X-Rangabot-Capability", encodeURIComponent(JSON.stringify(message.capabilityReceipt)));
   return new Response(message.content, { headers });
 }
 
-function partialMessage(content: string, headers: Headers) {
+function partialMessage(content: string, headers: Headers, failureFallback?: string) {
   const message = assistantMessageFromResponse(content, headers);
-  return content.trim() || message.wordArtifact ? message : null;
+  const terminalMessage: ChatMessage = failureFallback ? { ...message } : message;
+  if (failureFallback) delete terminalMessage.finishVerification;
+  if (content.trim()) return terminalMessage;
+  if (failureFallback && terminalMessage.capabilityReceipt) {
+    return { ...terminalMessage, content: failureFallback };
+  }
+  if (terminalMessage.wordArtifact) return terminalMessage;
+  return null;
 }
 
 function failureFrom(error: unknown): { code: ConversationTurnFailureCode; message: string } {
@@ -104,7 +117,8 @@ export function wrapSuccessfulTurnResponse(response: Response, callbacks: TurnLi
   const settle = (kind: "complete" | "cancel" | "fail", error?: unknown) => {
     if (terminal) return terminal;
     const operation = (async () => {
-      const partial = partialMessage(content, response.headers);
+      const failure = kind === "fail" ? failureFrom(error) : kind === "cancel" ? { code: "cancelled" as const, message: "Generation was stopped." } : null;
+      const partial = partialMessage(content, response.headers, failure?.message);
       if (kind === "complete") {
         if (!partial?.content.trim()) {
           throw new ProviderError("empty-output", "The local model returned an empty response.");
@@ -116,8 +130,7 @@ export function wrapSuccessfulTurnResponse(response: Response, callbacks: TurnLi
         await callbacks.cancel(partial);
         return;
       }
-      const failure = failureFrom(error);
-      await callbacks.fail(failure.code, failure.message, partial);
+      await callbacks.fail(failure!.code, failure!.message, partial);
     })();
     terminal = kind === "complete"
       ? operation.catch((error) => {
@@ -194,11 +207,18 @@ export async function recordFailedTurnResponse(response: Response, callbacks: Tu
   } catch {
     // The status-derived safe failure remains authoritative.
   }
+  const capabilityReceipt = parseCapabilityReceiptHeader(response.headers.get("X-Rangabot-Capability")) ?? undefined;
+  const failureAssistant: ChatMessage | null = capabilityReceipt
+    ? { role: "assistant", content: message, capabilityReceipt }
+    : null;
   const signalFailure = abortedFailure(signal);
-  if (signalFailure?.code === "cancelled") await callbacks.cancel(null);
-  else if (signalFailure) await callbacks.fail(signalFailure.code, signalFailure.message, null);
-  else if (code === "cancelled") await callbacks.cancel(null);
-  else await callbacks.fail(code, message, null);
+  const signalAssistant: ChatMessage | null = capabilityReceipt && signalFailure
+    ? { role: "assistant", content: signalFailure.message, capabilityReceipt }
+    : failureAssistant;
+  if (signalFailure?.code === "cancelled") await callbacks.cancel(signalAssistant);
+  else if (signalFailure) await callbacks.fail(signalFailure.code, signalFailure.message, signalAssistant);
+  else if (code === "cancelled") await callbacks.cancel(failureAssistant);
+  else await callbacks.fail(code, message, failureAssistant);
   return response;
 }
 

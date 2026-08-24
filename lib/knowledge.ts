@@ -8,6 +8,7 @@ import { getConfiguredEmbeddingModel, getKnowledgeBudgetBytes, getLocalOllamaBas
 import { verificationLocalModelDisabled } from "./desktop-external-filesystem-policy.ts";
 import { ensurePrivateDirectory, hardenPrivateSqliteFiles, preparePrivateSqliteStorage } from "./private-storage.ts";
 import { runtimePaths } from "./runtime-paths.ts";
+export { shouldAutoSearchKnowledge } from "./capability-intents.ts";
 
 const serverRequire = createRequire(runtimePaths.packageJson);
 const { DatabaseSync } = serverRequire("node:sqlite") as typeof import("node:sqlite");
@@ -181,22 +182,19 @@ export function isKnowledgeNewsQuestion(question: string) {
   return /\b(what(?:'s| is)? new|latest|recent|new developments?|this (?:week|month)|current (?:news|developments?|updates?))\b/i.test(question);
 }
 
-export function shouldAutoSearchKnowledge(question: string) {
-  const normalized = question.trim();
-  if (normalized.length < 8) return false;
-  if (/^(hi|hello|hey|thanks|thank you|good (?:morning|afternoon|evening))[!. ]*$/i.test(normalized)) return false;
-  return /\?|^(?:what|why|when|where|who|which|how|explain|define|compare|summarize|teach|tell me about|help me understand)\b/i.test(normalized)
-    || /\b(?:python|numpy|pandas|sql|spark|pyspark|databricks|snowflake|data science|machine learning|\bai\b|models?|statistics|visuali[sz]ation|history|mythology|algorithm)\b/i.test(normalized);
-}
-
-export function buildKnowledgeNewsAnswer(question: string) {
+export function buildKnowledgeNewsAnswer(question: string, readBrief: (path: string) => string = (path) => readFileSync(/* turbopackIgnore: true */ path, "utf8")) {
   const wantsMonth = /\b(month|monthly|july)\b/i.test(question);
   const path = wantsMonth ? knowledgeMonthlyBrief : knowledgeWeeklyBrief;
   const period = wantsMonth ? "monthly" : "weekly";
   try {
-    return `${readFileSync(/* turbopackIgnore: true */ path, "utf8").trim()}\n\n---\nThis is Rangabot's locally saved ${period} subject brief. Source links identify where each development was verified; items marked **indexed** can also be explored offline in Teacher Mode.`;
-  } catch {
-    return `No ${period} subject brief has been saved locally yet. The vault updater should only create one after finding a meaningful, source-verified development.`;
+    const brief = readBrief(path).trim();
+    if (!brief) return { answer: `No ${period} subject brief has been saved locally yet. The vault updater should only create one after finding a meaningful, source-verified development.`, used: false };
+    return { answer: `${brief}\n\n---\nThis is Rangabot's locally saved ${period} subject brief. Source links identify where each development was verified; items marked **indexed** can also be explored offline in Teacher Mode.`, used: true };
+  } catch (error) {
+    if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) {
+      return { answer: `The locally saved ${period} subject brief could not be read safely. Nothing from it was used.`, used: false };
+    }
+    return { answer: `No ${period} subject brief has been saved locally yet. The vault updater should only create one after finding a meaningful, source-verified development.`, used: false };
   }
 }
 

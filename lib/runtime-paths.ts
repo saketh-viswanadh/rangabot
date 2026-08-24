@@ -180,6 +180,7 @@ export function resolveRuntimePathContract(options: RuntimeRootOptions = {}) {
     get responseFeedbackDatabase() { return data("rangabot.db"); },
     get memoryDatabase() { return data("rangabot-memory.db"); },
     get datasetsRegistry() { return data("datasets.json"); },
+    get datasetSemanticContexts() { return data("dataset-semantic-contexts.json"); },
     get repositoriesRegistry() { return data("repositories.json"); },
     get sqlConfirmations() { return data("sql-confirmations.json"); },
     get datasetSnapshots() { return data("dataset-snapshots"); },
