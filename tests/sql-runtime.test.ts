@@ -163,3 +163,27 @@ test("inspects and joins an approved multi-table DuckDB database read only", asy
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("exposes declared primary and foreign keys without exposing database rows", async () => {
+  const root = mkdtempSync(join(tmpdir(), "rangabot-relational-schema-"));
+  const path = join(root, "relationships.duckdb");
+  const writer = await DuckDBInstance.create(path);
+  const connection = await writer.connect();
+  try {
+    await connection.run("CREATE TABLE accounts (account_number INTEGER PRIMARY KEY, label VARCHAR)");
+    await connection.run("CREATE TABLE payments (payment_id INTEGER PRIMARY KEY, billed_account INTEGER REFERENCES accounts(account_number), amount DOUBLE)");
+  } finally {
+    connection.closeSync(); writer.closeSync();
+  }
+  try {
+    assert.deepEqual(await inspectDatasetSchema(path), [
+      { table: "accounts", name: "account_number", type: "INTEGER", primaryKey: true },
+      { table: "accounts", name: "label", type: "VARCHAR" },
+      { table: "payments", name: "payment_id", type: "INTEGER", primaryKey: true },
+      { table: "payments", name: "billed_account", type: "INTEGER", references: [{ table: "accounts", column: "account_number" }] },
+      { table: "payments", name: "amount", type: "DOUBLE" },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

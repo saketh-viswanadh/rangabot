@@ -24,6 +24,7 @@ test("repository picker selects one work folder without reading or approving it"
           title: "Choose a work folder",
           buttonLabel: "Choose folder",
           properties: ["openDirectory"],
+          securityScopedBookmarks: false,
         });
         return { canceled: false, filePaths: [selectedPath] };
       },
@@ -31,8 +32,8 @@ test("repository picker selects one work folder without reading or approving it"
   });
 
   assert.equal(dialogCalls, 1);
-  assert.deepEqual(result, { status: "selected", paths: [selectedPath] });
-  assert.deepEqual(Object.keys(result).sort(), ["paths", "status"]);
+  assert.deepEqual(result, { status: "selected", paths: [selectedPath], bookmarks: [] });
+  assert.deepEqual(Object.keys(result).sort(), ["bookmarks", "paths", "status"]);
 });
 
 test("repository picker returns cancellation without a path", async () => {
@@ -45,7 +46,23 @@ test("repository picker returns cancellation without a path", async () => {
       },
     } as never,
   });
-  assert.deepEqual(result, { status: "cancelled", paths: [] });
+  assert.deepEqual(result, { status: "cancelled", paths: [], bookmarks: [] });
+});
+
+test("Mac App Store picker requests and returns app-scoped bookmark bytes", async () => {
+  const bookmark = Buffer.from("synthetic-app-scoped-bookmark").toString("base64");
+  const result = await pickLocalFilesWithDialog({
+    kind: "dataset",
+    window: {} as never,
+    securityScopedBookmarks: true,
+    dialog: {
+      async showOpenDialog(_window: BrowserWindow, options: OpenDialogOptions) {
+        assert.equal(options.securityScopedBookmarks, true);
+        return { canceled: false, filePaths: ["/synthetic/data.csv"], bookmarks: [bookmark] };
+      },
+    } as never,
+  });
+  assert.deepEqual(result, { status: "selected", paths: ["/synthetic/data.csv"], bookmarks: [bookmark] });
 });
 
 test("repository picker surfaces native dialog errors without fallback access", async () => {

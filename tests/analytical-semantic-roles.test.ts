@@ -53,6 +53,26 @@ test("resolves same-relation duration endpoints", () => {
   assert.equal(roles.endTime.value, "appointments.finished_at");
 });
 
+test("uses the explicitly named relation to break repeated-field ties", () => {
+  const columns = [
+    { table: "stores", name: "store_id", type: "INTEGER" },
+    { table: "sales", name: "sale_id", type: "INTEGER" },
+    { table: "sales", name: "store_id", type: "INTEGER" },
+    { table: "sales", name: "started_at", type: "TIMESTAMP" },
+    { table: "sales", name: "ended_at", type: "TIMESTAMP" },
+    { table: "visits", name: "visit_id", type: "INTEGER" },
+    { table: "visits", name: "store_id", type: "INTEGER" },
+    { table: "visits", name: "started_at", type: "TIMESTAMP" },
+    { table: "visits", name: "ended_at", type: "TIMESTAMP" },
+  ];
+  const duration = resolveAnalyticalSemanticRoles("What is the average duration between started at and ended at for sales?", columns);
+  assert.equal(duration.startTime.value, "sales.started_at");
+  assert.equal(duration.endTime.value, "sales.ended_at");
+
+  const distinct = resolveAnalyticalSemanticRoles("How many unique store IDs appear in sales?", columns);
+  assert.equal(distinct.countTarget.value, "stores.store_id");
+});
+
 test("resolves an explicitly named population relation over prefix distractors", () => {
   const columns = [
     { table: "visits", name: "visit_id", type: "INTEGER" },

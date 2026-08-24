@@ -11,6 +11,16 @@ test("compiles current-turn output constraints without model-specific rules", ()
   assert.match(formatAnswerContract(contract) ?? "", /higher priority than history and memory/i);
 });
 
+test("parses forbidden words and quoted phrases without capturing grammar", () => {
+  const phrase = compileAnswerContract([{ role: "user", content: 'Write a reply. Do not mention the phrase "secret".' }]);
+  assert.deepEqual(phrase.forbiddenTerms, ["secret"]);
+  assert.deepEqual(phrase.forbiddenWords, []);
+  assert.deepEqual(compileAnswerContract([{ role: "user", content: 'Write a reply. Do not include the exact phrase "internal only".' }]).forbiddenTerms, ["internal only"]);
+  const word = compileAnswerContract([{ role: "user", content: "Write a reply and do not mention the word Spark." }]);
+  assert.deepEqual(word.forbiddenTerms, ["Spark"]);
+  assert.deepEqual(word.forbiddenWords, ["Spark"]);
+});
+
 test("returns only an explicitly supplied literal without asking a model", () => {
   const contract = compileAnswerContract([{ role: "user", content: "Reply with exactly one word: ready." }]);
   assert.equal(deterministicContractAnswer(contract), "ready");
@@ -32,6 +42,31 @@ test("blocks unavailable external side effects before generation", () => {
     "Run this code on my machine: rm important.txt",
   ]) assert.match(answerUnavailableAction(request)?.answer ?? "", /can't/i);
   assert.equal(answerUnavailableAction("Explain how web search works."), null);
+  for (const request of [
+    "Draft an email message to Priya.",
+    "Write an email to Priya.",
+    "Compose a message for Priya.",
+    "Explain how to write an email to Priya.",
+    "I cannot send it; draft an email to Priya.",
+  ]) assert.equal(answerUnavailableAction(request), null, request);
+  for (const request of ["Email Priya saying hello.", "email priya saying hello.", "email mom the update", "Email my mom the update.", "Email my sister the update.", "Email my colleague the update.", "MESSAGE Priya saying hello.", "Forward this message to Priya.", "Forward Priya the update.", "Forward the update to Priya.", "Please forward the memo to Priya.", "Please forward the status report to Priya.", "Please forward the memo to my neighbor.", "Send this now.", "Can you send Priya the report?", "Would you send Priya the report?", "Can you send my neighbor the report?", "Please send Priya a note saying hello.", "Please send a note to Priya saying hello.", "Send Priya a note saying Should I attend?", "Send Priya a note saying never share passwords.", "Please email Priya saying hello.", "Can you email Priya saying hello?", "Could you message Priya saying hello?", "Could you please email Priya saying hello?", "Hey, can you email Priya saying hello?"]) {
+    const continuation = answerUnavailableAction(request);
+    assert.equal(continuation?.capability, "email-send", request);
+    assert.match(continuation?.answer ?? "", /Nothing was sent/, request);
+  }
+  for (const request of ["Email security is important. Explain why.", "Message queues improve reliability. Explain how.", "Do not browse the web; explain what web browsing is.", "Create a Word guide explaining how to browse the web privately.", "Explain whether I should send this email", "Can I send this email?", "Would I be able to send this email?", "Am I allowed to send this email?", "Is it okay to send this email?", "Do you think I should send this email?", "Should you send this email?", "Who should send this email?", "Why send this email?", "How can you send this email?", "What are the steps to send this email?", "Walk me through how to send this email?", "Never send this email; explain why.", "Should I cancel the meeting?", "What happens if I cancel the meeting?", "What's the best way to schedule a meeting?", "What’s the best way to schedule a meeting?", "Tell me how to cancel a meeting", "How do I browse the web privately?", "Give me steps to browse the web privately", "How do I schedule a meeting?", "Should we send this email?", "Should I transfer $50?", "Explain how to run rm important.txt safely.", "Do not send an email; explain email etiquette.", "Create a Word guide teaching how to send email safely."]) {
+    assert.equal(answerUnavailableAction(request), null, request);
+  }
+  assert.match(answerUnavailableAction("Send this to Priya: the launch is postponed")?.answer ?? "", /The launch is postponed\./);
+  const calendar = answerUnavailableAction("Schedule a meeting tomorrow and notify attendees saying the launch review starts at ten");
+  assert.equal(calendar?.capability, "calendar-write");
+  assert.match(calendar?.answer ?? "", /Nothing was scheduled or sent/);
+  assert.match(calendar?.answer ?? "", /Attendee note for review/);
+  assert.match(calendar?.answer ?? "", /launch review starts at ten/i);
+  const polite = answerUnavailableAction("Could you please email Priya saying the meeting is cancelled?");
+  assert.match(polite?.answer ?? "", /Hi Priya/);
+  assert.match(polite?.answer ?? "", /meeting is cancelled\./i);
+  assert.doesNotMatch(polite?.answer ?? "", /\?\./);
 });
 
 test("normalizes narrow exact formats without rewriting semantic prose", () => {

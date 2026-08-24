@@ -28,17 +28,17 @@ const {
   readdirSync,
 } = identityFilesystem;
 
-export const DESKTOP_ARTIFACT_SCHEMA_VERSION = 2;
+export const DESKTOP_ARTIFACT_SCHEMA_VERSION = 3;
 export const DESKTOP_SOURCE_BASE_COMMIT = "8b161635f79ac6a572524ba22e3af7364fe08a5b";
-export const DESKTOP_SOURCE_BASELINE_COMMIT = "ebc7bb6257da70cdc506d27e111b49d98a34dc31";
-export const DESKTOP_FUSE_POLICY_NAME = "electron-43-arm64-launchable-v1";
+export const DESKTOP_SOURCE_BASELINE_COMMIT = "cea0fe344934a218f44e4f31ee00783271eb0771";
+export const DESKTOP_FUSE_POLICY_NAME = "electron-43-hardened-v2";
 
 const sha256Pattern = /^[0-9a-f]{64}$/;
 const gitCommitPattern = /^[0-9a-f]{40}$/;
 const versionPattern = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/;
 const packageNamePattern = /^(?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]{0,127}$/;
 const buildPattern = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/;
-const nativeFilePattern = /\.(?:dylib|node|so|dll)$/i;
+const nativeFilePattern = /\.(?:dylib|node|so|dll|exe)$/i;
 const manifestMaximumBytes = 4 * 1024 * 1024;
 
 export type DesktopArtifactArch = "arm64" | "x64";
@@ -114,6 +114,7 @@ export const REQUIRED_DESKTOP_FUSE_NAMES = Object.freeze([
 ] as const);
 
 export const DESKTOP_FUSE_BINARY_PATH = "Frameworks/Electron Framework.framework/Versions/A/Electron Framework";
+export const WINDOWS_DESKTOP_FUSE_BINARY_PATH = "RangaBot.exe";
 
 export type DesktopFuseInspectionEntry = {
   index: number;
@@ -136,19 +137,19 @@ export type DesktopPackagingTooling = {
   fuseWireStates: number[];
   fuseInspection: DesktopFuseInspection;
   signature: {
-    mode: "adhoc";
+    mode: "adhoc" | "unsigned-candidate" | "app-store-development" | "app-store-distribution";
     postFuseMutation: boolean;
     deepStrictVerified: boolean;
   };
 };
 
 export type DesktopArtifactTarget = {
-  platform: "darwin";
+  platform: "darwin" | "win32";
   arch: DesktopArtifactArch;
 };
 
 export type DesktopArtifactManifest = {
-  schemaVersion: 2;
+  schemaVersion: 3;
   /** Founder-approved source merge from which Profiles v1 was developed. */
   sourceBaseCommit: string;
   desktopArtifactId: string;
@@ -189,13 +190,17 @@ export type DesktopRuntimeEvidence = {
   nativeModules?: DesktopNativeModuleVersion[];
 };
 
-const desktopNativePackageNames = (arch: DesktopArtifactArch) => [
+const desktopNativePackageNames = (platform: DesktopArtifactTarget["platform"], arch: DesktopArtifactArch) => [
   "@duckdb/node-api",
   "@duckdb/node-bindings",
-  `@duckdb/node-bindings-darwin-${arch}`,
+  `@duckdb/node-bindings-${platform}-${arch}`,
   "sqlite-vec",
-  `sqlite-vec-darwin-${arch}`,
+  platform === "darwin" ? `sqlite-vec-darwin-${arch}` : `sqlite-vec-windows-${arch}`,
 ] as const;
+
+export function desktopFuseBinaryPath(platform: DesktopArtifactTarget["platform"]) {
+  return platform === "darwin" ? DESKTOP_FUSE_BINARY_PATH : WINDOWS_DESKTOP_FUSE_BINARY_PATH;
+}
 
 export type DesktopArtifactVerificationReason =
   | "known"
@@ -204,7 +209,8 @@ export type DesktopArtifactVerificationReason =
   | "source-dirty"
   | "identity-mismatch"
   | "runtime-mismatch"
-  | "resource-mismatch";
+  | "resource-mismatch"
+  | "distribution-unsigned";
 
 export type DesktopArtifactVerification = ResponseFeedbackCandidateInspection & {
   reason: DesktopArtifactVerificationReason;
@@ -280,7 +286,7 @@ function parseFiles(value: unknown): DesktopArtifactFile[] | null {
   return files;
 }
 
-function normalizeNativeModules(modules: readonly DesktopNativeModuleVersion[], arch: DesktopArtifactArch) {
+function normalizeNativeModules(modules: readonly DesktopNativeModuleVersion[], target: DesktopArtifactTarget) {
   const names = new Set<string>();
   const normalized = modules.map((module) => {
     if (!packageNamePattern.test(module.name) || names.has(module.name)) {
@@ -290,20 +296,14 @@ function normalizeNativeModules(modules: readonly DesktopNativeModuleVersion[], 
     names.add(module.name);
     return { name: module.name, version: module.version };
   }).sort((left, right) => bytewiseCompare(left.name, right.name));
-  const required = [
-    "@duckdb/node-api",
-    "@duckdb/node-bindings",
-    `@duckdb/node-bindings-darwin-${arch}`,
-    "sqlite-vec",
-    `sqlite-vec-darwin-${arch}`,
-  ];
+  const required = desktopNativePackageNames(target.platform, target.arch);
   if (required.some((name) => !names.has(name))) {
-    throw new Error(`Native module identities must include the complete DuckDB and sqlite-vec ${arch} package chain.`);
+    throw new Error(`Native module identities must include the complete DuckDB and sqlite-vec ${target.platform}/${target.arch} package chain.`);
   }
   return normalized;
 }
 
-function parseNativeModules(value: unknown, arch: DesktopArtifactArch): DesktopNativeModuleVersion[] | null {
+function parseNativeModules(value: unknown, target: DesktopArtifactTarget): DesktopNativeModuleVersion[] | null {
   if (!Array.isArray(value)) return null;
   const modules: DesktopNativeModuleVersion[] = [];
   for (const entry of value) {
@@ -312,7 +312,7 @@ function parseNativeModules(value: unknown, arch: DesktopArtifactArch): DesktopN
     modules.push({ name: entry.name, version: entry.version });
   }
   try {
-    const normalized = normalizeNativeModules(modules, arch);
+    const normalized = normalizeNativeModules(modules, target);
     if (normalized.some((module, index) => module.name !== modules[index]?.name || module.version !== modules[index]?.version)) return null;
     return normalized;
   } catch {
@@ -348,7 +348,7 @@ function parseWebFeedback(value: unknown): DesktopWebFeedbackIdentity | null {
   }
 }
 
-function normalizeRuntimeVersions(versions: DesktopRuntimeVersions, arch: DesktopArtifactArch): DesktopRuntimeVersions {
+function normalizeRuntimeVersions(versions: DesktopRuntimeVersions, target: DesktopArtifactTarget): DesktopRuntimeVersions {
   if (!/^43\./.test(versions.electron) || !versionPattern.test(versions.electron)) {
     throw new Error("The desktop identity must bind an exact Electron 43 version.");
   }
@@ -362,15 +362,15 @@ function normalizeRuntimeVersions(versions: DesktopRuntimeVersions, arch: Deskto
     electron: versions.electron,
     embeddedNode: versions.embeddedNode,
     next: versions.next,
-    nativeModules: normalizeNativeModules(versions.nativeModules, arch),
+    nativeModules: normalizeNativeModules(versions.nativeModules, target),
   };
 }
 
-function parseRuntimeVersions(value: unknown, arch: DesktopArtifactArch): DesktopRuntimeVersions | null {
+function parseRuntimeVersions(value: unknown, target: DesktopArtifactTarget): DesktopRuntimeVersions | null {
   if (!isRecord(value) || !exactKeys(value, ["electron", "embeddedNode", "next", "nativeModules"])
     || typeof value.electron !== "string" || typeof value.embeddedNode !== "string"
     || typeof value.next !== "string") return null;
-  const nativeModules = parseNativeModules(value.nativeModules, arch);
+  const nativeModules = parseNativeModules(value.nativeModules, target);
   if (!nativeModules) return null;
   try {
     return normalizeRuntimeVersions({
@@ -378,7 +378,7 @@ function parseRuntimeVersions(value: unknown, arch: DesktopArtifactArch): Deskto
       embeddedNode: value.embeddedNode,
       next: value.next,
       nativeModules,
-    }, arch);
+    }, target);
   } catch {
     return null;
   }
@@ -391,10 +391,11 @@ function normalizeFuses(fuses: DesktopFusePolicy): DesktopFusePolicy {
   return { ...REQUIRED_DESKTOP_FUSE_POLICY };
 }
 
-function normalizeFuseInspection(inspection: DesktopFuseInspection): DesktopFuseInspection {
+function normalizeFuseInspection(inspection: DesktopFuseInspection, target: DesktopArtifactTarget): DesktopFuseInspection {
+  const expectedPath = desktopFuseBinaryPath(target.platform);
   if (!isRecord(inspection)
     || !exactKeys(inspection, ["inspectedPath", "wireVersion", "wireLength", "entries"])
-    || inspection.inspectedPath !== DESKTOP_FUSE_BINARY_PATH || inspection.wireVersion !== "1"
+    || inspection.inspectedPath !== expectedPath || inspection.wireVersion !== "1"
     || inspection.wireLength !== 9 || !Array.isArray(inspection.entries)
     || inspection.entries.length !== REQUIRED_DESKTOP_FUSE_NAMES.length) {
     throw new Error("Desktop fuse inspection evidence is incomplete.");
@@ -414,14 +415,14 @@ function normalizeFuseInspection(inspection: DesktopFuseInspection): DesktopFuse
     };
   });
   return {
-    inspectedPath: DESKTOP_FUSE_BINARY_PATH,
+    inspectedPath: expectedPath,
     wireVersion: "1",
     wireLength: 9,
     entries,
   };
 }
 
-function normalizePackagingTooling(tooling: DesktopPackagingTooling): DesktopPackagingTooling {
+function normalizePackagingTooling(tooling: DesktopPackagingTooling, target: DesktopArtifactTarget): DesktopPackagingTooling {
   if (!versionPattern.test(tooling.electronForge) || !/^7\./.test(tooling.electronForge)
     || tooling.electronFuses !== "2.1.3" || tooling.fuseWireVersion !== "1"
     || !Array.isArray(tooling.fuseWireStates)
@@ -429,7 +430,12 @@ function normalizePackagingTooling(tooling: DesktopPackagingTooling): DesktopPac
     || tooling.fuseWireStates.some((state, index) => state !== REQUIRED_DESKTOP_FUSE_WIRE_STATES[index])
     || !isRecord(tooling.fuseInspection)
     || !isRecord(tooling.signature) || !exactKeys(tooling.signature, ["mode", "postFuseMutation", "deepStrictVerified"])
-    || tooling.signature.mode !== "adhoc" || typeof tooling.signature.postFuseMutation !== "boolean"
+    || !["adhoc", "unsigned-candidate", "app-store-development", "app-store-distribution"].includes(tooling.signature.mode)
+    || (target.platform === "darwin"
+      ? !["adhoc", "app-store-development", "app-store-distribution"].includes(tooling.signature.mode)
+      : tooling.signature.mode !== "unsigned-candidate")
+    || (tooling.signature.mode === "unsigned-candidate" && tooling.signature.deepStrictVerified !== false)
+    || typeof tooling.signature.postFuseMutation !== "boolean"
     || typeof tooling.signature.deepStrictVerified !== "boolean") {
     throw new Error("Desktop packaging tooling or raw fuse-wire evidence is incomplete.");
   }
@@ -438,18 +444,18 @@ function normalizePackagingTooling(tooling: DesktopPackagingTooling): DesktopPac
     electronFuses: tooling.electronFuses,
     fuseWireVersion: "1",
     fuseWireStates: [...tooling.fuseWireStates],
-    fuseInspection: normalizeFuseInspection(tooling.fuseInspection),
+    fuseInspection: normalizeFuseInspection(tooling.fuseInspection, target),
     signature: { ...tooling.signature },
   };
 }
 
-function parsePackagingTooling(value: unknown): DesktopPackagingTooling | null {
+function parsePackagingTooling(value: unknown, target: DesktopArtifactTarget): DesktopPackagingTooling | null {
   if (!isRecord(value) || !exactKeys(value, ["electronForge", "electronFuses", "fuseWireVersion", "fuseWireStates", "fuseInspection", "signature"])
     || typeof value.electronForge !== "string" || typeof value.electronFuses !== "string"
     || value.fuseWireVersion !== "1" || !Array.isArray(value.fuseWireStates)
     || value.fuseWireStates.some((state) => typeof state !== "number")) return null;
   try {
-    return normalizePackagingTooling(value as DesktopPackagingTooling);
+    return normalizePackagingTooling(value as DesktopPackagingTooling, target);
   } catch {
     return null;
   }
@@ -465,7 +471,7 @@ function parseFuses(value: unknown): DesktopFusePolicy | null {
   }
 }
 
-function assertNativeInventory(resources: readonly DesktopArtifactFile[], natives: readonly DesktopArtifactFile[], arch: DesktopArtifactArch) {
+function assertNativeInventory(resources: readonly DesktopArtifactFile[], natives: readonly DesktopArtifactFile[], target: DesktopArtifactTarget) {
   const resourcesByPath = new Map(resources.map((file) => [file.path, file]));
   const nativeByPath = new Map(natives.map((file) => [file.path, file]));
   for (const native of natives) {
@@ -473,8 +479,10 @@ function assertNativeInventory(resources: readonly DesktopArtifactFile[], native
     if (!resource || resource.bytes !== native.bytes || resource.sha256 !== native.sha256 || !nativeFilePattern.test(native.path)) {
       throw new Error("Every native payload must be an identical member of the exact resource inventory.");
     }
-    if (/darwin-(?:arm64|x64)/.test(native.path) && !native.path.includes(`darwin-${arch}`)) {
-      throw new Error("Native payload inventory contains the wrong macOS architecture.");
+    if (/(?:darwin|win32|windows)-(?:arm64|x64)/.test(native.path)
+      && !native.path.includes(`${target.platform}-${target.arch}`)
+      && !(target.platform === "win32" && native.path.includes(`windows-${target.arch}`))) {
+      throw new Error("Native payload inventory contains the wrong target platform or architecture.");
     }
   }
   for (const resource of resources) {
@@ -482,13 +490,18 @@ function assertNativeInventory(resources: readonly DesktopArtifactFile[], native
       throw new Error("The native payload inventory must include every native resource file.");
     }
   }
-  const requiredSuffixes = [
-    `/@duckdb/node-bindings-darwin-${arch}/duckdb.node`,
-    `/@duckdb/node-bindings-darwin-${arch}/libduckdb.dylib`,
-    `/sqlite-vec-darwin-${arch}/vec0.dylib`,
+  const requiredSuffixes = target.platform === "darwin" ? [
+    `/@duckdb/node-bindings-darwin-${target.arch}/duckdb.node`,
+    `/@duckdb/node-bindings-darwin-${target.arch}/libduckdb.dylib`,
+    `/sqlite-vec-darwin-${target.arch}/vec0.dylib`,
+  ] : [
+    `/@duckdb/node-bindings-win32-${target.arch}/duckdb.node`,
+    `/@duckdb/node-bindings-win32-${target.arch}/duckdb.dll`,
+    `/sqlite-vec-windows-${target.arch}/vec0.dll`,
+    "/runtime/ollama/ollama.exe",
   ];
   if (requiredSuffixes.some((suffix) => !natives.some((file) => `/${file.path}`.endsWith(suffix)))) {
-    throw new Error(`Native payload inventory is missing required DuckDB or sqlite-vec ${arch} files.`);
+    throw new Error(`Native payload inventory is missing required DuckDB or sqlite-vec ${target.platform}/${target.arch} files.`);
   }
 }
 
@@ -541,11 +554,16 @@ export function deriveDesktopArtifactId(manifest: DesktopArtifactManifest) {
   return createHash("sha256").update(canonicalDesktopArtifactIdentity(manifest)).digest("hex");
 }
 
-export function desktopArtifactBuildName(sourceVersion: string, arch: DesktopArtifactArch, desktopArtifactId: string) {
+export function desktopArtifactBuildName(
+  sourceVersion: string,
+  target: DesktopArtifactArch | DesktopArtifactTarget,
+  desktopArtifactId: string,
+) {
   if (!versionPattern.test(sourceVersion) || !sha256Pattern.test(desktopArtifactId)) {
     throw new Error("Cannot name a desktop build without valid source and artifact identities.");
   }
-  return `${sourceVersion}+desktop.${arch}.${desktopArtifactId.slice(0, 12)}`;
+  const targetName = typeof target === "string" ? target : `${target.platform}.${target.arch}`;
+  return `${sourceVersion}+desktop.${targetName}.${desktopArtifactId.slice(0, 12)}`;
 }
 
 export function createDesktopArtifactManifest(input: DesktopArtifactManifestInput): DesktopArtifactManifest {
@@ -560,8 +578,10 @@ export function createDesktopArtifactManifest(input: DesktopArtifactManifestInpu
   }
   if (typeof input.sourceDirty !== "boolean" || !sha256Pattern.test(input.sourceManifestSha256)
     || !sha256Pattern.test(input.packageLockSha256)) throw new Error("Desktop source identity is incomplete.");
-  if (input.target.platform !== "darwin" || (input.target.arch !== "arm64" && input.target.arch !== "x64")) {
-    throw new Error("Only architecture-specific macOS desktop identities are supported.");
+  if ((input.target.platform !== "darwin" && input.target.platform !== "win32")
+    || (input.target.arch !== "arm64" && input.target.arch !== "x64")
+    || (input.target.platform === "win32" && input.target.arch !== "x64")) {
+    throw new Error("Only architecture-specific macOS and Windows x64 desktop identities are supported.");
   }
   if (!validGeneratedAt(input.generatedAt)) throw new Error("generatedAt must be a canonical UTC ISO timestamp.");
   const webFeedback = normalizeWebFeedback(input.webFeedback);
@@ -573,15 +593,15 @@ export function createDesktopArtifactManifest(input: DesktopArtifactManifestInpu
   if (deriveDesktopSourceManifestSha256(sourceFiles) !== input.sourceManifestSha256) {
     throw new Error("Desktop source manifest files do not match their bound digest.");
   }
-  const runtimeVersions = normalizeRuntimeVersions(input.runtimeVersions, input.target.arch);
+  const runtimeVersions = normalizeRuntimeVersions(input.runtimeVersions, input.target);
   const fuses = normalizeFuses(input.fuses);
-  const packagingTooling = normalizePackagingTooling(input.packagingTooling);
+  const packagingTooling = normalizePackagingTooling(input.packagingTooling, input.target);
   const bundleFiles = normalizeFiles(input.bundleFiles);
   const resources = normalizeFiles(input.resources);
   const natives = normalizeFiles(input.natives);
-  assertNativeInventory(resources, natives, input.target.arch);
-  if (packagingTooling.signature.postFuseMutation && packagingTooling.signature.deepStrictVerified
-    && !bundleFiles.some((file) => file.path === DESKTOP_FUSE_BINARY_PATH)) {
+  assertNativeInventory(resources, natives, input.target);
+  if (bundleFiles.length > 0
+    && !bundleFiles.some((file) => file.path === desktopFuseBinaryPath(input.target.platform))) {
     throw new Error("Final desktop identities must bind the fuse-bearing Electron Framework binary.");
   }
   const bundleManifestSha256 = fileManifestSha256("bundle", input.target, bundleFiles);
@@ -632,18 +652,20 @@ export function parseDesktopArtifactManifest(value: unknown): DesktopArtifactMan
     || typeof value.nativeManifestSha256 !== "string" || !sha256Pattern.test(value.nativeManifestSha256)
     || typeof value.generatedAt !== "string" || !validGeneratedAt(value.generatedAt)
     || !isRecord(value.target) || !exactKeys(value.target, ["platform", "arch"])
-    || value.target.platform !== "darwin" || (value.target.arch !== "arm64" && value.target.arch !== "x64")) return null;
-  const arch = value.target.arch;
+    || (value.target.platform !== "darwin" && value.target.platform !== "win32")
+    || (value.target.arch !== "arm64" && value.target.arch !== "x64")
+    || (value.target.platform === "win32" && value.target.arch !== "x64")) return null;
+  const target = { platform: value.target.platform, arch: value.target.arch } as DesktopArtifactTarget;
   const webFeedback = parseWebFeedback(value.webFeedback);
   const launchProfile = parseDesktopLaunchProfile(value.launchProfile);
   const sourceFiles = parseFiles(value.sourceFiles);
-  const runtimeVersions = parseRuntimeVersions(value.runtimeVersions, arch);
+  const runtimeVersions = parseRuntimeVersions(value.runtimeVersions, target);
   const fuses = parseFuses(value.fuses);
-  const packagingTooling = parsePackagingTooling(value.packagingTooling);
+  const packagingTooling = parsePackagingTooling(value.packagingTooling, target);
   const bundleFiles = parseFiles(value.bundleFiles);
   const resources = parseFiles(value.resources);
   const natives = parseFiles(value.natives);
-  if (!webFeedback || !launchProfile || (launchProfile.kind === "finder-synthetic-v1" && arch !== "arm64")
+  if (!webFeedback || !launchProfile || (launchProfile.kind === "finder-synthetic-v1" && (target.platform !== "darwin" || target.arch !== "arm64"))
     || !sourceFiles || deriveDesktopSourceManifestSha256(sourceFiles) !== value.sourceManifestSha256
     || !runtimeVersions || !fuses || !packagingTooling || !bundleFiles || !resources || !natives) return null;
   const manifest: DesktopArtifactManifest = {
@@ -659,7 +681,7 @@ export function parseDesktopArtifactManifest(value: unknown): DesktopArtifactMan
     webFeedback,
     launchProfile,
     runtimeVersions,
-    target: { platform: "darwin", arch },
+    target,
     fuses,
     packagingTooling,
     bundleManifestSha256: value.bundleManifestSha256,
@@ -671,7 +693,7 @@ export function parseDesktopArtifactManifest(value: unknown): DesktopArtifactMan
     generatedAt: value.generatedAt,
   };
   try {
-    assertNativeInventory(resources, natives, arch);
+    assertNativeInventory(resources, natives, target);
     if (manifest.bundleManifestSha256 !== fileManifestSha256("bundle", manifest.target, bundleFiles)
       || manifest.resourceManifestSha256 !== fileManifestSha256("resources", manifest.target, resources)
       || manifest.nativeManifestSha256 !== fileManifestSha256("natives", manifest.target, natives, runtimeVersions.nativeModules)
@@ -748,6 +770,9 @@ function snapshotSignedMachOCode(path: string): DesktopArtifactFile {
     let signatureOffset = -1;
     let signatureSize = -1;
     let signatureCommandOffset = -1;
+    let linkEditCommandOffset = -1;
+    let linkEditFileOffset = -1;
+    let linkEditFileSize = -1;
     for (let index = 0; index < commands; index += 1) {
       if (commandOffset + 8 > source.length) throw new Error("The desktop launcher has a truncated Mach-O command table.");
       const command = source.readUInt32LE(commandOffset);
@@ -763,24 +788,44 @@ function snapshotSignedMachOCode(path: string): DesktopArtifactFile {
         signatureOffset = source.readUInt32LE(commandOffset + 8);
         signatureSize = source.readUInt32LE(commandOffset + 12);
       }
+      if (command === 0x19 && commandSize >= 72
+        && source.subarray(commandOffset + 8, commandOffset + 24).toString("ascii").split("\0", 1)[0] === "__LINKEDIT") {
+        if (linkEditCommandOffset !== -1) throw new Error("The desktop launcher has duplicate __LINKEDIT segments.");
+        const fileOffset = source.readBigUInt64LE(commandOffset + 40);
+        const fileSize = source.readBigUInt64LE(commandOffset + 48);
+        if (fileOffset > BigInt(Number.MAX_SAFE_INTEGER) || fileSize > BigInt(Number.MAX_SAFE_INTEGER)) {
+          throw new Error("The desktop launcher __LINKEDIT segment is not safely representable.");
+        }
+        linkEditCommandOffset = commandOffset;
+        linkEditFileOffset = Number(fileOffset);
+        linkEditFileSize = Number(fileSize);
+      }
       commandOffset += commandSize;
     }
     if (signatureCommandOffset === -1 || signatureOffset < commandOffset || signatureSize <= 0
-      || signatureOffset + signatureSize > source.length) {
+      || signatureOffset + signatureSize !== source.length) {
       throw new Error("The desktop launcher has an invalid embedded code signature.");
+    }
+    if (linkEditCommandOffset === -1 || linkEditFileOffset < commandOffset
+      || linkEditFileSize <= signatureSize || linkEditFileOffset + linkEditFileSize !== source.length
+      || signatureOffset < linkEditFileOffset) {
+      throw new Error("The desktop launcher has an invalid __LINKEDIT signature layout.");
     }
 
     // The outer ad-hoc seal necessarily changes after the embedded resource
     // manifest is written. Bind every launcher byte except the circular
-    // LC_CODE_SIGNATURE payload and its offset/size fields. Code, load
-    // commands, entitlements outside that payload, and appended bytes remain
-    // identity-bound, while the final signature is independently verified.
+    // LC_CODE_SIGNATURE payload, its offset/size fields, and the derived
+    // __LINKEDIT file-size field. codesign updates that segment length when a
+    // timestamp changes the tail signature size. The exact tail layout is
+    // validated above; code, all other load-command fields, and non-signature
+    // __LINKEDIT bytes remain identity-bound while the signature is verified.
     const prefix = Buffer.from(source.subarray(0, signatureOffset));
     prefix.fill(0, signatureCommandOffset + 8, signatureCommandOffset + 16);
+    prefix.fill(0, linkEditCommandOffset + 48, linkEditCommandOffset + 56);
     const suffix = source.subarray(signatureOffset + signatureSize);
     const canonicalBytes = prefix.length + suffix.length;
     const hash = createHash("sha256")
-      .update("rangabot-signed-mach-o-code-v1\0")
+      .update("rangabot-signed-mach-o-code-v2\0")
       .update(prefix)
       .update(suffix)
       .digest("hex");
@@ -833,13 +878,15 @@ export function desktopRuntimeEvidenceFromResourceRoot(input: {
   const root = explicitAbsoluteRoot(input.resourceRoot);
   const arch = input.arch ?? process.arch;
   if (arch !== "arm64" && arch !== "x64") throw new Error("Desktop runtime architecture is unsupported.");
+  const platform = input.platform ?? process.platform;
+  if (platform !== "darwin" && platform !== "win32") throw new Error("Desktop runtime platform is unsupported.");
   const next = packageVersionBelowResourceRoot(root, "next");
-  const nativeModules = desktopNativePackageNames(arch).map((name) => ({
+  const nativeModules = desktopNativePackageNames(platform, arch).map((name) => ({
     name,
     version: packageVersionBelowResourceRoot(root, name),
   }));
   return {
-    platform: input.platform ?? process.platform,
+    platform,
     arch,
     electron: input.electron ?? process.versions.electron ?? "",
     embeddedNode: input.embeddedNode ?? process.versions.node,
@@ -884,8 +931,9 @@ export function collectDesktopArtifactFiles(resourceRoot: string, excludedPaths:
  * manifest. Every framework/helper file and safe in-bundle symlink is bound,
  * including the framework binary that owns Electron's fuse wire.
  */
-export function collectDesktopBundleFiles(contentsRoot: string) {
-  const root = explicitAbsoluteRoot(contentsRoot);
+export function collectDesktopBundleFiles(bundleRoot: string, platform: DesktopArtifactTarget["platform"] = "darwin") {
+  const root = explicitAbsoluteRoot(bundleRoot);
+  const resourcesDirectory = platform === "darwin" ? "Resources" : "resources";
   const files: DesktopArtifactFile[] = [];
   const visit = (directory: string, prefix: string) => {
     const entries = readdirSync(directory, { withFileTypes: true })
@@ -893,11 +941,12 @@ export function collectDesktopBundleFiles(contentsRoot: string) {
     for (const entry of entries) {
       const path = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (!pathIsSafe(path)) throw new Error("Desktop bundle contains an unsafe path.");
-      if (path === "Resources" || path.startsWith("Resources/")
-        || path === "_CodeSignature" || path.startsWith("_CodeSignature/")) continue;
+      if (path === resourcesDirectory || path.startsWith(`${resourcesDirectory}/`)
+        || (platform === "darwin" && (path === "_CodeSignature" || path.startsWith("_CodeSignature/")))) continue;
       const absolute = join(directory, entry.name);
       const status = lstatSync(absolute);
       if (status.isSymbolicLink()) {
+        if (platform === "win32") throw new Error("Windows desktop bundles cannot contain symbolic links.");
         const target = readlinkSync(absolute);
         if (isAbsolute(target)) throw new Error("Desktop bundle symlinks must remain relative.");
         const resolvedTarget = normalize(join(dirname(absolute), target));
@@ -914,6 +963,7 @@ export function collectDesktopBundleFiles(contentsRoot: string) {
       } else if (status.isDirectory()) visit(absolute, path);
       else if (status.isFile()) {
         const snapshot = /^MacOS\/[^/]+$/.test(path)
+          && platform === "darwin"
           ? snapshotSignedMachOCode(absolute)
           : snapshotFile(absolute);
         files.push({ ...snapshot, path });
@@ -923,7 +973,7 @@ export function collectDesktopBundleFiles(contentsRoot: string) {
   };
   visit(root, "");
   const normalized = normalizeFiles(files);
-  if (!normalized.some((file) => file.path === DESKTOP_FUSE_BINARY_PATH)) {
+  if (!normalized.some((file) => file.path === desktopFuseBinaryPath(platform))) {
     throw new Error("Desktop bundle is missing its fuse-bearing Electron Framework binary.");
   }
   return normalized;
@@ -974,7 +1024,7 @@ function runtimeMatches(manifest: DesktopArtifactManifest, runtime: DesktopRunti
     || (runtime.next !== undefined && runtime.next !== manifest.runtimeVersions.next)) return false;
   if (runtime.nativeModules !== undefined) {
     try {
-      const modules = normalizeNativeModules(runtime.nativeModules, manifest.target.arch);
+      const modules = normalizeNativeModules(runtime.nativeModules, manifest.target);
       if (modules.length !== manifest.runtimeVersions.nativeModules.length
         || modules.some((module, index) => module.name !== manifest.runtimeVersions.nativeModules[index]?.name
           || module.version !== manifest.runtimeVersions.nativeModules[index]?.version)) return false;
@@ -1012,7 +1062,8 @@ export function inspectDesktopArtifact(options: {
     return emptyVerification("mixed", "identity-mismatch", manifest);
   }
   if (!manifest.packagingTooling.signature.postFuseMutation
-    || !manifest.packagingTooling.signature.deepStrictVerified) {
+    || (manifest.packagingTooling.signature.mode !== "unsigned-candidate"
+      && !manifest.packagingTooling.signature.deepStrictVerified)) {
     return emptyVerification("unknown", "manifest-invalid", manifest);
   }
   const runtime = options.runtime ?? {
@@ -1025,7 +1076,7 @@ export function inspectDesktopArtifact(options: {
   try {
     const resources = collectDesktopArtifactFiles(root, [relativeManifest]);
     if (!sameFiles(resources, manifest.resources)) return emptyVerification("mixed", "resource-mismatch", manifest);
-    const bundleFiles = collectDesktopBundleFiles(dirname(root));
+    const bundleFiles = collectDesktopBundleFiles(dirname(root), manifest.target.platform);
     if (!sameFiles(bundleFiles, manifest.bundleFiles)) return emptyVerification("mixed", "resource-mismatch", manifest);
   } catch {
     return emptyVerification("mixed", "resource-mismatch", manifest);
@@ -1033,10 +1084,13 @@ export function inspectDesktopArtifact(options: {
   // Dirty build input disables known-build claims only after the installed
   // resource tree itself has passed exact cryptographic verification.
   if (manifest.sourceDirty) return emptyVerification("dirty", "source-dirty", manifest);
+  if (manifest.packagingTooling.signature.mode === "unsigned-candidate") {
+    return emptyVerification("dirty", "distribution-unsigned", manifest);
+  }
   return {
     state: "known",
     candidateBuildId: manifest.desktopArtifactId,
-    build: desktopArtifactBuildName(manifest.webFeedback.sourceVersion, manifest.target.arch, manifest.desktopArtifactId),
+    build: desktopArtifactBuildName(manifest.webFeedback.sourceVersion, manifest.target, manifest.desktopArtifactId),
     baseCommit: manifest.sourceCommit,
     manifestSha256: manifest.sourceManifestSha256,
     artifactSha256: manifest.desktopArtifactId,

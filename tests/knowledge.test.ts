@@ -119,7 +119,16 @@ test("recognizes subject news questions without confusing teaching questions", (
   assert.equal(knowledge.isKnowledgeNewsQuestion("What's new in data science this week?"), true);
   assert.equal(knowledge.isKnowledgeNewsQuestion("Tell me the latest AI model developments"), true);
   assert.equal(knowledge.isKnowledgeNewsQuestion("Explain the pandas string dtype"), false);
-  assert.match(knowledge.buildKnowledgeNewsAnswer("What's new this week?"), /Data science intelligence brief/);
+  const brief = knowledge.buildKnowledgeNewsAnswer("What's new this week?");
+  assert.equal(brief.used, true);
+  assert.match(brief.answer, /Data science intelligence brief/);
+  const missing = knowledge.buildKnowledgeNewsAnswer("What's new this week?", () => { throw Object.assign(new Error("missing"), { code: "ENOENT" }); });
+  assert.equal(missing.used, false);
+  assert.match(missing.answer, /No weekly subject brief has been saved/);
+  const unreadable = knowledge.buildKnowledgeNewsAnswer("What's new this week?", () => { throw Object.assign(new Error("denied"), { code: "EACCES" }); });
+  assert.equal(unreadable.used, false);
+  assert.match(unreadable.answer, /could not be read safely/);
+  assert.doesNotMatch(unreadable.answer, /No weekly subject brief has been saved/);
 });
 
 test("auto-searches the vault for informational Smart-mode questions", () => {

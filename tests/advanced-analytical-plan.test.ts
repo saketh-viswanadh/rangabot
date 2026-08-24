@@ -35,6 +35,61 @@ test("compiles generic period growth and anti-join plans", () => {
   assert.match(compileAdvancedAnalyticalPlan(plan({ operation: "anti_join", source: "staff", entity: "staff.staff_id", relatedField: "shifts.staff_id", metric: "", secondaryMetric: "" }), schema).query, /LEFT JOIN "shifts" USING \("staff_id"\)/);
 });
 
+test("compiles complete filtered totals and deterministic latest rows without model-authored SQL", () => {
+  const complete = compileAdvancedAnalyticalPlan(plan({
+    operation: "complete_filtered_sum",
+    source: "shifts",
+    metric: "shifts.hours",
+    entity: "staff.staff_id",
+    groupField: "shifts.staff_id",
+    numeratorFilters: [{ column: "shifts.shift_id", operator: "gte", value: "2" }],
+    secondaryMetric: "",
+  }), schema).query;
+  assert.match(complete, /FROM "staff"\nLEFT JOIN "shifts" ON "shifts"\."staff_id" = "staff"\."staff_id"/);
+  assert.match(complete, /COALESCE\(SUM\("shifts"\."hours"\) FILTER \(WHERE "shifts"\."shift_id" >= 2\), 0\)/);
+
+  const completeAverage = compileAdvancedAnalyticalPlan(plan({
+    operation: "complete_count_average",
+    source: "staff",
+    metric: "",
+    secondaryMetric: "",
+    entity: "staff.staff_id",
+    groupField: "shifts.staff_id",
+    relatedField: "shifts.shift_id",
+    filters: [{ column: "staff.active", operator: "eq", value: "true" }],
+  }), schema).query;
+  assert.match(completeAverage, /AVG\("activity_count"\)[\s\S]+FROM "staff"[\s\S]+LEFT JOIN "shifts" ON "shifts"\."staff_id" = "staff"\."staff_id"[\s\S]+WHERE "staff"\."active" = TRUE/);
+
+  const latest = compileAdvancedAnalyticalPlan(plan({
+    operation: "latest_per_group",
+    source: "shifts",
+    entity: "shifts.shift_id",
+    groupField: "shifts.staff_id",
+    dateField: "shifts.started_at",
+    metric: "",
+    secondaryMetric: "",
+  }), schema).query;
+  assert.match(latest, /ROW_NUMBER\(\) OVER \(PARTITION BY "shifts"\."staff_id" ORDER BY "shifts"\."started_at" DESC, "shifts"\."shift_id" DESC\)/);
+  assert.match(latest, /WHERE "rangabot_rank" = 1/);
+});
+
+test("audits the broadened operations against request and schema evidence", () => {
+  const complete = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "ratio", source: "shifts", metric: "shifts.hours", entity: "staff.staff_id", groupField: "shifts.staff_id",
+    numeratorFilters: [{ column: "shifts.shift_id", operator: "gte", value: "2" }],
+  }), "Return total hours from shifts with shift id at least 2 by staff, including staff with zero matching shifts.", schema);
+  assert.equal(complete.action, "query");
+  assert.equal(complete.operation, "complete_filtered_sum");
+  assert.deepEqual(complete.numeratorFilters, [{ column: "shifts.shift_id", operator: "gte", value: "2" }]);
+
+  const latest = normalizeAdvancedAnalyticalPlan(plan({
+    operation: "ratio", source: "shifts", metric: "", secondaryMetric: "", entity: "shifts.shift_id",
+    groupField: "shifts.staff_id", dateField: "shifts.started_at",
+  }), "Keep the newest shift per staff using started at; if timestamps tie, the higher shift id wins.", schema);
+  assert.equal(latest.action, "query");
+  assert.equal(latest.operation, "latest_per_group");
+});
+
 test("compiles distinct populations and aggregates over grouped values", () => {
   const distinct = normalizeAdvancedAnalyticalPlan(plan({ operation: "distinct_count", source: "incidents", entity: "incidents.staff_id", metric: "", filters: [{ column: "incidents.severity", operator: "eq", value: "high" }] }), "How many distinct staff have high severity incidents?", schema);
   assert.match(compileAdvancedAnalyticalPlan(distinct, schema).query, /COUNT\(DISTINCT "incidents"\."staff_id"\)/);
@@ -97,6 +152,76 @@ test("uses explicit temporal endpoints but does not invent absent roles", () => 
   assert.match(absent.explanation, /measure and entity/i);
 });
 
+test("deterministically resolves common complete-population, average, duration, distinct, and rate requests", () => {
+  const columns = [
+    { table: "stores", name: "store_id", type: "INTEGER" },
+    { table: "stores", name: "region", type: "VARCHAR" },
+    { table: "sales", name: "sale_id", type: "INTEGER" },
+    { table: "sales", name: "store_id", type: "INTEGER" },
+    { table: "sales", name: "revenue", type: "DOUBLE" },
+    { table: "sales", name: "status", type: "VARCHAR" },
+    { table: "sales", name: "is_completed", type: "BOOLEAN" },
+    { table: "sales", name: "started_at", type: "TIMESTAMP" },
+    { table: "sales", name: "ended_at", type: "TIMESTAMP" },
+    { table: "visits", name: "visit_id", type: "INTEGER" },
+    { table: "visits", name: "store_id", type: "INTEGER" },
+    { table: "visits", name: "started_at", type: "TIMESTAMP" },
+    { table: "visits", name: "ended_at", type: "TIMESTAMP" },
+    { table: "hotels", name: "hotel_id", type: "INTEGER" },
+    { table: "bookings", name: "booking_id", type: "INTEGER" },
+    { table: "bookings", name: "hotel_id", type: "INTEGER" },
+    { table: "bookings", name: "revenue", type: "DOUBLE" },
+    { table: "hubs", name: "hub_id", type: "INTEGER" },
+    { table: "shipments", name: "shipment_id", type: "INTEGER" },
+    { table: "shipments", name: "hub_id", type: "INTEGER" },
+    { table: "shipments", name: "weight", type: "DOUBLE" },
+    { table: "plants", name: "plant_id", type: "INTEGER" },
+    { table: "batches", name: "batch_id", type: "INTEGER" },
+    { table: "batches", name: "plant_id", type: "INTEGER" },
+    { table: "batches", name: "units", type: "DOUBLE" },
+    { table: "batches", name: "status", type: "VARCHAR" },
+  ];
+  const resolve = (request: string) => {
+    const recovered = recoverAdvancedAnalyticalPlan(request, columns);
+    assert.ok(recovered, request);
+    const normalized = normalizeAdvancedAnalyticalPlan(recovered, request, columns);
+    assert.equal(normalized.action, "query", request);
+    return { plan: normalized, query: compileAdvancedAnalyticalPlan(normalized, columns).query };
+  };
+
+  const complete = resolve("List all stores, including zero, with their total completed revenue.");
+  assert.equal(complete.plan.operation, "complete_filtered_sum");
+  assert.match(complete.query, /FROM "stores"\nLEFT JOIN "sales"/);
+  assert.match(complete.query, /COALESCE\(SUM\("sales"\."revenue"\) FILTER \(WHERE "sales"\."is_completed" = TRUE\), 0\)/);
+
+  const average = resolve("What is the average total revenue per store?");
+  assert.equal(average.plan.operation, "per_entity_average");
+  assert.match(average.query, /SUM\("sales"\."revenue"\)/);
+  assert.match(average.query, /GROUP BY "sales"\."store_id"/);
+
+  const shortPlural = resolve("What is the average total weight per hub?");
+  assert.equal(shortPlural.plan.entity, "shipments.hub_id");
+
+  const pluralMetric = resolve("List all plants, including zero, with their total accepted units.");
+  assert.match(pluralMetric.query, /SUM\("batches"\."units"\) FILTER \(WHERE "batches"\."status" = 'accepted'\)/);
+
+  const duration = resolve("What is the average duration between started at and ended at for sales?");
+  assert.equal(duration.plan.operation, "duration_average");
+  assert.match(duration.query, /DATE_DIFF\('minute', "sales"\."started_at", "sales"\."ended_at"\)/);
+
+  const distinct = resolve("How many unique store IDs appear in sales?");
+  assert.equal(distinct.plan.operation, "distinct_count");
+  assert.match(distinct.query, /COUNT\(DISTINCT "sales"\."store_id"\)[\s\S]*FROM "sales"/);
+
+  const rate = resolve("Among all sales, what percentage are completed?");
+  assert.equal(rate.plan.operation, "conditional_rate");
+  assert.match(rate.query, /COUNT\(\*\) FILTER \(WHERE "sales"\."is_completed" = TRUE\)/);
+
+  const naturalRate = resolve("Calculate the completed rate across every row in sales.");
+  assert.equal(naturalRate.plan.operation, "conditional_rate");
+  assert.match(naturalRate.query, /100\.0 \* COUNT\(\*\) FILTER/);
+});
+
 test("recovers a complete high-confidence plan without trusting malformed model JSON", () => {
   const columns = [
     { table: "sessions", name: "session_id", type: "INTEGER" },
@@ -108,6 +233,72 @@ test("recovers a complete high-confidence plan without trusting malformed model 
     operation: "duration_average", source: "sessions", start: "sessions.opened_at", end: "sessions.closed_at",
   });
   assert.equal(recoverAdvancedAnalyticalPlan("What is the average duration?", columns), null);
+});
+
+test("recovers broadened operations only from unambiguous request and schema roles", () => {
+  const columns = [
+    { table: "clients", name: "client_id", type: "INTEGER" },
+    { table: "charges", name: "charge_id", type: "INTEGER" },
+    { table: "charges", name: "client_id", type: "INTEGER" },
+    { table: "charges", name: "state", type: "VARCHAR" },
+    { table: "charges", name: "charge_amount", type: "DOUBLE" },
+    { table: "updates", name: "update_id", type: "INTEGER" },
+    { table: "updates", name: "client_id", type: "INTEGER" },
+    { table: "updates", name: "observed_at", type: "TIMESTAMP" },
+  ];
+  const complete = recoverAdvancedAnalyticalPlan("Return settled charge amount totals by client, including clients with zero settled charges.", columns);
+  assert.deepEqual({ operation: complete?.operation, source: complete?.source, metric: complete?.metric, entity: complete?.entity, group: complete?.groupField, filters: complete?.numeratorFilters }, {
+    operation: "complete_filtered_sum", source: "charges", metric: "charges.charge_amount", entity: "clients.client_id", group: "charges.client_id",
+    filters: [{ column: "charges.state", operator: "eq", value: "settled" }],
+  });
+  const latest = recoverAdvancedAnalyticalPlan("Keep the newest update per client using observed at; if timestamps tie, the higher update id wins.", columns);
+  assert.deepEqual({ operation: latest?.operation, source: latest?.source, entity: latest?.entity, group: latest?.groupField, date: latest?.dateField }, {
+    operation: "latest_per_group", source: "updates", entity: "updates.update_id", group: "updates.client_id", date: "updates.observed_at",
+  });
+  assert.equal(recoverAdvancedAnalyticalPlan("Show totals including clients with zero matches.", columns), null);
+  assert.equal(recoverAdvancedAnalyticalPlan("Show the latest update per client.", columns), null);
+});
+
+test("recovers unmatched entities through the exact shared relationship key", () => {
+  for (const fixture of [
+    { entities: "plants", entity: "plant", events: "batches", event: "batch" },
+    { entities: "sites", entity: "site", events: "readings", event: "reading" },
+    { entities: "hotels", entity: "hotel", events: "bookings", event: "booking" },
+  ]) {
+    const columns = [
+      { table: fixture.entities, name: `${fixture.entity}_id`, type: "INTEGER" },
+      { table: fixture.events, name: `${fixture.event}_id`, type: "INTEGER" },
+      { table: fixture.events, name: `${fixture.entity}_id`, type: "INTEGER" },
+    ];
+    const recovered = recoverAdvancedAnalyticalPlan(`Which ${fixture.entity} IDs never have ${fixture.events}?`, columns);
+    assert.deepEqual({ operation: recovered?.operation, source: recovered?.source, entity: recovered?.entity, related: recovered?.relatedField }, {
+      operation: "anti_join", source: fixture.entities, entity: `${fixture.entities}.${fixture.entity}_id`, related: `${fixture.events}.${fixture.event}_id`,
+    });
+    const related = recoverAdvancedAnalyticalPlan(`Which ${fixture.entity} IDs have no related ${fixture.events}?`, columns);
+    assert.deepEqual({ operation: related?.operation, source: related?.source, entity: related?.entity, related: related?.relatedField }, {
+      operation: "anti_join", source: fixture.entities, entity: `${fixture.entities}.${fixture.entity}_id`, related: `${fixture.events}.${fixture.event}_id`,
+    });
+  }
+});
+
+test("decomposes possessive average-of-totals and complete-population status requests", () => {
+  const columns = [
+    { table: "branches", name: "branch_id", type: "INTEGER" },
+    { table: "transactions", name: "transaction_id", type: "INTEGER" },
+    { table: "transactions", name: "branch_id", type: "INTEGER" },
+    { table: "transactions", name: "amount", type: "DOUBLE" },
+    { table: "transactions", name: "status", type: "VARCHAR" },
+    { table: "transactions", name: "is_settled", type: "BOOLEAN" },
+  ];
+  const average = recoverAdvancedAnalyticalPlan("What is the average of each branch's total amount in transactions?", columns);
+  assert.deepEqual({ operation: average?.operation, source: average?.source, metric: average?.metric, entity: average?.entity }, {
+    operation: "per_entity_average", source: "transactions", metric: "transactions.amount", entity: "transactions.branch_id",
+  });
+  const complete = recoverAdvancedAnalyticalPlan("List every branch ID, including zero-activity ones, with total amount for settled transactions.", columns);
+  assert.deepEqual({ operation: complete?.operation, source: complete?.source, metric: complete?.metric, entity: complete?.entity, group: complete?.groupField, filters: complete?.numeratorFilters }, {
+    operation: "complete_filtered_sum", source: "transactions", metric: "transactions.amount", entity: "branches.branch_id", group: "transactions.branch_id",
+    filters: [{ column: "transactions.is_settled", operator: "eq", value: "true" }],
+  });
 });
 
 test("resolves row-count ratios, thresholds, unmatched relations and period grains", () => {
@@ -307,6 +498,35 @@ test("derives valid calendar boundaries and fixes the operation source generical
   assert.equal(normalized.source, "shifts");
   assert.equal(normalized.dateField, "shifts.shift_date");
   assert.deepEqual([normalized.firstStart, normalized.firstEnd, normalized.secondStart, normalized.secondEnd], ["2025-01-01", "2025-02-01", "2025-02-01", "2025-03-01"]);
+});
+
+test("period growth rejects a numeric measure from an unrelated domain", () => {
+  const mixedSchema = [
+    { table: "sales", name: "sold_on", type: "DATE" },
+    { table: "sales", name: "revenue", type: "DOUBLE" },
+    { table: "bookings", name: "booked_on", type: "DATE" },
+    { table: "bookings", name: "revenue", type: "DOUBLE" },
+    { table: "readings", name: "read_on", type: "DATE" },
+    { table: "readings", name: "kilowatt_hours", type: "DOUBLE" },
+  ];
+  const wrongSource = plan({
+    operation: "period_growth",
+    source: "readings",
+    metric: "readings.kilowatt_hours",
+    dateField: "readings.read_on",
+    firstStart: "2026-04-01",
+    firstEnd: "2026-05-01",
+    secondStart: "2026-05-01",
+    secondEnd: "2026-06-01",
+  });
+  const audited = auditAdvancedAnalyticalPlan(wrongSource, "Calculate growth in revenue from April 2026 to May 2026 using sold on.", mixedSchema);
+  assert.equal(audited.plan.action, "clarify");
+  assert.match(audited.plan.explanation, /explicitly requested numeric field/);
+
+  const recoveredSales = recoverAdvancedAnalyticalPlan("Calculate growth in revenue from April 2026 to May 2026 using sold_on.", mixedSchema);
+  assert.deepEqual({ source: recoveredSales?.source, metric: recoveredSales?.metric, date: recoveredSales?.dateField }, { source: "sales", metric: "sales.revenue", date: "sales.sold_on" });
+  const recoveredBookings = recoverAdvancedAnalyticalPlan("Report growth in total revenue from April 2026 through May 2026, based on booked_on.", mixedSchema);
+  assert.deepEqual({ source: recoveredBookings?.source, metric: recoveredBookings?.metric, date: recoveredBookings?.dateField }, { source: "bookings", metric: "bookings.revenue", date: "bookings.booked_on" });
 });
 
 test("aligns anti-joins to distinct directly related relations", () => {

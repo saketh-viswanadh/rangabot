@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 import { completeJsonWithOllama, completeTextWithOllama, streamChatWithOllama } from "@/lib/providers/ollama";
 import { ProviderError, type ChatMessage } from "@/lib/providers/types";
-import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatalogQuestion, isKnowledgeNewsQuestion, searchKnowledgeWithDiagnostics, shouldAutoSearchKnowledge, type KnowledgeResult, type KnowledgeSearchMode } from "@/lib/knowledge";
+import { buildKnowledgeCatalogAnswer, buildKnowledgeNewsAnswer, isKnowledgeCatalogQuestion, isKnowledgeNewsQuestion, searchKnowledgeWithDiagnostics, type KnowledgeResult, type KnowledgeSearchMode } from "@/lib/knowledge";
 import { generateGroundedTeacherAnswer } from "@/lib/knowledge-grounding";
 import { buildTeacherMessages, formatKnowledgeContext } from "@/lib/teacher-mode";
 import { isCodeContextRequest } from "@/lib/code-context";
-import { buildConversationSummaryFallback, buildWordConversationPrompt, buildWordDraftPrompt, buildWordSourceTranscript, createWordArtifact, isWordConversationSummaryRequest, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, removeWordArtifact, shouldPlanWordDocument, validateWordDraftForBrief, type WordDocumentBrief } from "@/lib/word-documents";
+import { buildConversationSummaryFallback, buildWordConversationPrompt, buildWordDraftPrompt, buildWordSourceTranscript, createWordArtifact, isWordConversationSummaryRequest, parseWordBriefFromPlan, parseWordDocumentPlan, parseWordDraft, removeWordArtifact, validateWordDraftForBrief, type WordDocumentBrief } from "@/lib/word-documents";
 import { findStoryPack } from "@/lib/story-packs";
 import { buildKnowledgeSearchQuery } from "@/lib/knowledge-query-planning";
 import { listMemories } from "@/lib/memories";
-import { buildConversationMessagesWithSelected, buildSemanticRepairMessages, selectConversationMemories } from "@/lib/conversation-orchestration";
-import { applySelectedMemoryToContract, chooseSemanticRepair, compileAnswerContract, enforceReasoningInvariants, needsBufferedConformance } from "@/lib/conversation-contract";
-import { dispatchCoreChat } from "@/lib/chat-core-dispatch";
+import { buildConversationMessagesWithSelected, selectConversationMemories } from "@/lib/conversation-orchestration";
+import { applySelectedMemoryToContract, compileAnswerContract, enforceReasoningInvariants } from "@/lib/conversation-contract";
+import { auditFinishedAnswer, buildFinishRepairMessages, chooseFinishedAnswer, deriveFinishVerificationPlan, finishVerificationReceipt } from "@/lib/finish-verification";
+import { CapabilityExecutionError, dispatchCoreChat } from "@/lib/chat-core-dispatch";
+import { capabilityReceipt, type CapabilityContext } from "@/lib/capability-router";
 import {
   CONVERSATION_TURN_PROTOCOL_VERSION,
   ConversationTurnError,
@@ -20,6 +22,7 @@ import {
   completeConversationTurn,
   failConversationTurn,
   isValidConversationTurnId,
+  type ConversationMode,
 } from "@/lib/conversation-turns";
 import { recordFailedTurnResponse, recordTurnException, responseFromCompletedAssistant, wrapSuccessfulTurnResponse, type TurnLifecycleCallbacks } from "@/lib/chat-turn-lifecycle";
 import { getConversationTurnTimeoutMs } from "@/lib/local-runtime-config";
@@ -69,30 +72,42 @@ type ChatGenerationInput = {
 };
 
 async function generateChatResponse(body: ChatGenerationInput, signal?: AbortSignal) {
-    if (body.mode === "codex") {
-      return NextResponse.json(
-        { error: "Codex handoff is not enabled yet. Nothing was sent to the cloud." },
-        { status: 501 },
-      );
-    }
     if (body.codeContext !== undefined && !isCodeContextRequest(body.codeContext)) {
       return NextResponse.json({ error: "The attached code reference is invalid." }, { status: 400 });
     }
     if (body.datasetId !== undefined && (typeof body.datasetId !== "string" || body.datasetId.length < 1 || body.datasetId.length > 120 || body.datasetId !== body.datasetId.trim())) return NextResponse.json({ error: "The attached dataset reference is invalid." }, { status: 400 });
     if (body.conversationId !== undefined && (typeof body.conversationId !== "string" || body.conversationId.length < 1 || body.conversationId.length > 120)) return NextResponse.json({ error: "The conversation reference is invalid." }, { status: 400 });
 
-    const core = await dispatchCoreChat({
-      messages: body.messages,
-      codeContext: body.codeContext,
-      datasetId: typeof body.datasetId === "string" ? body.datasetId : undefined,
-      conversationId: typeof body.conversationId === "string" ? body.conversationId : undefined,
-      signal,
-    });
-    if (core.response) return core.response;
+    const mode: ConversationMode = body.mode === "smart" || body.mode === "teach" || body.mode === "codex" ? body.mode : "local";
+    let core: Awaited<ReturnType<typeof dispatchCoreChat>>;
+    try {
+      core = await dispatchCoreChat({
+        messages: body.messages,
+        mode,
+        codeContext: body.codeContext,
+        datasetId: typeof body.datasetId === "string" ? body.datasetId : undefined,
+        conversationId: typeof body.conversationId === "string" ? body.conversationId : undefined,
+        signal,
+      });
+    } catch (error) {
+      if (!(error instanceof CapabilityExecutionError)) throw error;
+      const response = providerErrorResponse(error.originalError);
+      response.headers.set("X-Rangabot-Capability", encodeURIComponent(JSON.stringify(capabilityReceipt(error.capabilityPlan, error.usedContexts, error.attemptedContexts))));
+      return response;
+    }
+    const activeCapabilityPlan = core.capabilityPlan;
+    const usedCapabilityContexts = new Set<CapabilityContext>(core.usedContexts);
+    const attemptedCapabilityContexts = new Set<CapabilityContext>(core.attemptedContexts);
+    const withCapabilityReceipt = (response: Response) => {
+      response.headers.set("X-Rangabot-Capability", encodeURIComponent(JSON.stringify(capabilityReceipt(activeCapabilityPlan, [...usedCapabilityContexts], [...attemptedCapabilityContexts]))));
+      return response;
+    };
+    try {
+    if (core.response) return withCapabilityReceipt(core.response);
     const localCodeContext = core.localCodeContext;
     const latestQuestion = [...body.messages].reverse().find((message) => message.role === "user")?.content ?? "";
 
-    if (shouldPlanWordDocument(body.messages)) {
+    if (activeCapabilityPlan.route === "word-document") {
       const rawPlan = await completeJsonWithOllama([
         { role: "system", content: "You are Rangabot's local Word-document planner. Gather missing requirements conversationally, then produce faithful structured document content. Return valid JSON only." },
         { role: "user", content: `${buildWordConversationPrompt(body.messages)}${localCodeContext ? `\n\n${localCodeContext}` : ""}` },
@@ -127,41 +142,47 @@ async function generateChatResponse(body: ChatGenerationInput, signal?: AbortSig
         }
       }
       if (plan.action === "ask") {
-        return new Response(plan.question, {
+        return withCapabilityReceipt(new Response(plan.question, {
           headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff", "X-Rangabot-Artifact-Intent": "word" },
-        });
+        }));
       }
       const artifact = await createWordArtifact(plan.brief, plan.draft, { signal });
       const reference = { id: artifact.id, title: artifact.title, filename: artifact.filename, previewPages: artifact.previewPages };
-      return new Response(`I created **${artifact.title}** locally from our conversation. Review the rendered preview and source-grounding warning before using it.\n\n[Download the Word document](/api/artifacts/word/${artifact.id}/document)`, {
+      return withCapabilityReceipt(new Response(`I created **${artifact.title}** locally from our conversation. Review the rendered preview and source-grounding warning before using it.\n\n[Download the Word document](/api/artifacts/word/${artifact.id}/document)`, {
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
           "Cache-Control": "no-cache, no-transform",
           "X-Content-Type-Options": "nosniff",
           "X-Rangabot-Word-Artifact": encodeURIComponent(JSON.stringify(reference)),
         },
-      });
+      }));
     }
 
     let messages = body.messages;
     let knowledgeSources: KnowledgeResult[] = [];
     let knowledgeSearchMode: KnowledgeSearchMode | null = null;
     const question = latestQuestion;
-    const usesVault = body.mode === "teach" || (body.mode === "smart" && shouldAutoSearchKnowledge(question));
+    const usesVault = activeCapabilityPlan.route === "knowledge-vault";
     if (usesVault) {
+      attemptedCapabilityContexts.add("knowledge-vault");
       if (!localCodeContext && isKnowledgeCatalogQuestion(question)) {
-        return new Response(buildKnowledgeCatalogAnswer(), {
+        const answer = buildKnowledgeCatalogAnswer();
+        usedCapabilityContexts.add("knowledge-vault");
+        return withCapabilityReceipt(new Response(answer, {
           headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff", "X-Rangabot-Knowledge": "used" },
-        });
+        }));
       }
       if (!localCodeContext && isKnowledgeNewsQuestion(question)) {
-        return new Response(buildKnowledgeNewsAnswer(question), {
-          headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff", "X-Rangabot-Knowledge": "used" },
-        });
+        const brief = buildKnowledgeNewsAnswer(question);
+        if (brief.used) usedCapabilityContexts.add("knowledge-vault");
+        return withCapabilityReceipt(new Response(brief.answer, {
+          headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Content-Type-Options": "nosniff", ...(brief.used ? { "X-Rangabot-Knowledge": "used" } : {}) },
+        }));
       }
       const history = body.messages.slice(0, -1);
       const retrievalQuery = buildKnowledgeSearchQuery(question, history);
       const { results: sources, mode: retrievalMode } = await searchKnowledgeWithDiagnostics(retrievalQuery, 5, signal);
+      usedCapabilityContexts.add("knowledge-vault");
       knowledgeSources = sources;
       knowledgeSearchMode = retrievalMode;
       const teacherMode = body.mode === "teach";
@@ -179,9 +200,11 @@ async function generateChatResponse(body: ChatGenerationInput, signal?: AbortSig
         : message);
     }
 
-    const approvedMemories = listMemories();
+    if (core.approvedMemoryAllowed) attemptedCapabilityContexts.add("approved-memory");
+    const approvedMemories = core.approvedMemoryAllowed ? listMemories() : [];
     const selectedMemories = selectConversationMemories(approvedMemories, body.messages);
     const relevantMemory = selectedMemories.length > 0;
+    if (relevantMemory) usedCapabilityContexts.add("approved-memory");
     const memoryTitles = relevantMemory ? buildConversationMessagesWithSelected([], selectedMemories).memoryTitles : [];
     const memoryTitleHeader = relevantMemory ? encodeURIComponent(JSON.stringify(memoryTitles)) : undefined;
 
@@ -189,7 +212,7 @@ async function generateChatResponse(body: ChatGenerationInput, signal?: AbortSig
 
     if (body.mode === "teach" && usesVault) {
       const grounded = await generateGroundedTeacherAnswer(messages, knowledgeSources, (groundingMessages) => completeTextWithOllama(groundingMessages, { signal }));
-      return new Response(grounded.answer, {
+      return withCapabilityReceipt(new Response(grounded.answer, {
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
           "Cache-Control": "no-cache, no-transform",
@@ -201,7 +224,7 @@ async function generateChatResponse(body: ChatGenerationInput, signal?: AbortSig
           "X-Rangabot-Memory": relevantMemory ? "used" : "not-used",
           ...(memoryTitleHeader ? { "X-Rangabot-Memory-Titles": memoryTitleHeader } : {}),
         },
-      });
+      }));
     }
 
     const answerContract = applySelectedMemoryToContract(compileAnswerContract(body.messages), selectedMemories);
@@ -215,17 +238,34 @@ async function generateChatResponse(body: ChatGenerationInput, signal?: AbortSig
       "X-Rangabot-Memory": relevantMemory ? "used" : "not-used",
       ...(memoryTitleHeader ? { "X-Rangabot-Memory-Titles": memoryTitleHeader } : {}),
     };
-    if (needsBufferedConformance(answerContract)) {
-      let generated = await completeTextWithOllama(messages, { signal });
-      const repairMessages = buildSemanticRepairMessages(messages, generated, body.messages);
-      if (repairMessages) generated = chooseSemanticRepair(generated, await completeTextWithOllama(repairMessages, { signal }), answerContract);
-      const answer = enforceReasoningInvariants(generated, answerContract);
-      return new Response(answer, { headers: { ...responseHeaders, "X-Rangabot-Response": "contract-checked" } });
+    const finishPlan = deriveFinishVerificationPlan(answerContract);
+    if (finishPlan.shouldVerify) {
+      let generated = enforceReasoningInvariants(await completeTextWithOllama(messages, { signal }), answerContract);
+      let issues = auditFinishedAnswer(generated, finishPlan, answerContract);
+      let repaired = false;
+      const repairMessages = buildFinishRepairMessages(messages, generated, issues);
+      if (repairMessages) {
+        const repairCandidate = enforceReasoningInvariants(await completeTextWithOllama(repairMessages, { signal }), answerContract);
+        const selection = chooseFinishedAnswer(generated, repairCandidate, finishPlan, answerContract);
+        generated = selection.answer;
+        repaired = selection.repaired;
+        issues = selection.issues;
+      }
+      const answer = generated;
+      const receipt = finishVerificationReceipt(finishPlan, repaired, issues);
+      return withCapabilityReceipt(new Response(answer, { headers: {
+        ...responseHeaders,
+        "X-Rangabot-Response": "finish-checked",
+        "X-Rangabot-Finish": encodeURIComponent(JSON.stringify(receipt)),
+      } }));
     }
     const stream = await streamChatWithOllama(messages, { signal });
-    return new Response(stream, {
+    return withCapabilityReceipt(new Response(stream, {
       headers: responseHeaders,
-    });
+    }));
+    } catch (error) {
+      return withCapabilityReceipt(providerErrorResponse(error));
+    }
 }
 
 type VersionedChatBody = {

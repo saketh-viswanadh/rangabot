@@ -59,7 +59,19 @@ export type SqlExecutionResult = {
   receipt: SqlExecutionReceipt;
 };
 
-export type DatasetColumn = { table?: string; name: string; type: string };
+export type DatasetColumn = {
+  table?: string;
+  name: string;
+  type: string;
+  primaryKey?: boolean;
+  references?: Array<{ table: string; column: string }>;
+  semantic?: {
+    tableDescription?: string;
+    tableAliases?: string[];
+    description?: string;
+    aliases?: string[];
+  };
+};
 
 export type DatasetFileIdentity = {
   device: string;

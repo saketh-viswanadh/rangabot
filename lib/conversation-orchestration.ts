@@ -4,6 +4,7 @@ import { memoryTitle, selectRelevantMemoriesFrom } from "./memories.ts";
 import { answerUnavailableAction, compileAnswerContract, deterministicContractAnswer, formatAnswerContract } from "./conversation-contract.ts";
 import { semanticContractRepairs } from "./conversation-contract.ts";
 import { deriveSemanticTaskFrame, formatSemanticTaskFrame } from "./conversation-task-frame.ts";
+import { deriveFinishVerificationPlan, deterministicArithmeticAnswer } from "./finish-verification.ts";
 
 export const conversationSystemPrompt = `You are Rangabot, a capable local-first personal assistant.
 
@@ -44,7 +45,7 @@ export function answerUnavailableExternalAction(question: string): string | null
 
 export function answerDeterministicConversationRequest(messages: ChatMessage[]): string | null {
   const contract = compileAnswerContract(messages);
-  return answerUnavailableAction(contract.latestRequest)?.answer ?? deterministicContractAnswer(contract);
+  return deterministicContractAnswer(contract) ?? deterministicArithmeticAnswer(deriveFinishVerificationPlan(contract));
 }
 
 export function selectConversationMemories(memories: LocalMemory[], messages: ChatMessage[], limit = 6) {

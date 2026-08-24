@@ -82,6 +82,17 @@ export async function listMacProcessDescendants(rootPid: number) {
   return descendantProcessIds(rootPid, parseProcessTable(output));
 }
 
+export async function terminateWindowsProcessTree(rootPid: number, force: boolean) {
+  if (process.platform !== "win32") return;
+  await new Promise<void>((resolve) => {
+    execFile("taskkill.exe", ["/PID", String(rootPid), "/T", ...(force ? ["/F"] : [])], {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 5_000,
+    }, () => resolve());
+  });
+}
+
 function drain(stream: NodeJS.ReadableStream | null | undefined) {
   stream?.on("data", () => undefined);
 }
@@ -138,6 +149,8 @@ export type SupervisedDesktopServerInput = {
   spawnTimeoutMs?: number;
   gracefulTimeoutMs?: number;
   forceTimeoutMs?: number;
+  platform?: NodeJS.Platform;
+  terminateWindowsTree?: (rootPid: number, force: boolean) => Promise<void>;
 };
 
 function validUtilityProcessId(processId: number | undefined): processId is number {
@@ -205,6 +218,16 @@ export function startSupervisedDesktopServer(input: SupervisedDesktopServerInput
           if (!await waitForExit(exit, forceTimeoutMs)) {
             throw new Error("Rangabot's local server process did not terminate.");
           }
+        }
+        return;
+      }
+      if ((input.platform ?? process.platform) === "win32") {
+        const terminateTree = input.terminateWindowsTree ?? terminateWindowsProcessTree;
+        await terminateTree(rootPid, false);
+        if (await waitForExit(exit, gracefulTimeoutMs)) return;
+        await terminateTree(rootPid, true);
+        if (!await waitForExit(exit, forceTimeoutMs)) {
+          throw new Error("Rangabot's local server process tree did not terminate.");
         }
         return;
       }

@@ -69,6 +69,8 @@ function generationOptions(options: GenerationOptions | undefined, defaultNumPre
   return {
     num_predict: options?.numPredict ?? defaultNumPredict,
     num_ctx: options?.numContext ?? selectedChatContextTokens(),
+    ...(typeof options?.temperature === "number" && Number.isFinite(options.temperature) ? { temperature: options.temperature } : {}),
+    ...(typeof options?.seed === "number" && Number.isSafeInteger(options.seed) ? { seed: options.seed } : {}),
   };
 }
 

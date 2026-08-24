@@ -5,6 +5,12 @@ import type { DesktopArtifactVerification } from "../../lib/desktop-artifact-ide
 import { createDesktopLaunch, type DesktopVerificationLaunchPolicy } from "./launch-environment.ts";
 import { createSecondInstanceFocusCoordinator } from "./lifecycle.ts";
 import { reserveVerifiedLoopbackPort, waitForDesktopServer } from "./loopback.ts";
+import {
+  isMacAppStoreRuntime,
+  rememberMacSecurityScopedAccess,
+  restoreMacSecurityScopedAccess,
+  type MacSecurityScopedAccess,
+} from "./macos-security-scoped-access.ts";
 import { diagnoseLocalOllama } from "./ollama-diagnostic.ts";
 import { startManagedModelRuntime, type ManagedModelRuntime } from "./model-runtime.ts";
 import { startLeasedDesktopServer, type LeasedSupervisedDesktopServer } from "./process-supervisor.ts";
@@ -65,6 +71,7 @@ type RuntimeState = {
   window?: BrowserWindowType;
   server?: LeasedSupervisedDesktopServer;
   modelRuntime?: ManagedModelRuntime;
+  securityScopedAccess: MacSecurityScopedAccess[];
   stopping: boolean;
   stopPromise?: Promise<void>;
 };
@@ -111,6 +118,7 @@ function stopRuntime(state: RuntimeState) {
       state.server = undefined;
       await state.modelRuntime?.stop();
       state.modelRuntime = undefined;
+      for (const access of state.securityScopedAccess.splice(0).reverse()) access.stop();
     }
   })();
   return state.stopPromise;
@@ -133,7 +141,7 @@ export async function startDesktopRuntime(input: {
 } = {}) {
   emitStartupStage("R10_RESOURCES");
   const electronApp = input.electronApp ?? app;
-  const state: RuntimeState = { stopping: false };
+  const state: RuntimeState = { stopping: false, securityScopedAccess: [] };
   input.signal?.throwIfAborted();
   const verified = input.verifiedResources ?? verifyDesktopResourcesBeforeMutation({
     resourcesPath: input.resourcesPath ?? process.resourcesPath,
@@ -152,6 +160,10 @@ export async function startDesktopRuntime(input: {
     resources: verified.resources,
     userDataPath,
   });
+  const macAppStore = isMacAppStoreRuntime();
+  if (macAppStore) {
+    state.securityScopedAccess.push(restoreMacSecurityScopedAccess({ app: electronApp, userDataPath }));
+  }
   const artifact = verified.artifact;
   let modelBaseUrl: string | undefined;
   if (!input.verificationPolicy) {
@@ -159,7 +171,7 @@ export async function startDesktopRuntime(input: {
     state.modelRuntime = await startManagedModelRuntime({
       boundary,
       port: modelPort,
-      standardModelsRoot: join(electronApp.getPath("home"), ".ollama", "models"),
+      standardModelsRoot: macAppStore ? undefined : join(electronApp.getPath("home"), ".ollama", "models"),
     });
     modelBaseUrl = state.modelRuntime.baseUrl;
   }
@@ -206,7 +218,21 @@ export async function startDesktopRuntime(input: {
       ipcMain.handle(LOCAL_FILE_PICKER_CHANNEL, async (event, request: { kind?: unknown }) => {
         if (!state.window || state.window.isDestroyed() || event.sender !== state.window.webContents) throw new Error("The file picker request did not come from the active local RangaBot window.");
         if (!isLocalFilePickerKind(request?.kind)) throw new Error("The local file picker request is invalid.");
-        return pickLocalFilesWithDialog({ kind: request.kind, window: state.window, dialog });
+        const picked = await pickLocalFilesWithDialog({
+          kind: request.kind,
+          window: state.window,
+          dialog,
+          securityScopedBookmarks: macAppStore,
+        });
+        if (macAppStore && picked.status === "selected") {
+          state.securityScopedAccess.push(rememberMacSecurityScopedAccess({
+            app: electronApp,
+            userDataPath,
+            paths: picked.paths,
+            bookmarks: picked.bookmarks,
+          }));
+        }
+        return Object.freeze({ status: picked.status, paths: picked.paths });
       });
     }
     emitStartupStage("R90_WINDOW_LOAD");
@@ -274,6 +300,12 @@ try {
   initialProfile = prepareDesktopStartupProfileBeforeLock({
     electronApp: app,
     launchProfile,
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    windowsStore: Boolean((process as NodeJS.Process & { windowsStore?: boolean }).windowsStore),
+    macAppStore: isMacAppStoreRuntime(),
+    localAppDataPath: process.env.LOCALAPPDATA,
+    execPath: process.execPath,
   });
 } catch {
   emitStartupStage(startupPreludeStage, true);

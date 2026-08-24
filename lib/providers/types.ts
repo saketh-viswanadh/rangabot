@@ -16,6 +16,22 @@ export interface ChatMessage {
   memoryUse?: "context" | "direct";
   memoryTitles?: string[];
   answerDisposition?: "verified-fallback";
+  finishVerification?: {
+    version: "finish-v1";
+    status: "passed" | "repaired" | "warning";
+    checks: Array<"requirements" | "arithmetic" | "code-structure" | "preservation" | "completion">;
+    issueCount: number;
+    manualReview?: "ambiguous-sentence-boundary";
+  };
+  capabilityReceipt?: {
+    version: "capability-route-v1";
+    status: "selected" | "clarify" | "unavailable";
+    route: "safe-continuation" | "deterministic-answer" | "direct-memory" | "analytics" | "word-document" | "knowledge-vault" | "repository-context" | "conversation" | "clarification" | "unavailable";
+    contexts: Array<"dataset" | "repository" | "knowledge-vault" | "approved-memory">;
+    /** Resources supplied to a selected local capability even if it failed before completion. */
+    attemptedContexts?: Array<"dataset" | "repository" | "knowledge-vault" | "approved-memory">;
+    reasons: Array<"external-action-unavailable" | "deterministic-contract" | "explicit-memory-recall" | "attached-data-analysis" | "missing-required-dataset" | "explicit-word-artifact" | "explicit-vault-request" | "teacher-mode" | "smart-vault-match" | "attached-repository-context" | "ordinary-conversation" | "multiple-material-capabilities" | "cloud-handoff-disabled">;
+  };
   /** Exact, allowlisted expert-pack warning provenance for faithful replay. */
   packWarnings?: Array<"model-narration-unavailable" | "narration-grounding-rejected">;
   wordArtifact?: {
@@ -74,6 +90,8 @@ export interface GenerationOptions {
   modelId?: string;
   numPredict?: number;
   numContext?: number;
+  temperature?: number;
+  seed?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
   jsonSchema?: Record<string, unknown>;

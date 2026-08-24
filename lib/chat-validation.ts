@@ -4,8 +4,161 @@ import { expertPackWarningCodes, type ExpertPackWarningCode } from "./expert-pac
 export const MAX_CHAT_MESSAGES = 200;
 export const MAX_CHAT_MESSAGE_CHARS = 50_000;
 export const MAX_CHAT_TOTAL_CHARS = 1_000_000;
-const messageKeys = new Set(["role", "content", "artifactIntent", "wordArtifact", "analysisTrace", "codeContext", "replyTo", "retrievalMode", "memoryUse", "memoryTitles", "answerDisposition", "packWarnings", "knowledgeUsed"]);
+const messageKeys = new Set(["role", "content", "artifactIntent", "wordArtifact", "analysisTrace", "codeContext", "replyTo", "retrievalMode", "memoryUse", "memoryTitles", "answerDisposition", "packWarnings", "knowledgeUsed", "finishVerification", "capabilityReceipt"]);
 const analysisTraceKeys = new Set(["engine", "dataset", "query", "returnedRows", "truncated", "durationMs", "inputSha256", "querySha256", "packId", "packVersion", "modelMode", "modelId"]);
+const finishVerificationKeys = new Set(["version", "status", "checks", "issueCount", "manualReview"]);
+const finishVerificationChecks = new Set(["requirements", "arithmetic", "code-structure", "preservation", "completion"]);
+const finishVerificationCheckOrder = ["completion", "requirements", "arithmetic", "code-structure", "preservation"];
+const capabilityReceiptKeys = new Set(["version", "status", "route", "contexts", "attemptedContexts", "reasons"]);
+const capabilityRoutes = new Set(["safe-continuation", "deterministic-answer", "direct-memory", "analytics", "word-document", "knowledge-vault", "repository-context", "conversation", "clarification", "unavailable"]);
+const capabilityContexts = new Set(["dataset", "repository", "knowledge-vault", "approved-memory"]);
+const capabilityReasons = new Set(["external-action-unavailable", "deterministic-contract", "explicit-memory-recall", "attached-data-analysis", "missing-required-dataset", "explicit-word-artifact", "explicit-vault-request", "teacher-mode", "smart-vault-match", "attached-repository-context", "ordinary-conversation", "multiple-material-capabilities", "cloud-handoff-disabled"]);
+
+function sameValues(values: unknown[], expected: string[]) {
+  return values.length === expected.length && expected.every((value) => values.includes(value));
+}
+
+function sameSequence(values: unknown[], expected: string[]) {
+  return values.length === expected.length && values.every((value, index) => value === expected[index]);
+}
+
+function oneSequence(values: unknown[], expected: string[][]) {
+  return expected.some((sequence) => sameSequence(values, sequence));
+}
+
+function validCapabilitySemantics(receipt: Record<string, unknown>) {
+  const route = String(receipt.route);
+  const status = String(receipt.status);
+  const contexts = receipt.contexts as unknown[];
+  const attemptedContexts = (receipt.attemptedContexts ?? receipt.contexts) as unknown[];
+  const hasExplicitAttempts = Object.prototype.hasOwnProperty.call(receipt, "attemptedContexts");
+  const reasons = receipt.reasons as unknown[];
+  if (!contexts.every((context) => attemptedContexts.includes(context))) return false;
+  if (route === "safe-continuation") return status === "selected" && sameValues(contexts, []) && sameValues(attemptedContexts, []) && sameValues(reasons, ["external-action-unavailable"]);
+  if (route === "deterministic-answer") return status === "selected" && sameValues(contexts, []) && sameValues(attemptedContexts, []) && sameValues(reasons, ["deterministic-contract"]);
+  if (route === "direct-memory") return status === "selected"
+    && (sameValues(contexts, []) || sameValues(contexts, ["approved-memory"]))
+    && (hasExplicitAttempts ? sameValues(attemptedContexts, ["approved-memory"]) : sameValues(contexts, ["approved-memory"]))
+    && sameValues(reasons, ["explicit-memory-recall"]);
+  if (route === "analytics") return status === "selected"
+    && (sameValues(contexts, []) || sameValues(contexts, ["dataset"]))
+    && (hasExplicitAttempts ? sameValues(attemptedContexts, ["dataset"]) : sameValues(contexts, ["dataset"]))
+    && sameValues(reasons, ["attached-data-analysis"]);
+  if (route === "word-document") {
+    const hasRepositoryReason = reasons.includes("attached-repository-context");
+    if (status !== "selected" || !(sameValues(reasons, ["explicit-word-artifact"])
+      || sameValues(reasons, ["explicit-word-artifact", "attached-repository-context"]))) return false;
+    if (!hasRepositoryReason) return sameSequence(contexts, []) && sameSequence(attemptedContexts, []);
+    return oneSequence(contexts, [[], ["repository"]])
+      && (hasExplicitAttempts ? sameSequence(attemptedContexts, ["repository"]) : sameSequence(contexts, ["repository"]));
+  }
+  if (route === "knowledge-vault") {
+    const hasRepositoryReason = reasons.includes("attached-repository-context");
+    if (status !== "selected"
+      || !contexts.every((context) => ["knowledge-vault", "repository", "approved-memory"].includes(String(context)))
+      || !attemptedContexts.every((context) => ["knowledge-vault", "repository", "approved-memory"].includes(String(context)))
+      || reasons.filter((reason) => ["explicit-vault-request", "teacher-mode", "smart-vault-match"].includes(String(reason))).length !== 1
+      || !reasons.every((reason) => ["explicit-vault-request", "teacher-mode", "smart-vault-match", "attached-repository-context"].includes(String(reason)))) return false;
+    const attempts = hasRepositoryReason
+      ? [["repository"], ["repository", "knowledge-vault"], ["repository", "knowledge-vault", "approved-memory"]]
+      : [["knowledge-vault"], ["knowledge-vault", "approved-memory"]];
+    const completed = hasRepositoryReason
+      ? [[], ["repository"], ["repository", "knowledge-vault"], ["repository", "knowledge-vault", "approved-memory"]]
+      : [[], ["knowledge-vault"], ["knowledge-vault", "approved-memory"]];
+    if (!hasExplicitAttempts) return hasRepositoryReason
+      ? oneSequence(contexts, [["repository", "knowledge-vault"], ["repository", "knowledge-vault", "approved-memory"]])
+      : oneSequence(contexts, [["knowledge-vault"], ["knowledge-vault", "approved-memory"]]);
+    if (!oneSequence(attemptedContexts, attempts)) return false;
+    if (!oneSequence(contexts, completed)) return false;
+    if (hasRepositoryReason) {
+      if (sameSequence(attemptedContexts, ["repository"])) return sameSequence(contexts, []);
+      if (sameSequence(attemptedContexts, ["repository", "knowledge-vault"])) return oneSequence(contexts, [["repository"], ["repository", "knowledge-vault"]]);
+      return oneSequence(contexts, [["repository", "knowledge-vault"], ["repository", "knowledge-vault", "approved-memory"]]);
+    }
+    if (sameSequence(attemptedContexts, ["knowledge-vault"])) return oneSequence(contexts, [[], ["knowledge-vault"]]);
+    return oneSequence(contexts, [["knowledge-vault"], ["knowledge-vault", "approved-memory"]]);
+  }
+  if (route === "repository-context") {
+    if (status !== "selected" || !sameValues(reasons, ["attached-repository-context"])) return false;
+    if (!hasExplicitAttempts) return oneSequence(contexts, [["repository"], ["repository", "approved-memory"]]);
+    if (!oneSequence(attemptedContexts, [["repository"], ["repository", "approved-memory"]])) return false;
+    if (sameSequence(attemptedContexts, ["repository"])) return oneSequence(contexts, [[], ["repository"]]);
+    return oneSequence(contexts, [["repository"], ["repository", "approved-memory"]]);
+  }
+  if (route === "conversation") return status === "selected"
+    && contexts.every((context) => context === "approved-memory")
+    && attemptedContexts.every((context) => context === "approved-memory")
+    && sameValues(reasons, ["ordinary-conversation"]);
+  if (route === "clarification") return status === "clarify" && sameValues(contexts, []) && sameValues(attemptedContexts, [])
+    && (sameValues(reasons, ["multiple-material-capabilities"]) || sameValues(reasons, ["missing-required-dataset"]));
+  return route === "unavailable" && status === "unavailable" && sameValues(contexts, []) && sameValues(attemptedContexts, []) && sameValues(reasons, ["cloud-handoff-disabled"]);
+}
+
+export function isValidCapabilityReceipt(value: unknown): value is NonNullable<ChatMessage["capabilityReceipt"]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const receipt = value as Record<string, unknown>;
+  const status = String(receipt.status);
+  const route = String(receipt.route);
+  const attemptedContexts = receipt.attemptedContexts;
+  return (Object.keys(receipt).length === 5 || Object.keys(receipt).length === 6)
+    && Object.keys(receipt).every((key) => capabilityReceiptKeys.has(key))
+    && receipt.version === "capability-route-v1"
+    && ["selected", "clarify", "unavailable"].includes(status)
+    && capabilityRoutes.has(route)
+    && (status === "selected" ? route !== "clarification" && route !== "unavailable" : status === "clarify" ? route === "clarification" : route === "unavailable")
+    && Array.isArray(receipt.contexts) && receipt.contexts.length <= 4
+    && new Set(receipt.contexts).size === receipt.contexts.length
+    && receipt.contexts.every((context) => capabilityContexts.has(String(context)))
+    && (attemptedContexts === undefined || Array.isArray(attemptedContexts) && attemptedContexts.length <= 4
+      && new Set(attemptedContexts).size === attemptedContexts.length
+      && attemptedContexts.every((context) => capabilityContexts.has(String(context))))
+    && Array.isArray(receipt.reasons) && receipt.reasons.length >= 1 && receipt.reasons.length <= 3
+    && new Set(receipt.reasons).size === receipt.reasons.length
+    && receipt.reasons.every((reason) => capabilityReasons.has(String(reason)))
+    && validCapabilitySemantics(receipt);
+}
+
+export function parseCapabilityReceiptHeader(value: string | null) {
+  if (!value || value.length > 2_000) return null;
+  try {
+    const parsed: unknown = JSON.parse(decodeURIComponent(value));
+    return isValidCapabilityReceipt(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isValidFinishVerification(value: unknown): value is NonNullable<ChatMessage["finishVerification"]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const receipt = value as Record<string, unknown>;
+  const checks = receipt.checks;
+  return (Object.keys(receipt).length === 4 || Object.keys(receipt).length === 5)
+    && Object.keys(receipt).every((key) => finishVerificationKeys.has(key))
+    && receipt.version === "finish-v1"
+    && ["passed", "repaired", "warning"].includes(String(receipt.status))
+    && Array.isArray(checks) && checks.length >= 1 && checks.length <= 5
+    && new Set(checks).size === checks.length
+    && checks.every((check) => finishVerificationChecks.has(String(check)))
+    && checks.every((check, index) => String(check) === finishVerificationCheckOrder.filter((candidate) => checks.includes(candidate))[index])
+    && checks[0] === "completion"
+    && typeof receipt.issueCount === "number" && Number.isInteger(receipt.issueCount)
+    && receipt.issueCount >= 0 && receipt.issueCount <= 20
+    && (receipt.status === "warning" ? receipt.issueCount > 0 : receipt.issueCount === 0)
+    && (receipt.manualReview === undefined
+      || receipt.manualReview === "ambiguous-sentence-boundary"
+        && receipt.status === "warning"
+        && checks.includes("requirements"));
+}
+
+export function parseFinishVerificationHeader(value: string | null) {
+  if (!value || value.length > 1_000) return null;
+  try {
+    const parsed: unknown = JSON.parse(decodeURIComponent(value));
+    return isValidFinishVerification(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 export function isValidAnalysisTrace(value: unknown): value is NonNullable<ChatMessage["analysisTrace"]> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -54,6 +207,8 @@ export function parsePackWarningCodesHeader(value: string | null): NonNullable<C
 function validOptionalMetadata(message: Record<string, unknown>) {
   if (!Object.keys(message).every((key) => messageKeys.has(key))) return false;
   if (message.knowledgeUsed !== undefined && (message.knowledgeUsed !== true || message.role !== "assistant")) return false;
+  if (message.finishVerification !== undefined && (message.role !== "assistant" || !isValidFinishVerification(message.finishVerification))) return false;
+  if (message.capabilityReceipt !== undefined && (message.role !== "assistant" || !isValidCapabilityReceipt(message.capabilityReceipt))) return false;
   if (message.artifactIntent !== undefined && message.artifactIntent !== "word") return false;
   if (message.retrievalMode !== undefined && !["hybrid", "keyword-only"].includes(String(message.retrievalMode))) return false;
   if (message.memoryUse !== undefined && !["context", "direct"].includes(String(message.memoryUse))) return false;

@@ -71,7 +71,7 @@ test("binds browser and native packaging metadata to the primary mark", () => {
   assert.match(layout, /icons:\s*\{/);
   assert.match(layout, /rangabot-primary-64\.png/);
   assert.match(layout, /rangabot-primary-192\.png/);
-  assert.match(forge, /icon:\s*path\.resolve\(__dirname, "desktop", "assets", "rangabot\.icns"\)/);
+  assert.match(forge, /icon:\s*path\.resolve\(__dirname, "desktop", "assets", targetPlatform === "darwin" \? "rangabot\.icns" : "rangabot\.ico"\)/);
   for (const asset of [
     "rangabot-primary-64.png",
     "rangabot-primary-192.png",
