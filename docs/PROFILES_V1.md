@@ -268,7 +268,7 @@ candidate, timestamp-sized Mach-O seal binding, schema-grounded SQL planning,
 cross-platform Mac security test correction, profile-local dataset semantic
 context with verified-usage retrieval, and governed capability routing with
 truthful resource receipts and bounded mechanical Finish & Verify at commit
-`e1cc7a47ecbb810aa2d7b9347dd1767fc05b5988`.
+`cea0fe344934a218f44e4f31ee00783271eb0771`.
 The generated v3 manifest records
 the exact clean packaging HEAD as `sourceCommit`; the installed verifier uses
 that value as its commit identity and does not require `.git`.
