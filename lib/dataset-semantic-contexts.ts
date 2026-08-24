@@ -14,6 +14,7 @@ export type DatasetSemanticMemory = Readonly<{
   version: 1;
   datasetId: string;
   datasetSha256: string;
+  revision: number;
   status: "skipped" | "complete";
   updatedAt: string;
   context: AnalyticalSemanticContext;
@@ -21,6 +22,7 @@ export type DatasetSemanticMemory = Readonly<{
 }>;
 
 type Registry = Readonly<{ version: 1; memories: readonly DatasetSemanticMemory[] }>;
+type StoredDatasetSemanticMemory = Omit<DatasetSemanticMemory, "revision"> & { revision?: number };
 let registryPathOverride: string | undefined;
 function registryPath() { return registryPathOverride ?? runtimePaths.datasetSemanticContexts; }
 const emptyUsage = (): SemanticUsage => ({ tables: {}, columns: {} });
@@ -50,11 +52,12 @@ function validUsage(value: unknown): value is SemanticUsage {
     && Object.entries(group as Record<string, unknown>).every(([key, item]) => key.length > 0 && key.length <= 601 && validUsageEntry(item)));
 }
 
-function validMemory(value: unknown): value is DatasetSemanticMemory {
+function validMemory(value: unknown): value is StoredDatasetSemanticMemory {
   if (!value || typeof value !== "object") return false;
   const memory = value as Record<string, unknown>;
   return memory.version === 1 && typeof memory.datasetId === "string" && memory.datasetId.length > 0 && memory.datasetId.length <= 200
     && typeof memory.datasetSha256 === "string" && /^[a-f0-9]{64}$/.test(memory.datasetSha256)
+    && (memory.revision === undefined || Number.isSafeInteger(memory.revision) && Number(memory.revision) >= 1)
     && (memory.status === "skipped" || memory.status === "complete")
     && typeof memory.updatedAt === "string" && !Number.isNaN(Date.parse(memory.updatedAt))
     && Boolean(memory.context && typeof memory.context === "object" && (memory.context as Record<string, unknown>).version === 1)
@@ -67,11 +70,17 @@ function readRegistry(): Registry {
   let parsed: unknown;
   try { parsed = JSON.parse(readText(path)); }
   catch (error) { if (error instanceof Error && /damaged/.test(error.message)) throw error; throw new Error("The local dataset context store is damaged."); }
-  if (!parsed || typeof parsed !== "object" || (parsed as Registry).version !== 1 || !Array.isArray((parsed as Registry).memories)
-    || !(parsed as Registry).memories.every(validMemory)) throw new Error("The local dataset context store is damaged.");
-  const ids = new Set((parsed as Registry).memories.map((item) => item.datasetId));
-  if (ids.size !== (parsed as Registry).memories.length) throw new Error("The local dataset context store is damaged.");
-  return parsed as Registry;
+  const stored = parsed as { version?: unknown; memories?: unknown };
+  if (!parsed || typeof parsed !== "object" || stored.version !== 1 || !Array.isArray(stored.memories)
+    || !stored.memories.every(validMemory)) throw new Error("The local dataset context store is damaged.");
+  const ids = new Set(stored.memories.map((item) => item.datasetId));
+  if (ids.size !== stored.memories.length) throw new Error("The local dataset context store is damaged.");
+  return {
+    version: 1,
+    // Pre-revision semantic memories represent one already-durable context
+    // write. Normalize them to revision 1 without weakening the stored data.
+    memories: stored.memories.map((memory) => ({ ...memory, revision: memory.revision ?? 1 })),
+  };
 }
 
 function writeRegistry(memories: readonly DatasetSemanticMemory[]) {
@@ -88,18 +97,58 @@ export function getDatasetSemanticMemory(dataset: ApprovedDataset): DatasetSeman
   return memory?.datasetSha256 === dataset.fileIdentity.sha256 ? memory : null;
 }
 
+export class DatasetSemanticMemoryConflictError extends Error {
+  readonly currentRevision: number;
+  constructor(currentRevision: number) {
+    super("Dataset context changed in another local window. Reload it before saving.");
+    this.name = "DatasetSemanticMemoryConflictError";
+    this.currentRevision = currentRevision;
+  }
+}
+
+export class DatasetSemanticMemoryDatasetChangedError extends Error {
+  constructor() {
+    super("The approved dataset changed or was revoked while its context was being saved. Reload the dataset before trying again.");
+    this.name = "DatasetSemanticMemoryDatasetChangedError";
+  }
+}
+
+function sameApprovedDataset(left: ApprovedDataset | null, right: ApprovedDataset) {
+  return Boolean(left && left.id === right.id && left.name === right.name && left.path === right.path
+    && left.format === right.format && left.sizeBytes === right.sizeBytes && left.addedAt === right.addedAt
+    && left.approvalVersion === right.approvalVersion
+    && left.fileIdentity.device === right.fileIdentity.device
+    && left.fileIdentity.inode === right.fileIdentity.inode
+    && left.fileIdentity.sizeBytes === right.fileIdentity.sizeBytes
+    && left.fileIdentity.modifiedNs === right.fileIdentity.modifiedNs
+    && left.fileIdentity.changedNs === right.fileIdentity.changedNs
+    && left.fileIdentity.sha256 === right.fileIdentity.sha256);
+}
+
 export function saveDatasetSemanticMemory(input: {
   dataset: ApprovedDataset;
   columns: readonly DatasetColumn[];
   status: "skipped" | "complete";
   context?: AnalyticalSemanticContext;
+  expectedRevision: number;
+  /** Re-read the approval inside the synchronous read/compare/write boundary. */
+  currentDataset?: () => ApprovedDataset | null;
 }): DatasetSemanticMemory {
+  if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) {
+    throw new Error("A valid dataset context revision is required.");
+  }
   const context = withoutQueryEvidence(input.context ?? { version: 1 });
   applyAnalyticalSemanticContext(input.columns, context);
   const registry = readRegistry();
   const previous = registry.memories.find((item) => item.datasetId === input.dataset.id && item.datasetSha256 === input.dataset.fileIdentity.sha256);
+  const currentRevision = previous?.revision ?? 0;
+  if (currentRevision !== input.expectedRevision) throw new DatasetSemanticMemoryConflictError(currentRevision);
+  if (input.currentDataset && !sameApprovedDataset(input.currentDataset(), input.dataset)) {
+    throw new DatasetSemanticMemoryDatasetChangedError();
+  }
   const memory: DatasetSemanticMemory = {
     version: 1, datasetId: input.dataset.id, datasetSha256: input.dataset.fileIdentity.sha256,
+    revision: currentRevision + 1,
     status: input.status, updatedAt: new Date().toISOString(), context, usage: previous?.usage ?? emptyUsage(),
   };
   writeRegistry([...registry.memories.filter((item) => item.datasetId !== input.dataset.id), memory]);

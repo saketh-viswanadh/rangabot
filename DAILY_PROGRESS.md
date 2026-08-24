@@ -1,5 +1,27 @@
 # Daily progress
 
+## 2026-08-24 — Goal-preserving recovery and local-context integrity
+
+- Added a manual failed-turn recovery card that reconstructs the stored request,
+  mode, and reply receipt without reusing failed partial output or automatically
+  running the model. Project, conversation-history, dataset, and code bindings
+  are revalidated before the restored draft can be sent; changed or missing
+  resources fail closed.
+- Added canonical conversation-binding receipts and transactional compare-and-
+  swap guards for project and dataset mutations. Dataset revocation, semantic-
+  context revision conflicts, ambiguous start/Stop outcomes, concurrent local
+  windows, and stale SQL preview/result responses now reconcile against
+  authoritative state instead of silently adopting a different local resource.
+- Restored the transparent canonical assistant mark in chat, removing the
+  inherited accent-colored square while retaining the reviewed light and dark
+  vector assets and compact responsive sizing.
+- Independent source-level acceptance passed 24/24 recovery cases, and a fresh
+  differential binding harness moved from 0/5 protected cases on the merged
+  base to 5/5 on this candidate. The deterministic repository suite passed
+  948 tests with zero failures and one expected Windows-only skip. These results
+  are source evidence only; they are not a signed package, TestFlight, Store,
+  clean-install, or public-release claim.
+
 ## 2026-08-12 — Integrated local model runtime
 
 - Embedded the checksum-pinned Ollama 0.32.9 macOS runtime in the generated

@@ -9,6 +9,11 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Added
 
+- Added goal-preserving failed-turn recovery. A visible, user-triggered recovery
+  card can restore the exact stored request, response mode, and reply receipt
+  only after RangaBot revalidates the conversation, project, dataset, and code
+  bindings. Failed partial output is excluded, changed resources fail closed,
+  and nothing is sent or rerun automatically.
 - Added a Mac-first integrated Model Manager. The desktop app now starts and
   supervises its own pinned local Ollama runtime, keeps model files inside
   RangaBot's private data root, discovers installed models, persists explicit
@@ -125,6 +130,12 @@ notes and `ROADMAP.md` separates approved, proposed, and decision-dependent work
 
 ### Improved
 
+- Restored the canonical transparent assistant mark in chat instead of placing
+  it on an inherited accent-colored square across appearance palettes.
+- Hardened conversation and local-data state across Stop, recovery, revocation,
+  and concurrent windows. Canonical binding receipts, guarded project/dataset
+  mutations, semantic-context revisions, and identity-checked SQL results now
+  prevent stale UI state from silently selecting a different local resource.
 - Replaced browser-authored chat persistence with Core Turn Lifecycle v2. Each
   request receives one request-bound UUID and server-owned context snapshot;
   ambiguous starts replay idempotently, only clean completion atomically appends

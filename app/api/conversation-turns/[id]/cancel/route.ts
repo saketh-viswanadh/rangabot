@@ -14,17 +14,19 @@ export async function POST(request: Request, context: RouteContext) {
   try { profileBindingFromRequest(request); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "The active profile could not be verified.", code: "stale-profile" }, { status: error instanceof StaleProfileRequestError ? 409 : 500 }); }
   if (!Object.keys(body).every((key) => key === "conversationId")
-    || !isValidConversationTurnId(id) || typeof body.conversationId !== "string" || !body.conversationId || body.conversationId.length > 120) {
+    || !isValidConversationTurnId(id)
+    || (body.conversationId !== undefined
+      && (typeof body.conversationId !== "string" || !body.conversationId || body.conversationId.length > 120))) {
     return NextResponse.json({ error: "A valid conversation turn is required." }, { status: 400 });
   }
   const turn = getConversationTurn(id);
-  if (!turn || turn.conversationId !== body.conversationId) {
+  if (!turn || (body.conversationId !== undefined && turn.conversationId !== body.conversationId)) {
     return NextResponse.json({ error: "Conversation turn not found." }, { status: 404 });
   }
   try {
     const terminal = cancelConversationTurn(id);
     abortActiveConversationTurn(id, new DOMException("Generation was stopped.", "AbortError"));
-    return NextResponse.json({ turn: { id: terminal.id, status: terminal.status } });
+    return NextResponse.json({ conversationId: turn.conversationId, turn: { id: terminal.id, status: terminal.status } });
   } catch {
     abortActiveConversationTurn(id, new DOMException("Generation was stopped.", "AbortError"));
     return NextResponse.json({ error: "The local turn could not be stopped safely.", code: "internal" }, { status: 500 });

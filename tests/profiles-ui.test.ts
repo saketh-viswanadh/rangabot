@@ -111,7 +111,7 @@ test("keeps the active profile visible and blocks chat admission during switchin
   assert.match(manager, /view\.profileTransferAllowed/);
   assert.match(manager, /Backup and restore file access is disabled in this sealed verification build/);
   assert.match(page, /disabled=\{profileWorkspaceBlocked\}/);
-  assert.match(page, /conversationLoading \|\| profileWorkspaceBlocked/);
+  assert.match(page, /conversationLoading \|\|[\s\S]{0,220}profileWorkspaceBlocked/);
   assert.match(page, /profileWorkspaceBlocked = profileSwitching \|\| profileRecoveryRequired/);
   assert.match(page, /Normal workspace access is paused/);
   assert.match(page, /onRecoveryRequiredChange=\{setProfileRecoveryRequired\}/);

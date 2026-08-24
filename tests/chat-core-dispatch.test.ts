@@ -97,6 +97,22 @@ test("revoked code is validated for a code request before model work", async () 
   assert.deepEqual(result.attemptedContexts, ["repository"]);
 });
 
+test("changed code bytes fail before the excerpt is formatted or used", async () => {
+  const fixture = dependencies({
+    analysisIntent: () => ({ requested: false, requiresDataset: false, explicitlyDeclined: false }),
+    repositoryPreference: () => "use",
+  });
+  const result = await dispatchCoreChat({
+    messages: [{ role: "user", content: "Explain this code" }],
+    codeContext: { repositoryId: "repo-a", path: "src/index.ts", line: 1, previewSha256: "0".repeat(64) },
+  }, fixture.value);
+  assert.equal(result.response?.status, 409);
+  assert.match(await result.response?.text() ?? "", /code excerpt changed/i);
+  assert.deepEqual(fixture.calls, ["repository", "preview"]);
+  assert.deepEqual(result.usedContexts, []);
+  assert.deepEqual(result.attemptedContexts, ["repository"]);
+});
+
 test("Analytics ignores an incidental code attachment and records only used data", async () => {
   const fixture = dependencies();
   const result = await dispatchCoreChat({ messages, codeContext: { repositoryId: "repo-a", path: "src/index.ts", line: 1 }, datasetId: "dataset-a" }, fixture.value);

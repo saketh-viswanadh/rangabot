@@ -32,12 +32,15 @@ import { ResponseFeedback } from "@/app/components/response-feedback";
 import { ModelManager } from "@/app/components/model-manager";
 import { ProfileManager } from "@/app/components/profile-manager";
 import { FirstRunSetup } from "@/app/components/first-run-setup";
+import { TurnRecoveryCard } from "@/app/components/turn-recovery-card";
 import type { ResponseFeedbackRating, ResponseFeedbackView } from "@/lib/response-feedback-contract";
 import type { DesktopPreferences } from "@/lib/desktop-preferences";
 import type { OnboardingState } from "@/lib/onboarding-contract";
 import { mergeResponseFeedbackRead, responseFeedbackBindingMatches } from "@/lib/response-feedback-client-state";
 import type { AttachedDataset, SqlDraft } from "@/lib/sql-display";
 import { parseAnalysisTraceHeader, parseCapabilityReceiptHeader, parseFinishVerificationHeader, parsePackWarningCodesHeader } from "@/lib/chat-validation";
+import { parseTurnRecoveryDraft, shouldRetainRecoveryBindingAfterStartFailure, turnRecoveryPlan, verifyTurnRecoveryDraftHash, type TurnRecoveryAction } from "@/lib/turn-recovery";
+import type { ConversationContextBinding, RecoveryTurnBinding } from "@/lib/conversation-turns";
 import {
   knowledgeImportFailureMessage as formatKnowledgeImportFailureMessage,
   knowledgeImportMessage as formatKnowledgeImportMessage,
@@ -83,21 +86,28 @@ type ConversationSummary = {
 type ProjectSummary = { id: string; name: string; createdAt: string; updatedAt: string };
 type AllowedRepository = { id: string; name: string; path: string; addedAt: string };
 type CodeSearchResult = { path: string; line: number; excerpt: string };
-type CodePreview = { path: string; startLine: number; focusLine: number; lines: string[] };
-type AttachedCodeContext = { repositoryId: string; repositoryName: string; path: string; line: number; startLine: number; endLine: number; characterCount: number };
+type CodePreview = { path: string; startLine: number; focusLine: number; lines: string[]; sha256: string };
+type AttachedCodeContext = { repositoryId: string; repositoryName: string; path: string; line: number; startLine: number; endLine: number; characterCount: number; previewSha256: string };
 type KnowledgeSourceState = { name: string; status: "indexed" | "pending" | "incompatible"; detail: string; chunks: number };
 type KnowledgeStatus = { usedBytes: number; budgetBytes: number; documents: number; chunks: number; incompatible: number; pending: number; sources: KnowledgeSourceState[] };
 type DesktopFilePickerBridge = { pickLocalFiles(kind: "knowledge" | "dataset"): Promise<{ status: "selected" | "cancelled"; paths: string[] }> };
 type KnowledgeUpdates = { week: string; month: string; changelog: string; weekUpdatedAt: string | null };
 type KnowledgeTab = "discover" | "vault" | "updates";
 type ActiveConversationTurn = { conversationId: string; turnId: string };
-type TurnStartResult = { ok: boolean; conversationId?: string; error?: string; code?: string };
+type TurnStartResult = { ok: boolean; conversationId?: string; conversationBinding?: ConversationContextBinding; turnStatus?: ConversationTurnStatus; error?: string; code?: string };
+type TurnCancellationStatus = Extract<ConversationTurnStatus, "completed" | "cancelled" | "failed">;
 type LegacyPreferencesPreview = Pick<DesktopPreferences, "preferredName" | "welcomeMode" | "appearance" | "palette">;
 const BOOK_WELCOME_HISTORY_STORAGE_KEY = "rangabot-book-welcome-history-v1";
 const TURN_CANCELLATION_TIMEOUT_MS = 2_500;
 const ADOPTED_TURN_POLL_INTERVAL_MS = 2_000;
 const ADOPTED_TURN_POLL_ATTEMPTS = 480;
 const PUBLIC_DEMO_MODES = new Set(["knowledge", "welcome"]);
+
+function enqueueSerialMutation<T>(tail: { current: Promise<void> }, mutation: () => Promise<T>): Promise<T> {
+  const pending = tail.current.then(mutation, mutation);
+  tail.current = pending.then(() => undefined, () => undefined);
+  return pending;
+}
 
 const finishCheckLabels: Record<NonNullable<ChatMessage["finishVerification"]>["checks"][number], string> = {
   requirements: "requirements",
@@ -190,7 +200,7 @@ function responseFeedbackMap(value: unknown) {
   return feedback;
 }
 
-async function requestTurnCancellation(turn: ActiveConversationTurn, keepalive = false) {
+async function requestTurnCancellation(turn: ActiveConversationTurn, keepalive = false): Promise<TurnCancellationStatus | null> {
   const timeout = new AbortController();
   const timer = window.setTimeout(() => timeout.abort(), TURN_CANCELLATION_TIMEOUT_MS);
   try {
@@ -201,11 +211,33 @@ async function requestTurnCancellation(turn: ActiveConversationTurn, keepalive =
       keepalive,
       signal: timeout.signal,
     });
-    return response.ok;
+    const value = await response.json().catch(() => null) as {
+      conversationId?: unknown;
+      turn?: { id?: unknown; status?: unknown };
+    } | null;
+    const status = value?.turn?.status;
+    if (!response.ok || value?.conversationId !== turn.conversationId || value?.turn?.id !== turn.turnId
+      || (status !== "completed" && status !== "cancelled" && status !== "failed")) return null;
+    return status;
   } catch {
     // The server-side stream lifecycle also records cancellation when the
     // connection closes. This explicit request covers pre-stream abandons.
-    return false;
+    return null;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function replayAmbiguousTurnStart(payload: string, expectedTurnId: string): Promise<TurnStartResult | null> {
+  const timeout = new AbortController();
+  const timer = window.setTimeout(() => timeout.abort(), TURN_CANCELLATION_TIMEOUT_MS);
+  try {
+    // A cancel 404 can race a committed start whose response was interrupted.
+    // Replay the exact idempotent request to recover its authoritative receipt.
+    const result = await startConversationTurn(payload, expectedTurnId, timeout.signal);
+    return result.ok && result.conversationId && result.conversationBinding ? result : null;
+  } catch {
+    return null;
   } finally {
     window.clearTimeout(timer);
   }
@@ -219,15 +251,35 @@ function parseTurnStartResult(value: unknown, response: Response, expectedTurnId
   const conversationId = typeof record.conversationId === "string" && record.conversationId ? record.conversationId : undefined;
   const error = typeof record.error === "string" && record.error ? record.error : undefined;
   const code = typeof record.code === "string" && record.code ? record.code : undefined;
+  const conversationBinding = parseConversationContextBinding(record.conversationBinding);
   const turn = record.turn && typeof record.turn === "object" && !Array.isArray(record.turn)
     ? record.turn as Record<string, unknown>
     : undefined;
   const validTurnStatus = turn?.status === "pending" || turn?.status === "completed"
     || turn?.status === "cancelled" || turn?.status === "failed";
-  if (response.ok && (!conversationId || turn?.id !== expectedTurnId || !validTurnStatus)) {
+  if (response.ok && (!conversationId || !conversationBinding || turn?.id !== expectedTurnId || !validTurnStatus)) {
     throw new Error("The local turn returned an incomplete start receipt.");
   }
-  return { ok: response.ok, ...(conversationId ? { conversationId } : {}), ...(error ? { error } : {}), ...(code ? { code } : {}) };
+  return {
+    ok: response.ok,
+    ...(conversationId ? { conversationId } : {}),
+    ...(conversationBinding ? { conversationBinding } : {}),
+    ...(validTurnStatus ? { turnStatus: turn.status as ConversationTurnStatus } : {}),
+    ...(error ? { error } : {}),
+    ...(code ? { code } : {}),
+  };
+}
+
+function parseConversationContextBinding(value: unknown): ConversationContextBinding | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const binding = value as Record<string, unknown>;
+  if (Object.keys(binding).length !== 4
+    || !Object.keys(binding).every((key) => ["projectId", "datasetId", "datasetSha256", "contextMessageCount"].includes(key))
+    || binding.projectId !== null && (typeof binding.projectId !== "string" || !binding.projectId || binding.projectId.length > 120)
+    || binding.datasetId !== null && (typeof binding.datasetId !== "string" || !binding.datasetId || binding.datasetId.length > 120)
+    || !Number.isSafeInteger(binding.contextMessageCount) || Number(binding.contextMessageCount) < 0
+    || (binding.datasetId === null ? binding.datasetSha256 !== null : typeof binding.datasetSha256 !== "string" || !/^[a-f0-9]{64}$/.test(binding.datasetSha256))) return null;
+  return binding as ConversationContextBinding;
 }
 
 async function startConversationTurn(payload: string, expectedTurnId: string, signal: AbortSignal): Promise<TurnStartResult> {
@@ -323,6 +375,9 @@ export default function Home() {
   const [sending, setSending] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [adoptedPendingTurn, setAdoptedPendingTurn] = useState<ActiveConversationTurn | null>(null);
+  const [turnRecoveryPreparing, setTurnRecoveryPreparing] = useState<string | null>(null);
+  const [turnRecoveryStatus, setTurnRecoveryStatus] = useState<Record<string, string>>({});
+  const [recoveredTurnBinding, setRecoveredTurnBinding] = useState<RecoveryTurnBinding | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationSearch, setConversationSearch] = useState("");
   const [conversationTransferMessage, setConversationTransferMessage] = useState("");
@@ -354,14 +409,32 @@ export default function Home() {
   const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
   const [sqlPanelOpen, setSqlPanelOpen] = useState(false);
   const [attachedDataset, setAttachedDataset] = useState<AttachedDataset | null>(null);
+  const attachedDatasetRef = useRef<AttachedDataset | null>(null);
+  const [datasetBindingChanging, setDatasetBindingChanging] = useState(false);
+  const [conversationBindingUncertain, setConversationBindingUncertain] = useState(false);
+  const [projectBindingChanging, setProjectBindingChanging] = useState(false);
+  const [turnStartUncertain, setTurnStartUncertain] = useState(false);
   const [sqlDraft, setSqlDraft] = useState<SqlDraft | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const activeConversationIdRef = useRef<string | null>(null);
+  const activeProjectIdRef = useRef<string | null>(null);
+  const activeConversationBindingRef = useRef<ConversationContextBinding | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const activeTurnRef = useRef<ActiveConversationTurn | null>(null);
   const sendingRef = useRef(false);
   const conversationLoadingRef = useRef(false);
   const conversationOpenEpochRef = useRef(0);
+  const composerMutationRef = useRef(0);
+  const conversationMutationTailRef = useRef<Promise<void>>(Promise.resolve());
+  const datasetBindingPendingRef = useRef(0);
+  const conversationBindingUncertainRef = useRef(false);
+  const projectBindingPendingRef = useRef(0);
+  const turnStartUncertainRef = useRef(false);
+  const turnRecoveryOperationRef = useRef(0);
+  const turnRecoveryInFlightRef = useRef(false);
+  const turnRecoveryAbortRef = useRef<AbortController | null>(null);
+  const turnRecoveryTurnRef = useRef<string | null>(null);
   const responseFeedbackConversationRef = useRef<string | null>(null);
   const responseFeedbackGenerationRef = useRef(0);
   const responseFeedbackOperationRef = useRef(0);
@@ -376,11 +449,35 @@ export default function Home() {
   const mobileNavigationRef = useRef<HTMLButtonElement>(null);
   const toolsTriggerRef = useRef<HTMLButtonElement>(null);
   const toolsPopoverRef = useRef<HTMLDivElement>(null);
+
+  const updateAttachedDataset = useCallback((dataset: AttachedDataset | null) => {
+    attachedDatasetRef.current = dataset;
+    setAttachedDataset(dataset);
+  }, []);
   const preferencesTriggerRef = useRef<HTMLButtonElement>(null);
   const setupReturnFocusRef = useRef<HTMLElement | null>(null);
   const bookWelcomeRequestRef = useRef<AbortController | null>(null);
   const wordPreviewCloseRef = useRef<HTMLButtonElement>(null);
   const wordPreviewReturnFocusRef = useRef<HTMLElement | null>(null);
+  function cancelTurnRecoveryPreparation() {
+    if (!turnRecoveryInFlightRef.current) return;
+    const cancelledTurnId = turnRecoveryTurnRef.current;
+    turnRecoveryOperationRef.current += 1;
+    turnRecoveryAbortRef.current?.abort();
+    turnRecoveryAbortRef.current = null;
+    turnRecoveryTurnRef.current = null;
+    turnRecoveryInFlightRef.current = false;
+    setTurnRecoveryPreparing(null);
+    if (cancelledTurnId) setTurnRecoveryStatus((current) => {
+      const next = { ...current };
+      delete next[cancelledTurnId];
+      return next;
+    });
+  }
+  function recordComposerMutation() {
+    composerMutationRef.current += 1;
+    cancelTurnRecoveryPreparation();
+  }
   const closeWordPreview = useCallback(() => {
     setWordPreview(null);
     requestAnimationFrame(() => wordPreviewReturnFocusRef.current?.focus());
@@ -445,9 +542,10 @@ export default function Home() {
       sendingRef.current = false;
       setSending(false);
     }
-    return activeTurn ? requestTurnCancellation(activeTurn, keepalive) : true;
+    return activeTurn ? requestTurnCancellation(activeTurn, keepalive) : null;
   }, []);
   const reconcileTurnFromServer = useCallback(async (conversationId: string, turnId: string, signal?: AbortSignal): Promise<ConversationTurnStatus | null> => {
+    const expectedEpoch = conversationOpenEpochRef.current;
     const feedbackGeneration = responseFeedbackGenerationRef.current;
     const feedbackRevision = responseFeedbackOperationRef.current;
     const feedbackRequestId = ++responseFeedbackReadRequestRef.current;
@@ -456,20 +554,31 @@ export default function Home() {
       if (!response.ok) return null;
       const data = (await response.json()) as {
         conversation?: { messages?: ChatMessage[] };
+        attachedDataset?: AttachedDataset | null;
+        conversationBinding?: unknown;
         responseFeedback?: unknown;
       };
       if (!Array.isArray(data.conversation?.messages)) return null;
+      const conversationBinding = parseConversationContextBinding(data.conversationBinding);
+      if (!conversationBinding) return null;
+      if (expectedEpoch === conversationOpenEpochRef.current
+        && activeConversationIdRef.current === conversationId) {
+        const authoritativeDataset = conversationBinding.datasetId === null
+          ? null
+          : data.attachedDataset?.id === conversationBinding.datasetId ? data.attachedDataset : undefined;
+        if (authoritativeDataset === undefined) return null;
+        activeConversationBindingRef.current = conversationBinding;
+        activeProjectIdRef.current = conversationBinding.projectId;
+        setActiveProjectId(conversationBinding.projectId);
+        updateAttachedDataset(authoritativeDataset);
+        conversationBindingUncertainRef.current = false;
+        setConversationBindingUncertain(false);
+      }
       const receipt = data.conversation.messages.find((message) => message.turn?.id === turnId)?.turn;
       if (!receipt) return null;
       const authoritative = displayMessagesFromTimeline(data.conversation.messages)
         .filter((message) => message.turn?.id === turnId);
       if (!authoritative.length) return null;
-      if (!responseFeedbackBindingMatches(
-        responseFeedbackConversationRef.current,
-        responseFeedbackGenerationRef.current,
-        conversationId,
-        feedbackGeneration,
-      )) return receipt.status;
       setMessages((current) => {
         const firstIndex = current.findIndex((message) => message.turn?.id === turnId);
         if (firstIndex < 0) return current;
@@ -477,6 +586,12 @@ export default function Home() {
         withoutTurn.splice(firstIndex, 0, ...authoritative);
         return withoutTurn;
       });
+      if (!responseFeedbackBindingMatches(
+        responseFeedbackConversationRef.current,
+        responseFeedbackGenerationRef.current,
+        conversationId,
+        feedbackGeneration,
+      )) return receipt.status;
       applyResponseFeedbackRead(
         conversationId,
         feedbackGeneration,
@@ -489,7 +604,7 @@ export default function Home() {
       // The terminal receipt remains available on the next local reopen.
       return null;
     }
-  }, [applyResponseFeedbackRead]);
+  }, [applyResponseFeedbackRead, updateAttachedDataset]);
   const closeMemoryPanel = useCallback(() => setMemoryPanelOpen(false), []);
   const closeSqlPanel = useCallback(() => setSqlPanelOpen(false), []);
   const nextWelcomeIndex = useCallback((current: number, welcomeMode: WelcomeMode) => {
@@ -631,6 +746,7 @@ export default function Home() {
 
   function attachCodePreview() {
     if (!selectedRepository || !codePreview) return;
+    recordComposerMutation();
     setAttachedCodeContext({
       repositoryId: selectedRepository.id,
       repositoryName: selectedRepository.name,
@@ -639,6 +755,7 @@ export default function Home() {
       startLine: codePreview.startLine,
       endLine: codePreview.startLine + codePreview.lines.length - 1,
       characterCount: codePreview.lines.join("\n").length,
+      previewSha256: codePreview.sha256,
     });
     setRepositoryPanelOpen(false);
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus());
@@ -699,6 +816,7 @@ export default function Home() {
     if (!response.ok) return;
     const project = ((await response.json()) as { project: ProjectSummary }).project;
     setProjects((current) => [project, ...current]);
+    activeProjectIdRef.current = project.id;
     setActiveProjectId(project.id);
     setNewProjectName("");
     startNewChat(project.id);
@@ -714,36 +832,98 @@ export default function Home() {
   async function removeProject(project: ProjectSummary) {
     if (!window.confirm(`Delete “${project.name}”? Its chats will move to All chats.`)) return;
     const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId);
-    if (sendingRef.current && (activeProjectId === project.id || activeConversation?.projectId === project.id)) {
-      await abandonActiveTurn();
+    const targetConversationId = activeConversationIdRef.current;
+    const targetEpoch = conversationOpenEpochRef.current;
+    const tracksOpenBinding = targetConversationId !== null || activeProjectIdRef.current === project.id;
+    if (tracksOpenBinding) recordComposerMutation();
+    if (tracksOpenBinding) {
+      projectBindingPendingRef.current += 1;
+      setProjectBindingChanging(true);
     }
-    const response = await localApiFetch(`/api/projects/${project.id}`, { method: "DELETE" });
-    if (!response.ok) return;
-    if (activeProjectId === project.id) setActiveProjectId(null);
-    await Promise.all([refreshProjects(), refreshConversations()]);
+    let deletionConfirmed = false;
+    try {
+      await enqueueSerialMutation(conversationMutationTailRef, async () => {
+        if (sendingRef.current && activeConversationIdRef.current === targetConversationId
+          && (activeProjectIdRef.current === project.id || activeConversation?.projectId === project.id)) {
+          await abandonActiveTurn();
+        }
+        const response = await localApiFetch(`/api/projects/${project.id}`, { method: "DELETE" });
+        if (!response.ok) {
+          const data = await response.json().catch(() => null) as { error?: unknown } | null;
+          setConversationTransferMessage(typeof data?.error === "string" ? data.error : "The project was not deleted.");
+          return;
+        }
+        deletionConfirmed = true;
+        await Promise.all([refreshProjects(), refreshConversations()]).catch(() => undefined);
+      });
+      if (!deletionConfirmed || targetEpoch !== conversationOpenEpochRef.current) return;
+      if (targetConversationId && activeConversationIdRef.current === targetConversationId) {
+        const reconciled = await reconcileOpenConversationBindings(targetConversationId, targetEpoch);
+        if (!reconciled && activeConversationIdRef.current === targetConversationId
+          && targetEpoch === conversationOpenEpochRef.current) {
+          conversationBindingUncertainRef.current = true;
+          setConversationBindingUncertain(true);
+          setConversationTransferMessage("The project was deleted, but this chat's authoritative project binding could not be reloaded. Sending is paused; reopen the chat.");
+        }
+      } else if (!targetConversationId && activeConversationIdRef.current === null
+        && activeProjectIdRef.current === project.id) {
+        recordComposerMutation();
+        activeProjectIdRef.current = null;
+        setActiveProjectId(null);
+        setRecoveredTurnBinding(null);
+      }
+    } catch {
+      if (targetConversationId && activeConversationIdRef.current === targetConversationId
+        && targetEpoch === conversationOpenEpochRef.current) {
+        const reconciled = await reconcileOpenConversationBindings(targetConversationId, targetEpoch);
+        if (!reconciled) {
+          conversationBindingUncertainRef.current = true;
+          setConversationBindingUncertain(true);
+          setConversationTransferMessage("The project deletion outcome could not be confirmed. Sending is paused; reopen this chat to reload its authoritative project binding.");
+        }
+      } else if (targetEpoch === conversationOpenEpochRef.current) {
+        setConversationTransferMessage("The project deletion outcome could not be confirmed. Refresh projects before relying on the current location.");
+      }
+    } finally {
+      if (tracksOpenBinding) {
+        projectBindingPendingRef.current = Math.max(0, projectBindingPendingRef.current - 1);
+        if (projectBindingPendingRef.current === 0) setProjectBindingChanging(false);
+      }
+    }
   }
 
   async function openConversation(id: string) {
+    cancelTurnRecoveryPreparation();
     const openEpoch = ++conversationOpenEpochRef.current;
     conversationLoadingRef.current = true;
     setConversationLoading(true);
     try {
       if (sendingRef.current) await abandonActiveTurn();
       if (openEpoch !== conversationOpenEpochRef.current) return;
-      const response = await localApiFetch(`/api/conversations/${id}`, { cache: "no-store" });
-      if (!response.ok || openEpoch !== conversationOpenEpochRef.current) return;
-      const data = (await response.json()) as {
-        conversation: { messages: ChatMessage[] };
-        attachedDataset: AttachedDataset | null;
-        responseFeedback?: unknown;
-      };
-      if (openEpoch !== conversationOpenEpochRef.current) return;
+      const data = await enqueueSerialMutation(conversationMutationTailRef, async () => {
+        const response = await localApiFetch(`/api/conversations/${id}`, { cache: "no-store" });
+        if (!response.ok) return null;
+        return await response.json() as {
+          conversation: { messages: ChatMessage[]; projectId: string | null };
+          attachedDataset: AttachedDataset | null;
+          conversationBinding: unknown;
+          responseFeedback?: unknown;
+        };
+      });
+      if (!data || openEpoch !== conversationOpenEpochRef.current) return;
+      const conversationBinding = parseConversationContextBinding(data.conversationBinding);
+      if (!conversationBinding) return;
       const displayMessages = displayMessagesFromTimeline(data.conversation.messages);
       const pendingTurn = data.conversation.messages.find((message) => message.turn?.status === "pending")?.turn;
       followLatestRef.current = true;
       setMessages(displayMessages);
       bindResponseFeedback(id, data.responseFeedback);
+      activeConversationIdRef.current = id;
+      activeProjectIdRef.current = data.conversation.projectId;
+      activeConversationBindingRef.current = conversationBinding;
       setActiveConversationId(id);
+      setActiveProjectId(data.conversation.projectId);
+      setRecoveredTurnBinding(null);
       setReplyTo(null);
       if (pendingTurn) {
         const adoptedTurn = { conversationId: id, turnId: pendingTurn.id };
@@ -757,7 +937,11 @@ export default function Home() {
         setSending(false);
       }
       setAttachedCodeContext(null);
-      setAttachedDataset(data.attachedDataset);
+      updateAttachedDataset(data.attachedDataset);
+      conversationBindingUncertainRef.current = false;
+      setConversationBindingUncertain(false);
+      turnStartUncertainRef.current = false;
+      setTurnStartUncertain(false);
       setSqlDraft(null);
       setSidebarOpen(false);
     } catch {
@@ -786,66 +970,258 @@ export default function Home() {
     }
   }
 
-  async function attachDatasetToChat(dataset: AttachedDataset | null) {
-    if (!activeConversationId) {
-      setAttachedDataset(dataset);
-      return;
+  async function reconcileOpenConversationBindings(id: string, expectedEpoch: number) {
+    try {
+      const data = await enqueueSerialMutation(conversationMutationTailRef, async () => {
+        const response = await localApiFetch(`/api/conversations/${id}`, { cache: "no-store" });
+        if (!response.ok) return null;
+        return await response.json() as {
+          conversation?: { projectId?: unknown };
+          attachedDataset?: AttachedDataset | null;
+          conversationBinding?: unknown;
+        };
+      });
+      if (!data || expectedEpoch !== conversationOpenEpochRef.current
+        || activeConversationIdRef.current !== id) return false;
+      if (!data.conversation || (data.conversation.projectId !== null && typeof data.conversation.projectId !== "string")
+        || (data.attachedDataset !== null && typeof data.attachedDataset !== "object")) return false;
+      const conversationBinding = parseConversationContextBinding(data.conversationBinding);
+      if (!conversationBinding) return false;
+      recordComposerMutation();
+      activeProjectIdRef.current = data.conversation.projectId;
+      activeConversationBindingRef.current = conversationBinding;
+      setActiveProjectId(data.conversation.projectId);
+      updateAttachedDataset(data.attachedDataset ?? null);
+      setRecoveredTurnBinding(null);
+      conversationBindingUncertainRef.current = false;
+      setConversationBindingUncertain(false);
+      return true;
+    } catch {
+      return false;
     }
-    const response = await localApiFetch(`/api/conversations/${activeConversationId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ datasetId: dataset?.id ?? null }),
-    });
-    if (response.ok) setAttachedDataset(dataset);
+  }
+
+  async function attachDatasetToChat(dataset: AttachedDataset | null): Promise<boolean> {
+    if (sendingRef.current) {
+      setConversationTransferMessage("Stop or finish the active request before changing this chat's local dataset. Nothing changed.");
+      return false;
+    }
+    recordComposerMutation();
+    const targetConversationId = activeConversationIdRef.current;
+    const targetEpoch = conversationOpenEpochRef.current;
+    if (!targetConversationId) {
+      updateAttachedDataset(dataset);
+      setRecoveredTurnBinding(null);
+      return true;
+    }
+    const expectedConversationBinding = activeConversationBindingRef.current
+      ? { ...activeConversationBindingRef.current }
+      : null;
+    if (!expectedConversationBinding) {
+      conversationBindingUncertainRef.current = true;
+      setConversationBindingUncertain(true);
+      setConversationTransferMessage("This chat's local binding receipt is missing. Reopen the chat before changing its dataset.");
+      return false;
+    }
+    datasetBindingPendingRef.current += 1;
+    setDatasetBindingChanging(true);
+    setConversationTransferMessage(dataset
+      ? `Attaching ${dataset.name} to this chat locally…`
+      : "Removing the local dataset from this chat…");
+    try {
+      return await enqueueSerialMutation(conversationMutationTailRef, async () => {
+        const response = await localApiFetch(`/api/conversations/${targetConversationId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ datasetId: dataset?.id ?? null, expectedConversationBinding }),
+        });
+        const data = await response.json().catch(() => null) as { error?: unknown; code?: unknown; conversationBinding?: unknown } | null;
+        if (!response.ok) {
+          if (data?.code === "stale-binding" || data?.code === "invalid-binding") {
+            throw new Error("The chat's dataset binding changed before the update was applied.");
+          }
+          if (targetEpoch === conversationOpenEpochRef.current
+            && activeConversationIdRef.current === targetConversationId) {
+            setConversationTransferMessage(typeof data?.error === "string"
+              ? `${data.error} The chat's prior dataset binding was kept.`
+              : "The dataset binding was not changed. The chat's prior dataset binding was kept.");
+          }
+          return false;
+        }
+        const conversationBinding = parseConversationContextBinding(data?.conversationBinding);
+        if (!conversationBinding || conversationBinding.datasetId !== (dataset?.id ?? null)) {
+          throw new Error("The dataset binding response was incomplete.");
+        }
+        if (targetEpoch === conversationOpenEpochRef.current
+          && activeConversationIdRef.current === targetConversationId) {
+          recordComposerMutation();
+          updateAttachedDataset(dataset);
+          activeConversationBindingRef.current = conversationBinding;
+          setRecoveredTurnBinding(null);
+          conversationBindingUncertainRef.current = false;
+          setConversationBindingUncertain(false);
+          setConversationTransferMessage(dataset
+            ? `${dataset.name} is now attached to this chat.`
+            : "The local dataset was removed from this chat.");
+        }
+        await refreshConversations().catch(() => undefined);
+        return true;
+      });
+    } catch {
+      if (targetEpoch === conversationOpenEpochRef.current
+        && activeConversationIdRef.current === targetConversationId) {
+        const reconciled = await reconcileOpenConversationBindings(targetConversationId, targetEpoch);
+        if (reconciled) {
+          const confirmed = activeConversationBindingRef.current?.datasetId === (dataset?.id ?? null);
+          setConversationTransferMessage(confirmed
+            ? "The dataset request response was interrupted. Rangabot reloaded and confirmed the requested local binding."
+            : "The dataset request response was interrupted. Rangabot reloaded a different authoritative local binding; review it before sending.");
+          return confirmed;
+        } else {
+          conversationBindingUncertainRef.current = true;
+          setConversationBindingUncertain(true);
+          setConversationTransferMessage("The dataset request outcome could not be confirmed. Sending is paused; reopen this chat to reload its authoritative local binding.");
+        }
+      }
+      return false;
+    } finally {
+      datasetBindingPendingRef.current = Math.max(0, datasetBindingPendingRef.current - 1);
+      if (datasetBindingPendingRef.current === 0) setDatasetBindingChanging(false);
+    }
   }
 
   async function removeConversation(id: string) {
-    if (sendingRef.current && activeConversationId === id) await abandonActiveTurn();
     setConversationTransferMessage("");
+    const targetEpoch = conversationOpenEpochRef.current;
     try {
-      const response = await localApiFetch(`/api/conversations/${id}`, { method: "DELETE" });
-      if (!response.ok) {
-        const data = await response.json().catch(() => null) as { error?: unknown } | null;
-        setConversationTransferMessage(typeof data?.error === "string"
-          ? `${data.error} Use the delete button to retry.`
-          : "The conversation was not deleted. Use the delete button to retry.");
-        return;
-      }
-      if (response.status === 202) {
-        const data = await response.json().catch(() => null) as { warning?: unknown } | null;
-        setConversationTransferMessage(typeof data?.warning === "string"
-          ? data.warning
-          : "The conversation was deleted, but private artifact cleanup will retry when Rangabot restarts.");
-      }
-      if (activeConversationId === id) startNewChat();
-      await refreshConversations();
+      await enqueueSerialMutation(conversationMutationTailRef, async () => {
+        if (sendingRef.current && activeConversationIdRef.current === id) await abandonActiveTurn();
+        const response = await localApiFetch(`/api/conversations/${id}`, { method: "DELETE" });
+        if (!response.ok) {
+          const data = await response.json().catch(() => null) as { error?: unknown } | null;
+          setConversationTransferMessage(typeof data?.error === "string"
+            ? `${data.error} Use the delete button to retry.`
+            : "The conversation was not deleted. Use the delete button to retry.");
+          return;
+        }
+        if (response.status === 202) {
+          const data = await response.json().catch(() => null) as { warning?: unknown } | null;
+          setConversationTransferMessage(typeof data?.warning === "string"
+            ? data.warning
+            : "The conversation was deleted, but private artifact cleanup will retry when Rangabot restarts.");
+        }
+        if (targetEpoch === conversationOpenEpochRef.current && activeConversationIdRef.current === id) startNewChat();
+        await refreshConversations();
+      });
     } catch {
       setConversationTransferMessage("The conversation was not deleted because the local request failed. Use the delete button to retry.");
     }
   }
 
   async function toggleConversationPin(conversation: ConversationSummary) {
-    const response = await localApiFetch(`/api/conversations/${conversation.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pinned: !conversation.pinned }),
+    await enqueueSerialMutation(conversationMutationTailRef, async () => {
+      const response = await localApiFetch(`/api/conversations/${conversation.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned: !conversation.pinned }),
+      });
+      if (response.ok) await refreshConversations();
     });
-    if (response.ok) await refreshConversations();
   }
 
   async function moveConversation(conversation: ConversationSummary, projectId: string | null) {
-    const response = await localApiFetch(`/api/conversations/${conversation.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId }),
-    });
-    const data = await response.json().catch(() => null) as { error?: string } | null;
-    if (!response.ok) return setConversationTransferMessage(data?.error ?? "The chat could not be moved.");
-    setConversationMenuId(null);
-    setConversationTransferMessage(projectId
-      ? `Moved “${conversation.title}” into ${projects.find(({ id }) => id === projectId)?.name ?? "the project"}.`
-      : `Moved “${conversation.title}” to All chats.`);
-    await refreshConversations();
+    const changesOpenConversation = conversation.id === activeConversationIdRef.current;
+    const targetEpoch = conversationOpenEpochRef.current;
+    if (changesOpenConversation && sendingRef.current) {
+      setConversationTransferMessage("Stop or finish the active request before changing this chat's project. Nothing changed.");
+      return;
+    }
+    if (changesOpenConversation) recordComposerMutation();
+    const openConversationBinding = changesOpenConversation && activeConversationBindingRef.current
+      ? { ...activeConversationBindingRef.current }
+      : null;
+    if (changesOpenConversation && !openConversationBinding) {
+      conversationBindingUncertainRef.current = true;
+      setConversationBindingUncertain(true);
+      setConversationTransferMessage("This chat's local binding receipt is missing. Reopen the chat before changing its project.");
+      return;
+    }
+    if (changesOpenConversation) {
+      projectBindingPendingRef.current += 1;
+      setProjectBindingChanging(true);
+    }
+    try {
+      await enqueueSerialMutation(conversationMutationTailRef, async () => {
+        let expectedConversationBinding = openConversationBinding;
+        if (!changesOpenConversation) {
+          const bindingResponse = await localApiFetch(`/api/conversations/${conversation.id}`, { cache: "no-store" });
+          const bindingData = await bindingResponse.json().catch(() => null) as {
+            conversation?: { projectId?: unknown };
+            conversationBinding?: unknown;
+          } | null;
+          const canonicalBinding = parseConversationContextBinding(bindingData?.conversationBinding);
+          if (!bindingResponse.ok || !canonicalBinding || !bindingData?.conversation
+            || (bindingData.conversation.projectId !== null && typeof bindingData.conversation.projectId !== "string")) {
+            throw new Error("The chat's current project binding could not be loaded.");
+          }
+          if (bindingData.conversation.projectId !== conversation.projectId) {
+            setConversationTransferMessage("This chat moved in another local window. Nothing was changed; review the refreshed chat list and try again.");
+            await refreshConversations().catch(() => undefined);
+            return;
+          }
+          expectedConversationBinding = canonicalBinding;
+        }
+        if (!expectedConversationBinding) throw new Error("The chat's project binding receipt is missing.");
+        const response = await localApiFetch(`/api/conversations/${conversation.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId, expectedConversationBinding }),
+        });
+        const data = await response.json().catch(() => null) as { error?: string; code?: unknown; conversationBinding?: unknown } | null;
+        if (!response.ok) {
+          if (changesOpenConversation && (data?.code === "stale-binding" || data?.code === "invalid-binding")) {
+            throw new Error("The chat's project binding changed before the update was applied.");
+          }
+          setConversationTransferMessage(data?.error ?? "The chat could not be moved.");
+          await refreshConversations().catch(() => undefined);
+          return;
+        }
+        const conversationBinding = parseConversationContextBinding(data?.conversationBinding);
+        if (!conversationBinding) throw new Error("The project binding response was incomplete.");
+        if (targetEpoch === conversationOpenEpochRef.current && activeConversationIdRef.current === conversation.id) {
+          recordComposerMutation();
+          activeProjectIdRef.current = projectId;
+          activeConversationBindingRef.current = conversationBinding;
+          setActiveProjectId(projectId);
+          setRecoveredTurnBinding(null);
+          conversationBindingUncertainRef.current = false;
+          setConversationBindingUncertain(false);
+        }
+        setConversationMenuId(null);
+        setConversationTransferMessage(projectId
+          ? `Moved “${conversation.title}” into ${projects.find(({ id }) => id === projectId)?.name ?? "the project"}.`
+          : `Moved “${conversation.title}” to All chats.`);
+        await refreshConversations().catch(() => undefined);
+      });
+    } catch {
+      if (changesOpenConversation) {
+        const reconciled = await reconcileOpenConversationBindings(conversation.id, targetEpoch);
+        if (reconciled) {
+          setConversationTransferMessage("The move response was interrupted. Rangabot reloaded the chat's authoritative project binding.");
+        } else {
+          conversationBindingUncertainRef.current = true;
+          setConversationBindingUncertain(true);
+          setConversationTransferMessage("The move outcome could not be confirmed. Sending is paused; reopen this chat to reload its authoritative project binding.");
+        }
+      } else {
+        setConversationTransferMessage("The move outcome could not be confirmed. Refresh the chat list before relying on its project location.");
+      }
+    } finally {
+      if (changesOpenConversation) {
+        projectBindingPendingRef.current = Math.max(0, projectBindingPendingRef.current - 1);
+        if (projectBindingPendingRef.current === 0) setProjectBindingChanging(false);
+      }
+    }
   }
 
   function beginConversationDrag(event: DragEvent<HTMLDivElement>, conversation: ConversationSummary) {
@@ -1129,17 +1505,35 @@ export default function Home() {
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || profileSwitching || sendingRef.current || conversationLoadingRef.current) return;
+    if (!content || profileSwitching || sendingRef.current || conversationLoadingRef.current || turnRecoveryInFlightRef.current) return;
+    if (datasetBindingPendingRef.current > 0 || projectBindingPendingRef.current > 0
+      || conversationBindingUncertainRef.current || turnStartUncertainRef.current) {
+      setConversationTransferMessage(datasetBindingPendingRef.current > 0 || projectBindingPendingRef.current > 0
+        ? "Wait for the chat's local project or dataset binding to finish before sending. Your draft has not changed."
+        : turnStartUncertainRef.current
+          ? "Sending is paused because a stopped turn could not be confirmed. Reopen the conversation from the chat list before sending; your draft has not changed."
+          : "Sending is paused because the chat's local binding could not be confirmed. Reopen this chat before sending; your draft has not changed.");
+      return;
+    }
+    if (activeConversationIdRef.current && !activeConversationBindingRef.current) {
+      conversationBindingUncertainRef.current = true;
+      setConversationBindingUncertain(true);
+      setConversationTransferMessage("This chat's local context receipt is missing. Reopen the chat before sending; your draft has not changed.");
+      return;
+    }
     sendingRef.current = true;
     setSending(true);
     setAdoptedPendingTurn(null);
     const sendEpoch = conversationOpenEpochRef.current;
+    const sendComposerRevision = composerMutationRef.current;
 
     const reference = replyTo ? {
       role: replyTo.role as "user" | "assistant",
-      excerpt: replyTo.content.slice(0, 160),
+      excerpt: replyTo.content.slice(0, 500),
     } : undefined;
     const codeContextForRequest = attachedCodeContext;
+    const recoveryBindingForRequest = recoveredTurnBinding;
+    const conversationBindingForRequest = activeConversationBindingRef.current;
     const codeContext = codeContextForRequest ? {
       repository: codeContextForRequest.repositoryName,
       path: codeContextForRequest.path,
@@ -1156,6 +1550,9 @@ export default function Home() {
     const abortController = new AbortController();
     abortRef.current = abortController;
     let turnStarted = false;
+    let turnPresented = false;
+    let startReceiptObserved = false;
+    let allowPreStartComposerRestore = true;
     let responseFailureCode: string | undefined;
     let responseArtifactIntent: ChatMessage["artifactIntent"];
     let responseWordArtifact: ChatMessage["wordArtifact"];
@@ -1172,29 +1569,36 @@ export default function Home() {
     setInput("");
     setReplyTo(null);
     setAttachedCodeContext(null);
+    setRecoveredTurnBinding(null);
 
+    const startPayload = JSON.stringify({
+        protocolVersion: CONVERSATION_TURN_PROTOCOL_VERSION,
+        turnId,
+        ...(conversationId
+          ? { conversationId, expectedConversationBinding: conversationBindingForRequest }
+          : {
+              projectId: activeProjectId,
+              ...(attachedDataset ? { datasetId: attachedDataset.id } : {}),
+            }),
+        message: turnMessage,
+        options: {
+          mode,
+          ...(codeContextForRequest ? { codeContext: { repositoryId: codeContextForRequest.repositoryId, path: codeContextForRequest.path, line: codeContextForRequest.line, previewSha256: codeContextForRequest.previewSha256 } } : {}),
+          ...(recoveryBindingForRequest?.datasetSha256 ? { datasetSha256: recoveryBindingForRequest.datasetSha256 } : {}),
+          ...(recoveryBindingForRequest ? { recoveryBinding: recoveryBindingForRequest } : {}),
+        },
+    });
     try {
-      const startPayload = JSON.stringify({
-          protocolVersion: CONVERSATION_TURN_PROTOCOL_VERSION,
-          turnId,
-          ...(conversationId
-            ? { conversationId }
-            : {
-                projectId: activeProjectId,
-                ...(attachedDataset ? { datasetId: attachedDataset.id } : {}),
-              }),
-          message: turnMessage,
-          options: {
-            mode,
-            ...(codeContextForRequest ? { codeContext: { repositoryId: codeContextForRequest.repositoryId, path: codeContextForRequest.path, line: codeContextForRequest.line } } : {}),
-          },
-      });
       const startData = await startConversationTurn(startPayload, turnId, abortController.signal);
-      if (!startData.ok || !startData.conversationId) {
+      startReceiptObserved = true;
+      if (!startData.ok || !startData.conversationId || !startData.conversationBinding) {
         responseFailureCode = startData.code;
         throw new Error(startData.error ?? "The local turn could not be started.");
       }
       conversationId = startData.conversationId;
+      activeConversationBindingRef.current = startData.conversationBinding;
+      turnStartUncertainRef.current = false;
+      setTurnStartUncertain(false);
       turnStarted = true;
       activeTurnRef.current = { conversationId, turnId };
       if (abortController.signal.aborted) {
@@ -1203,8 +1607,10 @@ export default function Home() {
       }
       followLatestRef.current = true;
       if (responseFeedbackConversationRef.current !== conversationId) bindResponseFeedback(conversationId, []);
+      activeConversationIdRef.current = conversationId;
       setActiveConversationId(conversationId);
       setMessages((current) => [...current, userMessage, assistantMessage]);
+      turnPresented = true;
       void refreshConversations();
       const response = await localApiFetch("/api/chat", {
         method: "POST",
@@ -1306,33 +1712,119 @@ export default function Home() {
       setMessages((current) => current.map((message) => message.turn?.id === turnId
         ? { ...message, active: false, turn: { id: turnId, status: "completed" } }
         : message));
+      if (activeConversationIdRef.current === conversationId && activeConversationBindingRef.current) {
+        activeConversationBindingRef.current = {
+          ...activeConversationBindingRef.current,
+          contextMessageCount: activeConversationBindingRef.current.contextMessageCount + 2,
+        };
+      }
       if (conversationId) await refreshResponseFeedback(conversationId, sendEpoch);
     } catch (error) {
       const stopped = abortController.signal.aborted;
+      let quarantinedAmbiguousStart = false;
+      let replayedStartStatus: ConversationTurnStatus | null = null;
+      if (!turnStarted && !startReceiptObserved) {
+        allowPreStartComposerRestore = false;
+        const replayedStart = await replayAmbiguousTurnStart(startPayload, turnId);
+        if (replayedStart?.conversationId && replayedStart.conversationBinding && replayedStart.turnStatus) {
+          conversationId = replayedStart.conversationId;
+          activeConversationBindingRef.current = replayedStart.conversationBinding;
+          replayedStartStatus = replayedStart.turnStatus;
+          quarantinedAmbiguousStart = true;
+          turnStarted = true;
+        } else if (sendEpoch === conversationOpenEpochRef.current) {
+          turnStartUncertainRef.current = true;
+          setTurnStartUncertain(true);
+          setConversationTransferMessage("The turn's exact server receipt could not be recovered. Nothing was restored and Send is paused until you reopen the conversation from the chat list.");
+        }
+        void refreshConversations();
+      }
       if (turnStarted) {
-        const cancellationConfirmed = stopped && conversationId
+        const cancellationStatus = (stopped || quarantinedAmbiguousStart) && conversationId
           ? await requestTurnCancellation({ conversationId, turnId })
-          : true;
-        const terminalStatus = stopped ? "cancelled" as const : "failed" as const;
+          : null;
         const failureMessage = error instanceof Error ? error.message : "The request failed.";
-        setMessages((current) => current.map((message) => {
-          if (message.turn?.id !== turnId) return message;
-          const turn = { id: turnId, status: terminalStatus, ...(!stopped && responseFailureCode ? { failureCode: responseFailureCode } : {}) };
-          if (message.id !== assistantId) return { ...message, turn };
-          return stopped
-            ? { ...message, content: message.content || "No response was generated.", active: false, stopped: true, turn }
-            : { ...message, content: message.content || failureMessage, ...(responseCapabilityReceipt ? { capabilityReceipt: responseCapabilityReceipt } : {}), error: true, source: undefined, active: false, turn };
-        }));
-        const authoritativeStatus = conversationId
+        const reconciledStatus = conversationId
           ? await reconcileTurnFromServer(conversationId, turnId)
           : null;
+        const authoritativeStatus = reconciledStatus ?? cancellationStatus ?? replayedStartStatus;
         const shouldRetainOwnership = authoritativeStatus === "pending"
-          || (authoritativeStatus === null && (!stopped || !cancellationConfirmed));
-        const newerTurnOwnsComposer = activeTurnRef.current && activeTurnRef.current.turnId !== turnId;
+          || authoritativeStatus === null;
+        if (quarantinedAmbiguousStart && sendEpoch === conversationOpenEpochRef.current) {
+          if (authoritativeStatus === "cancelled" || authoritativeStatus === "failed") {
+            allowPreStartComposerRestore = true;
+            turnStartUncertainRef.current = false;
+            setTurnStartUncertain(false);
+            setConversationTransferMessage(sendComposerRevision === composerMutationRef.current
+              ? "The ambiguous turn was confirmed terminal. Your unchanged draft can be restored safely."
+              : "The ambiguous turn was confirmed terminal. Your newer composer changes were kept.");
+          } else if (authoritativeStatus === "completed") {
+            turnStartUncertainRef.current = false;
+            setTurnStartUncertain(false);
+            setConversationTransferMessage(reconciledStatus === "completed"
+              ? "The turn completed before cancellation. Its saved conversation was refreshed; open it from the chat list to review the result."
+              : "The turn completed before cancellation, but its saved answer could not be refreshed. Open it from the chat list to load the authoritative result.");
+          } else {
+            setConversationTransferMessage("The exact turn is still pending locally. Rangabot is tracking that request; its draft was not restored or resent.");
+          }
+        }
+        if (!shouldRetainOwnership && reconciledStatus === null) {
+          const terminalStatus = authoritativeStatus === "completed" || authoritativeStatus === "failed"
+            ? authoritativeStatus
+            : "cancelled" as const;
+          setMessages((current) => current.map((message) => {
+            if (message.turn?.id !== turnId) return message;
+            const turn = {
+              id: turnId,
+              status: terminalStatus,
+              ...(!stopped && terminalStatus === "failed" && responseFailureCode ? { failureCode: responseFailureCode } : {}),
+            };
+            if (message.id !== assistantId) return { ...message, turn };
+            if (terminalStatus === "completed") return {
+              ...message,
+              content: "The answer completed locally, but its saved content could not be refreshed. Reopen this chat to load the authoritative answer.",
+              active: false,
+              stopped: false,
+              error: true,
+              source: undefined,
+              turn,
+            };
+            return terminalStatus === "cancelled"
+              ? { ...message, content: message.content || "No response was generated.", active: false, stopped: true, turn }
+              : { ...message, content: message.content || failureMessage, ...(responseCapabilityReceipt ? { capabilityReceipt: responseCapabilityReceipt } : {}), error: true, source: undefined, active: false, stopped: false, turn };
+          }));
+          if (authoritativeStatus === "completed" && sendEpoch === conversationOpenEpochRef.current) {
+            setConversationTransferMessage("The turn completed before cancellation, but its saved answer could not be refreshed. Reopen this chat to load the authoritative result.");
+          }
+        }
+        const canRestoreTerminalDraft = authoritativeStatus === "cancelled" || authoritativeStatus === "failed";
+        if (!turnPresented && (stopped || quarantinedAmbiguousStart) && canRestoreTerminalDraft
+          && sendEpoch === conversationOpenEpochRef.current
+          && sendComposerRevision === composerMutationRef.current) {
+          setInput(content);
+          setReplyTo(replyTo);
+          setAttachedCodeContext(codeContextForRequest);
+          if (recoveryBindingForRequest) setRecoveredTurnBinding(recoveryBindingForRequest);
+        }
+        const newerTurnOwnsComposer = abortRef.current !== null && abortRef.current !== abortController
+          || Boolean(activeTurnRef.current && activeTurnRef.current.turnId !== turnId);
         if (conversationId && shouldRetainOwnership && !newerTurnOwnsComposer
           && sendEpoch === conversationOpenEpochRef.current && !conversationLoadingRef.current) {
           if (abortRef.current === abortController) abortRef.current = null;
           const retainedTurn = { conversationId, turnId };
+          if (!turnPresented) {
+            if (responseFeedbackConversationRef.current !== conversationId) bindResponseFeedback(conversationId, []);
+            activeConversationIdRef.current = conversationId;
+            activeProjectIdRef.current = activeConversationBindingRef.current?.projectId ?? activeProjectIdRef.current;
+            setActiveConversationId(conversationId);
+            setActiveProjectId(activeConversationBindingRef.current?.projectId ?? activeProjectIdRef.current);
+            if (activeConversationBindingRef.current?.datasetId === null) updateAttachedDataset(null);
+            setMessages((current) => current.some((message) => message.turn?.id === turnId)
+              ? current
+              : [...current, userMessage, assistantMessage]);
+            turnPresented = true;
+            void refreshConversations();
+          }
           activeTurnRef.current = retainedTurn;
           setAdoptedPendingTurn(retainedTurn);
           sendingRef.current = true;
@@ -1343,16 +1835,30 @@ export default function Home() {
               : message));
           }
         }
-      } else if (!stopped) {
+      } else {
         if (responseFailureCode === "not-found") {
           bindResponseFeedback(null, []);
+          activeConversationIdRef.current = null;
+          activeConversationBindingRef.current = null;
           setActiveConversationId(null);
-          setAttachedDataset(null);
+          updateAttachedDataset(null);
         }
-        setInput((current) => current || content);
-        if (replyTo) setReplyTo((current) => current ?? replyTo);
-        if (codeContextForRequest) setAttachedCodeContext((current) => current ?? codeContextForRequest);
-        setMessages((current) => [...current,
+        const composerUnchanged = sendEpoch === conversationOpenEpochRef.current
+          && sendComposerRevision === composerMutationRef.current;
+        if (composerUnchanged && allowPreStartComposerRestore) {
+          setInput(content);
+          setReplyTo(replyTo);
+          setAttachedCodeContext(codeContextForRequest);
+          if (recoveryBindingForRequest && (stopped || shouldRetainRecoveryBindingAfterStartFailure(responseFailureCode))) {
+            setRecoveredTurnBinding(recoveryBindingForRequest);
+          } else if (recoveryBindingForRequest) {
+            setTurnRecoveryStatus((current) => ({
+              ...current,
+              [recoveryBindingForRequest.sourceTurnId]: "The chat or saved local context changed. The request text is still in the composer, but its original recovery binding was cleared. Review the current chat and reattach any local resource before sending.",
+            }));
+          }
+        }
+        if (!stopped) setMessages((current) => [...current,
           { ...userMessage, turn: undefined },
           { ...assistantMessage, ...(responseCapabilityReceipt ? { capabilityReceipt: responseCapabilityReceipt } : {}), turn: undefined, active: false, error: true, source: undefined, content: error instanceof Error ? error.message : "The request failed." },
         ]);
@@ -1373,15 +1879,16 @@ export default function Home() {
   async function stopGenerating() {
     const activeTurn = activeTurnRef.current;
     const stopEpoch = conversationOpenEpochRef.current;
-    const cancellationConfirmed = await abandonActiveTurn(false, true);
+    const cancellationStatus = await abandonActiveTurn(false, true);
     if (!activeTurn) {
       sendingRef.current = false;
       setSending(false);
       return;
     }
-    const authoritativeStatus = await reconcileTurnFromServer(activeTurn.conversationId, activeTurn.turnId);
+    const reconciledStatus = await reconcileTurnFromServer(activeTurn.conversationId, activeTurn.turnId);
+    const authoritativeStatus = reconciledStatus ?? cancellationStatus;
     const shouldRetainOwnership = authoritativeStatus === "pending"
-      || (!cancellationConfirmed && authoritativeStatus === null);
+      || authoritativeStatus === null;
     const newerTurnOwnsComposer = activeTurnRef.current && activeTurnRef.current.turnId !== activeTurn.turnId;
     if (shouldRetainOwnership && !newerTurnOwnsComposer
       && stopEpoch === conversationOpenEpochRef.current && !conversationLoadingRef.current) {
@@ -1400,15 +1907,33 @@ export default function Home() {
       sendingRef.current = false;
       setSending(false);
       setAdoptedPendingTurn(null);
-      if (cancellationConfirmed && authoritativeStatus === null) {
+      if (reconciledStatus === null && cancellationStatus) {
         setMessages((current) => current.map((message) => message.turn?.id === activeTurn.turnId
-          ? { ...message, active: false, stopped: message.role === "assistant", turn: { id: activeTurn.turnId, status: "cancelled" } }
+          ? cancellationStatus === "completed"
+            ? {
+                ...message,
+                ...(message.role === "assistant" ? {
+                  content: "The answer completed locally, but its saved content could not be refreshed. Reopen this chat to load the authoritative answer.",
+                  error: true,
+                  source: undefined,
+                } : {}),
+                active: false,
+                stopped: false,
+                turn: { id: activeTurn.turnId, status: "completed" },
+              }
+            : cancellationStatus === "failed"
+              ? { ...message, active: false, stopped: false, error: message.role === "assistant", source: message.role === "assistant" ? undefined : message.source, turn: { id: activeTurn.turnId, status: "failed" } }
+              : { ...message, active: false, stopped: message.role === "assistant", turn: { id: activeTurn.turnId, status: "cancelled" } }
           : message));
+        if (cancellationStatus === "completed") {
+          setConversationTransferMessage("The turn completed before cancellation, but its saved answer could not be refreshed. Reopen this chat to load the authoritative result.");
+        }
       }
     }
   }
 
   function startNewChat(projectId: string | null = activeProjectId) {
+    cancelTurnRecoveryPreparation();
     conversationOpenEpochRef.current += 1;
     conversationLoadingRef.current = false;
     setConversationLoading(false);
@@ -1418,23 +1943,126 @@ export default function Home() {
     followLatestRef.current = true;
     setMessages([]);
     bindResponseFeedback(null, []);
+    activeConversationIdRef.current = null;
+    activeProjectIdRef.current = projectId;
+    activeConversationBindingRef.current = null;
     setActiveConversationId(null);
     setActiveProjectId(projectId);
     setInput("");
     setReplyTo(null);
     setAttachedCodeContext(null);
-    setAttachedDataset(null);
+    updateAttachedDataset(null);
+    conversationBindingUncertainRef.current = false;
+    setConversationBindingUncertain(false);
+    setRecoveredTurnBinding(null);
     setSidebarOpen(false);
     rotateWelcome(welcomePreferences.mode);
   }
 
-  function copyTurnRequestText(turnId: string) {
-    const request = messages.find((message) => message.turn?.id === turnId && message.role === "user");
-    if (!request) return;
-    setInput(request.content);
-    setReplyTo(null);
-    setAttachedCodeContext(null);
-    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus());
+  async function restoreTurnRequest(turnId: string) {
+    if (!activeConversationId) return;
+    if (turnRecoveryInFlightRef.current) {
+      setTurnRecoveryStatus((current) => ({ ...current, [turnId]: "Wait for the current recovery check to finish." }));
+      return;
+    }
+    if (sendingRef.current || conversationLoadingRef.current) {
+      setTurnRecoveryStatus((current) => ({ ...current, [turnId]: "Wait for the active request to finish or stop it before restoring an older request." }));
+      return;
+    }
+    if (datasetBindingPendingRef.current > 0 || projectBindingPendingRef.current > 0) {
+      setTurnRecoveryStatus((current) => ({ ...current, [turnId]: "Wait for the chat's dataset or project update to finish before restoring this request." }));
+      return;
+    }
+    if (conversationBindingUncertainRef.current) {
+      setTurnRecoveryStatus((current) => ({ ...current, [turnId]: "Reopen this chat to reload its local bindings before restoring this request." }));
+      return;
+    }
+    if (input.trim() || replyTo || attachedCodeContext) {
+      setTurnRecoveryStatus((current) => ({ ...current, [turnId]: "The composer already has a draft or attachment. Send or clear it before restoring this request." }));
+      return;
+    }
+    const recoveryConversationId = activeConversationId;
+    const recoveryEpoch = conversationOpenEpochRef.current;
+    const recoveryComposerRevision = composerMutationRef.current;
+    const recoveryOperation = ++turnRecoveryOperationRef.current;
+    const recoveryController = new AbortController();
+    turnRecoveryAbortRef.current = recoveryController;
+    turnRecoveryTurnRef.current = turnId;
+    turnRecoveryInFlightRef.current = true;
+    setTurnRecoveryPreparing(turnId);
+    setTurnRecoveryStatus((current) => ({ ...current, [turnId]: "Revalidating the saved request and file/code bindings…" }));
+    try {
+      const response = await localApiFetch(`/api/conversation-turns/${turnId}/recovery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId: recoveryConversationId }),
+        signal: recoveryController.signal,
+      });
+      const data = await response.json().catch(() => null) as { recovery?: unknown; error?: unknown } | null;
+      if (!response.ok) throw new Error(typeof data?.error === "string" ? data.error : "The saved request could not be restored safely.");
+      const recovery = parseTurnRecoveryDraft(data?.recovery);
+      if (!recovery || !(await verifyTurnRecoveryDraftHash(recovery))
+        || recovery.sourceTurnId !== turnId || recovery.binding.conversationId !== recoveryConversationId
+        || recovery.binding.projectId !== activeProjectId || recovery.binding.datasetId !== (attachedDataset?.id ?? null)) {
+        throw new Error("The restored request no longer matches this chat's current local bindings. Reload the chat before trying again.");
+      }
+      if (turnRecoveryOperationRef.current !== recoveryOperation
+        || conversationOpenEpochRef.current !== recoveryEpoch
+        || composerMutationRef.current !== recoveryComposerRevision
+        || sendingRef.current || conversationLoadingRef.current
+        || datasetBindingPendingRef.current > 0 || projectBindingPendingRef.current > 0
+        || conversationBindingUncertainRef.current) {
+        throw new Error("The chat or composer changed while recovery was being prepared. Nothing was restored.");
+      }
+      composerMutationRef.current += 1;
+      setInput(recovery.message.content);
+      setMode(recovery.mode);
+      setReplyTo(recovery.message.replyTo ? {
+        id: `${turnId}:recovered-reply`,
+        role: recovery.message.replyTo.role,
+        content: recovery.message.replyTo.excerpt,
+      } : null);
+      setAttachedCodeContext(recovery.codeContext ?? null);
+      setRecoveredTurnBinding({
+        sourceTurnId: recovery.sourceTurnId,
+        conversationId: recovery.binding.conversationId,
+        projectId: recovery.binding.projectId,
+        datasetId: recovery.binding.datasetId,
+        datasetSha256: recovery.binding.datasetSha256,
+        contextMessageCount: recovery.binding.contextMessageCount,
+      });
+      const restored = ["request text", "mode"];
+      if (recovery.message.replyTo) restored.push("reply reference");
+      if (recovery.binding.datasetId) restored.push("dataset file binding");
+      if (recovery.codeContext) restored.push("revalidated code excerpt");
+      setTurnRecoveryStatus((current) => ({
+        ...current,
+        [turnId]: `${restored.join(", ")} restored. Review the composer, then press Send when you are ready.${recovery.binding.datasetId ? " If the request selects data analysis, current learned dataset context may be applied at Send time; it is not frozen by this recovery." : ""}`,
+      }));
+      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus());
+    } catch (error) {
+      if (turnRecoveryOperationRef.current === recoveryOperation && conversationOpenEpochRef.current === recoveryEpoch) {
+        setTurnRecoveryStatus((current) => ({
+          ...current,
+          [turnId]: error instanceof Error ? error.message : "The saved request could not be restored safely.",
+        }));
+      }
+    } finally {
+      if (turnRecoveryOperationRef.current === recoveryOperation) {
+        if (turnRecoveryAbortRef.current === recoveryController) turnRecoveryAbortRef.current = null;
+        if (turnRecoveryTurnRef.current === turnId) turnRecoveryTurnRef.current = null;
+        turnRecoveryInFlightRef.current = false;
+        setTurnRecoveryPreparing((current) => current === turnId ? null : current);
+      }
+    }
+  }
+
+  function handleTurnRecovery(action: TurnRecoveryAction, turnId: string) {
+    if (action === "open-models") {
+      setModelManagerOpen(true);
+      return;
+    }
+    void restoreTurnRequest(turnId);
   }
 
   function rotateWelcome(mode: WelcomeMode) {
@@ -1575,6 +2203,7 @@ export default function Home() {
 
   function chooseStarter(prompt: string) {
     if (profileSwitching) return;
+    recordComposerMutation();
     setInput(prompt);
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus());
   }
@@ -1680,10 +2309,16 @@ export default function Home() {
   }
 
   function askAboutUpdate(title: string) {
+    recordComposerMutation();
     setInput(`Teach me about this update and why it matters: ${title}`);
     setKnowledgePanelOpen(false);
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus());
   }
+
+  const renderedConversationBinding = activeConversationBindingRef.current
+    ? { ...activeConversationBindingRef.current }
+    : null;
+  const renderedConversationEpoch = conversationOpenEpochRef.current;
 
   return (
     <main className="app-shell" data-appearance={appearance} data-palette={palette}>
@@ -1774,7 +2409,7 @@ export default function Home() {
               </button>
               <label className="header-route-control" title={routeDescription}>
                 <span className="sr-only">Response mode</span>
-                <select value={mode} onChange={(event) => setMode(event.target.value as Mode)} aria-label="Response mode" aria-describedby="route-mode-description" disabled={profileWorkspaceBlocked}>
+                <select value={mode} onChange={(event) => { recordComposerMutation(); setMode(event.target.value as Mode); }} aria-label="Response mode" aria-describedby="route-mode-description" disabled={profileWorkspaceBlocked || Boolean(turnRecoveryPreparing)}>
                   <option value="local">Local only</option>
                   <option value="smart">Smart</option>
                   <option value="teach">Teacher</option>
@@ -1887,8 +2522,14 @@ export default function Home() {
                 {message.stopped && (
                   <div className="stopped-state" role="status"><i aria-hidden="true" /> Stopped</div>
                 )}
-                {!message.active && (!message.turn || message.turn.status === "completed") && !message.error && <button type="button" className="reply-button" onClick={() => { setReplyTo(message); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus()); }} aria-label="Reply to this message"><CraftIcon name="reply" size={14} /><span>Reply</span></button>}
-                {message.role === "assistant" && message.turn && (message.turn.status === "cancelled" || message.turn.status === "failed") && <button type="button" className="reply-button" onClick={() => copyTurnRequestText(message.turn!.id)} aria-label="Copy request text into the composer"><CraftIcon name="arrow" size={14} /><span>Copy request text</span></button>}
+                {message.role === "assistant" && message.turn && (message.turn.status === "cancelled" || message.turn.status === "failed")
+                  && <TurnRecoveryCard
+                    plan={turnRecoveryPlan(message.turn.status, message.turn.failureCode)}
+                    busy={sending || conversationLoading || datasetBindingChanging || projectBindingChanging || conversationBindingUncertain || Boolean(turnRecoveryPreparing)}
+                    status={turnRecoveryStatus[message.turn.id]}
+                    onAction={(action) => handleTurnRecovery(action, message.turn!.id)}
+                  />}
+                {!message.active && (!message.turn || message.turn.status === "completed") && !message.error && <button type="button" className="reply-button" onClick={() => { recordComposerMutation(); setReplyTo(message); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus()); }} aria-label="Reply to this message"><CraftIcon name="reply" size={14} /><span>Reply</span></button>}
               </div>
             </article>
           ))}
@@ -1906,15 +2547,15 @@ export default function Home() {
             <span>{status?.available ? "Open Model Manager to install or select a model—no terminal required." : "The private model engine is not ready yet."}</span>
             <button type="button" onClick={() => setModelManagerOpen(true)}>Model Manager</button>
           </div>}
-          <form className="composer" onSubmit={sendMessage} aria-busy={conversationLoading || profileWorkspaceBlocked}>
-            {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
-            {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => setAttachedCodeContext(null)} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
-            {attachedDataset && <div className="composer-code-context"><span><strong>Local data available to this chat</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>This attachment is remembered for this chat. Analytical requests may run bounded read-only SQL locally; expand the calculation trace to inspect it.</small></span><button type="button" onClick={() => void attachDatasetToChat(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
+          <form className="composer" onSubmit={sendMessage} aria-busy={conversationLoading || datasetBindingChanging || projectBindingChanging || conversationBindingUncertain || turnStartUncertain || profileWorkspaceBlocked || Boolean(turnRecoveryPreparing)} inert={profileWorkspaceBlocked || Boolean(turnRecoveryPreparing)}>
+            {replyTo && <div className="composer-reply"><span><strong>Replying to {replyTo.role === "assistant" ? "Rangabot" : "your message"}</strong>{replyTo.content.slice(0, 100)}</span><button type="button" onClick={() => { recordComposerMutation(); setReplyTo(null); }} aria-label="Cancel reply"><CraftIcon name="close" size={14} /></button></div>}
+            {attachedCodeContext && <div className="composer-code-context"><span><strong>Local code attached</strong>{attachedCodeContext.repositoryName} · {attachedCodeContext.path} · lines {attachedCodeContext.startLine}–{attachedCodeContext.endLine}<small>≈ {attachedCodeContext.characterCount.toLocaleString()} characters · sent only to Ollama when you press Send</small></span><button type="button" onClick={() => { recordComposerMutation(); setAttachedCodeContext(null); }} aria-label="Remove attached code"><CraftIcon name="close" size={14} /></button></div>}
+            {attachedDataset && <div className="composer-code-context"><span><strong>Local data available to this chat</strong>{attachedDataset.name} · {attachedDataset.format.toUpperCase()} · {(attachedDataset.sizeBytes / 1024 ** 2).toFixed(1)} MB<small>{datasetBindingChanging ? "Updating this chat's local dataset binding…" : "This attachment is remembered for this chat. Analytical requests may run bounded read-only SQL locally; expand the calculation trace to inspect it."}</small></span><button type="button" disabled={sending || datasetBindingChanging} onClick={() => void attachDatasetToChat(null)} aria-label="Remove attached dataset"><CraftIcon name="close" size={14} /></button></div>}
             <div className="composer-main-row">
-              <button type="button" className="composer-add" onClick={() => { setSqlPanelOpen(true); }} aria-label="Add local context"><CraftIcon name="add" size={18} /></button>
+              <button type="button" className="composer-add" disabled={sending} onClick={() => { setSqlPanelOpen(true); }} aria-label="Add local context"><CraftIcon name="add" size={18} /></button>
               <textarea
                 value={input}
-                onChange={(event) => setInput(event.target.value)}
+                onChange={(event) => { recordComposerMutation(); setInput(event.target.value); }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
@@ -1929,7 +2570,7 @@ export default function Home() {
                 {sending ? (
                   <button className="composer-submit stop-button" type="button" onClick={stopGenerating} aria-label="Stop generating"><CraftIcon name="stop" /></button>
                 ) : (
-                  <button className="composer-submit send-button" type="submit" disabled={!input.trim() || conversationLoading || profileWorkspaceBlocked} aria-label="Send"><CraftIcon name="send" /></button>
+                  <button className="composer-submit send-button" type="submit" disabled={!input.trim() || conversationLoading || datasetBindingChanging || projectBindingChanging || conversationBindingUncertain || turnStartUncertain || profileWorkspaceBlocked} aria-label="Send"><CraftIcon name="send" /></button>
                 )}
               </div>
             </div>
@@ -2040,7 +2681,54 @@ export default function Home() {
         </div>
       )}
       <MemoryPanel open={!profileRecoveryRequired && memoryPanelOpen} onClose={closeMemoryPanel} activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} />
-      <SqlAnalysisPanel key={sqlDraft ? `${sqlDraft.datasetId}:${sqlDraft.query}` : "manual"} open={!profileRecoveryRequired && sqlPanelOpen} onClose={closeSqlPanel} onAttach={(dataset) => { void attachDatasetToChat(dataset); setSqlDraft(null); }} initialDraft={sqlDraft} activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} />
+      <SqlAnalysisPanel
+        key={sqlDraft ? `${sqlDraft.datasetId}:${sqlDraft.query}` : "manual"}
+        open={!profileRecoveryRequired && sqlPanelOpen}
+        onClose={closeSqlPanel}
+        onAttach={(dataset) => { void attachDatasetToChat(dataset); setSqlDraft(null); }}
+        onDatasetRevoked={async (datasetId) => {
+          const targetConversationId = activeConversationId;
+          const targetDatasetId = attachedDataset?.id ?? null;
+          const targetBinding = renderedConversationBinding;
+          if (activeConversationIdRef.current !== targetConversationId
+            || conversationOpenEpochRef.current !== renderedConversationEpoch) {
+            if (attachedDatasetRef.current?.id === datasetId) {
+              conversationBindingUncertainRef.current = true;
+              setConversationBindingUncertain(true);
+              setConversationTransferMessage("A revoked dataset may still appear on this chat after navigation. Sending is paused; reopen the chat to reload its authoritative binding.");
+              return "unconfirmed";
+            }
+            return "not-bound";
+          }
+          if (targetDatasetId !== datasetId) return "not-bound";
+          const currentBinding = activeConversationBindingRef.current;
+          if (attachedDatasetRef.current?.id !== targetDatasetId) return "not-bound";
+          if (targetConversationId && (!targetBinding
+            || targetBinding.datasetId !== datasetId
+            || !currentBinding || currentBinding.datasetId !== datasetId
+            || currentBinding.datasetSha256 !== targetBinding.datasetSha256)) return "not-bound";
+          const detached = await attachDatasetToChat(null);
+          if (activeConversationIdRef.current !== targetConversationId
+            || conversationOpenEpochRef.current !== renderedConversationEpoch) {
+            if (attachedDatasetRef.current?.id === datasetId) {
+              conversationBindingUncertainRef.current = true;
+              setConversationBindingUncertain(true);
+              setConversationTransferMessage("A revoked dataset may still appear on this chat after navigation. Sending is paused; reopen the chat to reload its authoritative binding.");
+              return "unconfirmed";
+            }
+            return "not-bound";
+          }
+          if (!detached && activeConversationIdRef.current === targetConversationId
+            && attachedDatasetRef.current?.id === targetDatasetId) {
+            conversationBindingUncertainRef.current = true;
+            setConversationBindingUncertain(true);
+            setConversationTransferMessage("The dataset approval was revoked, but this chat's saved binding could not be confirmed. Sending is paused; reopen this chat before continuing.");
+          }
+          return detached ? "detached" : "unconfirmed";
+        }}
+        initialDraft={sqlDraft}
+        activeProfileMarker={activeProfileContext?.marker ?? "Loading…"}
+      />
       {!profileRecoveryRequired && welcomePreferencesOpen && <WelcomePreferencesDialog preferences={welcomePreferences} appearance={desktopPreferences?.appearance ?? null} palette={palette} activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} onClose={closeWelcomePreferences} onSave={saveWelcomePreferences} onOpenSetup={() => { setupReturnFocusRef.current = preferencesTriggerRef.current; setWelcomePreferencesOpen(false); setSetupOpen(true); }} />}
       {!profileRecoveryRequired && modelManagerOpen && <ModelManager activeProfileMarker={activeProfileContext?.marker ?? "Loading…"} onClose={() => setModelManagerOpen(false)} onChanged={() => void refreshStatus()} />}
       {!profileRecoveryRequired && setupOpen && activeProfileContext && desktopPreferences && onboarding && <FirstRunSetup
