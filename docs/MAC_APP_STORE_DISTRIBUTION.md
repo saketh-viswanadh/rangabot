@@ -1,7 +1,10 @@
 # Mac App Store distribution
 
-Status: **implemented source candidate; Apple signing, package creation,
-TestFlight installation, App Review, and public distribution are NOT RUN.**
+Status: **the App Store path is included in the 1.2.0 source release.** An
+earlier 0.1.0 beta was signed and submitted to TestFlight Beta App Review; that
+historical submission is not evidence for 1.2.0. Signing, package creation,
+TestFlight installation, App Review, and public distribution for the exact
+1.2.0 package are **NOT RUN**.
 
 The App Store edition is a separate Electron `mas` build. It does not replace
 or silently change the direct-download `darwin` edition.

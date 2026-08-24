@@ -188,15 +188,15 @@ risks are recorded in `SECURITY.md`, `CHANGELOG.md`, and `DAILY_PROGRESS.md`.
 
 ### Repository maintenance
 
-- Public `main` is current through merged PR #63 and its Linux and Windows CI passed.
-- Release `v0.1.0` remains behind `main`; publish a new release only after the
-  reliability week finishes and the release candidate passes.
+- This review records the repository state through merged PR #63. Later release
+  decisions must use the current changelog, exact candidate checks, and GitHub
+  release evidence rather than treating this historical checkpoint as current.
 - Automatic merged-branch deletion is enabled. Ten remote branches proven merged
   into `main` were removed on 2026-08-02; unmerged branches were preserved.
 - GitHub issues #23 and #25 were closed because their synthetic retrieval
   evaluation and repository allowlist/search contracts are implemented.
-- The GitHub homepage field is empty. Add a project/demo URL only when one exists;
-  do not add a placeholder.
+- At this historical checkpoint the GitHub homepage field was empty. Current
+  repository metadata must be checked live rather than inferred from this review.
 
 ## Deliberately retained
 

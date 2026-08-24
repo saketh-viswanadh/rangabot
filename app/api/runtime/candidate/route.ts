@@ -16,6 +16,7 @@ export async function GET(request: Request) {
       manifestSha256: candidate.manifestSha256,
       artifactSha256: candidate.artifactSha256,
       sourceVersion: candidate.sourceVersion,
+      productVersion: candidate.productVersion,
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Runtime identity could not be read." }, { status: error instanceof StaleProfileRequestError ? 409 : 500 });

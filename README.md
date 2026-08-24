@@ -13,10 +13,11 @@ mandatory cloud account, paid API, or specialized machine.
   <img src="public/brand/rangabot-primary-512.png" width="320" alt="Rangabot primary mark: a golden-retriever guide shaped around an R monogram">
 </p>
 
-> **Reliability status:** Rangabot is active pre-release software. Core chat,
-> local memory, retrieval, and document creation work today, but capability
-> quality varies with the installed model. The frozen conversation benchmark
-> and its strict acceptance gates are documented in
+> **Reliability status:** Rangabot 1.2.0 is prepared as a public source release; supported
+> signed desktop downloads are still in validation. Core chat, local memory,
+> retrieval, and document creation work today, but capability quality varies
+> with the installed model. The frozen conversation benchmark and its strict
+> acceptance gates are documented in
 > [the Core Conversation Contract](docs/CORE_CONVERSATION_CONTRACT.md); a merged
 > feature is not automatically a mastered capability.
 
@@ -91,16 +92,17 @@ the desktop session's low file-watcher limit. Linux and Windows retain native
 watching. Override with `WATCHPACK_POLLING=false npm run dev` only if your macOS
 file limit has been raised and verified.
 
-**Major update coming soon: Rangabot for Mac.** An unreleased macOS Electron
-development foundation is being validated as an easier Finder-launched path.
-It is not a supported download or release. Local build architecture, privacy
+Rangabot 1.2.0 includes the macOS Electron packaging path used by the current
+internal Finder-launched candidate. The planned public release remains source-only: the
+ad-hoc local build is not a supported download. Architecture, privacy
 boundaries, unsigned limitations, and the distinct verification-only profile are documented in
 [docs/MACOS_DESKTOP_DEVELOPMENT.md](docs/MACOS_DESKTOP_DEVELOPMENT.md).
 
-A separate Mac App Store source candidate uses Electron's sandboxed `mas`
-runtime, an app-private managed model store, and explicit security-scoped access
-for user-selected files. Apple signing, TestFlight installation, App Review,
-and public availability remain **NOT RUN**. See
+A separate Mac App Store path uses Electron's sandboxed `mas` runtime, an
+app-private managed model store, and explicit security-scoped access for
+user-selected files. An earlier 0.1.0 beta was signed and submitted to TestFlight
+Beta App Review; that evidence does not cover 1.2.0. Signing, TestFlight install,
+App Review, and public availability of the exact 1.2.0 package remain **NOT RUN**. See
 [docs/MAC_APP_STORE_DISTRIBUTION.md](docs/MAC_APP_STORE_DISTRIBUTION.md).
 
 Experienced users can copy `.env.example` to `.env.local` and use the manual
@@ -164,20 +166,20 @@ model server.
 Conversation data stays in `data/rangabot.db` on this computer. The database and
 its journal files are excluded from Git.
 
-### Unreleased candidate: Local Response Feedback Pulse
+### Version 1.2 source capability: Local Response Feedback Pulse
 
-The current local candidate adds **Helpful** and **Needs improvement** controls
+Eligible exact desktop builds add **Helpful** and **Needs improvement** controls
 only to completed, lifecycle-managed assistant responses. A selection can be
 changed or cleared, is stored in the private conversation database, and never
 changes the answer or triggers model training, regeneration, telemetry, or a
 third-party request. Legacy/imported/demo/failed/cancelled responses and builds
 without an exact manifest-bound identity remain ineligible.
 
-The candidate also provides an explicit local `npm run feedback:export` seam
+Version 1.2 also provides an explicit local `npm run feedback:export` seam
 for a sanitized, build/day-bound `response_feedback_daily` aggregate. It never
 writes a Control Center database and never exports a turn ID or conversation
-content. This behavior is unreleased and must not be presented as shipped until
-the candidate is independently verified and merged. See
+content. The feature is part of the 1.2 source release, but the controls remain
+disabled unless the running package carries an exact eligible build identity. See
 [docs/RESPONSE_FEEDBACK.md](docs/RESPONSE_FEEDBACK.md) for the storage,
 provenance, exchange, and status contract.
 

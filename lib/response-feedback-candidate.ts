@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
 import candidateManifest from "../config/response-feedback-candidate.json" with { type: "json" };
+import packageMetadata from "../package.json" with { type: "json" };
 import {
   desktopRuntimeEvidenceFromResourceRoot,
   inspectDesktopArtifact,
@@ -57,6 +58,10 @@ export type ResponseFeedbackCandidateInspection = {
   sourceVersion: string | null;
 };
 
+export type RuntimeResponseFeedbackCandidateInspection = ResponseFeedbackCandidateInspection & {
+  productVersion: string | null;
+};
+
 export type KnownResponseFeedbackCandidate = {
   state: "known";
   candidateBuildId: string;
@@ -71,6 +76,9 @@ const sha256Pattern = /^[0-9a-f]{64}$/;
 const gitCommitPattern = /^[0-9a-f]{40}$/;
 const sourceVersionPattern = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
 const buildPattern = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
+const runtimeProductVersion = sourceVersionPattern.test(packageMetadata.version)
+  ? packageMetadata.version
+  : null;
 
 function pathIsSafe(path: string) {
   return Boolean(path)
@@ -409,13 +417,22 @@ export function responseFeedbackCandidateEnvironment(
 
 let productionRuntimeCandidate: Readonly<KnownResponseFeedbackCandidate> | undefined;
 
-export function getRuntimeResponseFeedbackCandidate(): ResponseFeedbackCandidateInspection {
+function runtimeCandidateInspection(
+  candidate: ResponseFeedbackCandidateInspection,
+  productVersion: string | null = runtimeProductVersion,
+): RuntimeResponseFeedbackCandidateInspection {
+  return { ...candidate, productVersion };
+}
+
+export function getRuntimeResponseFeedbackCandidate(): RuntimeResponseFeedbackCandidateInspection {
   if (process.env.RANGABOT_DESKTOP === "1") {
     try {
       const manifestPath = process.env.RANGABOT_DESKTOP_MANIFEST_PATH;
       const artifactRoot = process.env.RANGABOT_DESKTOP_ARTIFACT_ROOT;
       const expectedManifestPath = runtimeResourcePath("desktop", "manifest.json");
-      if (!manifestPath || resolve(manifestPath) !== expectedManifestPath || !artifactRoot) return emptyInspection("unknown");
+      if (!manifestPath || resolve(manifestPath) !== expectedManifestPath || !artifactRoot) {
+        return runtimeCandidateInspection(emptyInspection("unknown"));
+      }
       const verified = inspectDesktopArtifact({
         resourceRoot: resolve(artifactRoot),
         manifestPath,
@@ -430,12 +447,14 @@ export function getRuntimeResponseFeedbackCandidate(): ResponseFeedbackCandidate
         artifactSha256: verified.artifactSha256,
         sourceVersion: verified.sourceVersion,
       };
-      return inspection;
+      return runtimeCandidateInspection(inspection, verified.productVersion);
     } catch {
-      return emptyInspection("unknown");
+      return runtimeCandidateInspection(emptyInspection("unknown"));
     }
   }
-  if (process.env.NODE_ENV === "production" && productionRuntimeCandidate) return productionRuntimeCandidate;
+  if (process.env.NODE_ENV === "production" && productionRuntimeCandidate) {
+    return runtimeCandidateInspection(productionRuntimeCandidate);
+  }
   const state = process.env.RANGABOT_CANDIDATE_STATE;
   const candidateBuildId = process.env.RANGABOT_CANDIDATE_BUILD_ID;
   const build = process.env.RANGABOT_CANDIDATE_BUILD;
@@ -443,14 +462,18 @@ export function getRuntimeResponseFeedbackCandidate(): ResponseFeedbackCandidate
   const manifestSha256 = process.env.RANGABOT_CANDIDATE_MANIFEST_SHA256;
   const artifactSha256 = process.env.RANGABOT_CANDIDATE_ARTIFACT_SHA256;
   const sourceVersion = process.env.RANGABOT_CANDIDATE_SOURCE_VERSION;
-  if (process.env.NODE_ENV === "production" && !artifactSha256) return emptyInspection("unknown");
+  if (process.env.NODE_ENV === "production" && !artifactSha256) {
+    return runtimeCandidateInspection(emptyInspection("unknown"));
+  }
   if (state !== "known" || !candidateBuildId || !sha256Pattern.test(candidateBuildId)
     || !build || !buildPattern.test(build) || !baseCommit || !gitCommitPattern.test(baseCommit)
     || !manifestSha256 || !sha256Pattern.test(manifestSha256)
     || (artifactSha256 !== undefined && !sha256Pattern.test(artifactSha256))
-    || !sourceVersion || !sourceVersionPattern.test(sourceVersion)) return emptyInspection(
+    || !sourceVersion || !sourceVersionPattern.test(sourceVersion)) {
+    return runtimeCandidateInspection(emptyInspection(
       state === "dirty" || state === "mixed" || state === "unknown" ? state : "unknown",
-    );
+    ));
+  }
   if (process.env.NODE_ENV === "production") {
     productionRuntimeCandidate = Object.freeze({
       state: "known",
@@ -461,7 +484,7 @@ export function getRuntimeResponseFeedbackCandidate(): ResponseFeedbackCandidate
       artifactSha256: artifactSha256 ?? null,
       sourceVersion,
     });
-    return productionRuntimeCandidate;
+    return runtimeCandidateInspection(productionRuntimeCandidate);
   }
   const verified = inspectResponseFeedbackCandidate({
     requireBuildArtifact: Boolean(artifactSha256),
@@ -469,8 +492,10 @@ export function getRuntimeResponseFeedbackCandidate(): ResponseFeedbackCandidate
   if (verified.state !== "known" || verified.candidateBuildId !== candidateBuildId || verified.build !== build
     || verified.baseCommit !== baseCommit || verified.manifestSha256 !== manifestSha256
     || verified.artifactSha256 !== (artifactSha256 ?? null)
-    || verified.sourceVersion !== sourceVersion) return emptyInspection(verified.state === "known" ? "mixed" : verified.state);
-  return verified;
+    || verified.sourceVersion !== sourceVersion) {
+    return runtimeCandidateInspection(emptyInspection(verified.state === "known" ? "mixed" : verified.state));
+  }
+  return runtimeCandidateInspection(verified);
 }
 
 export function responseFeedbackCandidateManifestForTests() {

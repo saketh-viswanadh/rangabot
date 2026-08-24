@@ -38,6 +38,18 @@ function assertMacOSInfoPlistPolicy(plist) {
   }
 }
 
+function assertMacOSInfoPlistProductVersion(plist, productVersion) {
+  if (typeof productVersion !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/u.test(productVersion)) {
+    throw new Error("The expected macOS product version is invalid.");
+  }
+  if (plist.CFBundleShortVersionString !== productVersion) {
+    throw new Error("Packaged macOS CFBundleShortVersionString does not match the desktop product version.");
+  }
+  if (plist.CFBundleVersion !== productVersion) {
+    throw new Error("Packaged macOS CFBundleVersion does not match the desktop product version.");
+  }
+}
+
 function removePlistKey(plistPath, key) {
   execFileSync("/usr/bin/plutil", ["-remove", key, plistPath], { stdio: "pipe" });
 }
@@ -91,6 +103,7 @@ function hardenPackagedMacOSInfoPlist(outputPath) {
 module.exports = {
   PROHIBITED_USAGE_DESCRIPTION_KEYS,
   assertMacOSInfoPlistPolicy,
+  assertMacOSInfoPlistProductVersion,
   hardenMacOSInfoPlist,
   hardenPackagedMacOSInfoPlist,
   packagedInfoPlistPath,

@@ -2,7 +2,7 @@ import { lstatSync, mkdirSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 
 export const WINDOWS_INTERNAL_MSIX_PACKAGE_NAME = "RangaBot.InternalCandidate" as const;
-export const WINDOWS_INTERNAL_MSIX_PACKAGE_VERSION = "0.1.0.0" as const;
+export const WINDOWS_INTERNAL_MSIX_PACKAGE_VERSION = "1.2.0.0" as const;
 export const WINDOWS_INTERNAL_MSIX_PUBLISHER_ID = "d8tfa9dph86fg" as const;
 export const WINDOWS_INTERNAL_MSIX_PACKAGE_FAMILY_NAME =
   `${WINDOWS_INTERNAL_MSIX_PACKAGE_NAME}_${WINDOWS_INTERNAL_MSIX_PUBLISHER_ID}` as const;

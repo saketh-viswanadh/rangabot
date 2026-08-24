@@ -9,11 +9,13 @@ const require = createRequire(import.meta.url);
 const {
   PROHIBITED_USAGE_DESCRIPTION_KEYS,
   assertMacOSInfoPlistPolicy,
+  assertMacOSInfoPlistProductVersion,
   hardenPackagedMacOSInfoPlist,
   readMacOSInfoPlist,
 } = require("../desktop/electron/macos-plist-policy.cjs") as {
   PROHIBITED_USAGE_DESCRIPTION_KEYS: readonly string[];
   assertMacOSInfoPlistPolicy(value: Record<string, unknown>): void;
+  assertMacOSInfoPlistProductVersion(value: Record<string, unknown>, productVersion: string): void;
   hardenPackagedMacOSInfoPlist(outputPath: string): Record<string, unknown>;
   readMacOSInfoPlist(plistPath: string): Record<string, unknown>;
 };
@@ -39,12 +41,30 @@ test("macOS plist policy rejects inherited broad transport and unused permission
   }));
 });
 
+test("macOS plist product identity must match the bound package version", () => {
+  const plist = {
+    CFBundleShortVersionString: "1.2.0",
+    CFBundleVersion: "1.2.0",
+  };
+  assert.doesNotThrow(() => assertMacOSInfoPlistProductVersion(plist, "1.2.0"));
+  assert.throws(
+    () => assertMacOSInfoPlistProductVersion({ ...plist, CFBundleShortVersionString: "0.1.0" }, "1.2.0"),
+    /CFBundleShortVersionString/,
+  );
+  assert.throws(
+    () => assertMacOSInfoPlistProductVersion({ ...plist, CFBundleVersion: "0.1.0" }, "1.2.0"),
+    /CFBundleVersion/,
+  );
+});
+
 test("Forge hardens the final plist before artifact finalization", () => {
   const forgeSource = readFileSync(join(projectRoot, "forge.config.cjs"), "utf8");
+  const finalizerSource = readFileSync(join(projectRoot, "scripts", "finalize-desktop-package.ts"), "utf8");
   const hardeningIndex = forgeSource.indexOf("hardenPackagedMacOSInfoPlist(outputPath)");
   const finalizerIndex = forgeSource.indexOf("scripts\", \"finalize-desktop-package.ts");
   assert.ok(hardeningIndex >= 0, "Forge must invoke final-package plist hardening");
   assert.ok(finalizerIndex > hardeningIndex, "plist hardening must run before artifact finalization");
+  assert.match(finalizerSource, /assertMacOSInfoPlistProductVersion\([\s\S]*?staged\.productVersion\)/u);
 });
 
 test("final-package plist hardening removes only the inherited broad declarations", {

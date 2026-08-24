@@ -6,7 +6,24 @@ Do not open a public issue for vulnerabilities, leaked private content, or
 credentials. Use GitHub's private vulnerability reporting for this repository.
 Include the affected version, reproduction steps, and potential privacy impact.
 
-Until the first stable release, security fixes target the latest `main` branch.
+## Supported versions
+
+| Version | Supported |
+| --- | --- |
+| 1.2.x | Yes |
+| Earlier source releases | No |
+
+Security fixes land on the latest `main` branch and are included in supported
+source releases. Signed desktop distribution has a separate acceptance gate;
+the source-version table does not claim that a platform package is supported.
+
+The 1.2.0 release gate reports zero production dependency advisories with
+`npm audit --omit=dev`. The Electron Forge development packaging chain still
+contains upstream transitive advisories in archive, temporary-file, and image
+tooling. The latest stable Forge release does not currently provide a clean
+non-breaking resolution, so these findings remain disclosed and tracked rather
+than hidden by an unsafe forced downgrade. Build only governed source and do
+not feed untrusted archives or image assets to the development toolchain.
 
 ## Rangabot's privacy boundary
 

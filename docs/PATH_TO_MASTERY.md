@@ -854,9 +854,9 @@ Ship reproducible versions whose documentation, capabilities, security, and limi
 | Acceptance criterion | Assessment | Merged evidence | Audit note |
 |---|---:|---|---|
 | At least one tagged public release exists | Verified | [#17](https://github.com/saketh-viswanadh/rangabot/pull/17) | — |
-| Latest release contains the current verified capabilities | Failed | [#63](https://github.com/saketh-viswanadh/rangabot/pull/63) | v0.1.0 trails current main. |
+| Latest release contains the current verified capabilities | Failed | [#63](https://github.com/saketh-viswanadh/rangabot/pull/63) | The 1.2.0 source release is prepared here; this criterion stays failed until the exact public tag is published and independently reconciled. |
 | Changelog and release notes distinguish product work from private data | Verified | [#64](https://github.com/saketh-viswanadh/rangabot/pull/64) [#93](https://github.com/saketh-viswanadh/rangabot/pull/93) | — |
-| Production dependencies, privacy scan, build, and release evidence pass on the exact candidate | Verified | [#93](https://github.com/saketh-viswanadh/rangabot/pull/93) [#100](https://github.com/saketh-viswanadh/rangabot/pull/100) | PR #100 passed dependency, privacy, build, and required Ubuntu/Windows validation. This criterion does not represent core-conversation or blind-human quality; a current tagged public release remains blocked separately by release-management-2. |
+| Production dependencies, privacy scan, build, and release evidence pass on the exact candidate | Verified | [#93](https://github.com/saketh-viswanadh/rangabot/pull/93) [#100](https://github.com/saketh-viswanadh/rangabot/pull/100) | PR #100 passed dependency, privacy, build, and required Ubuntu/Windows validation. This criterion does not represent core-conversation or blind-human quality; an exact tagged 1.2.0 source release and independent reconciliation remain separate gates. |
 
 <a id="public-roadmap"></a>
 ### Charter, mastery & community

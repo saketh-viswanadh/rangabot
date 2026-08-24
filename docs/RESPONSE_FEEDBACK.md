@@ -1,6 +1,7 @@
-# Local Response Feedback Pulse (unreleased candidate)
+# Local Response Feedback Pulse
 
-Status: **implemented locally, not independently verified, not released**.
+Status: **included in the 1.2.0 source release; exact packaged eligibility is
+still candidate-bound and is not a signed-desktop release claim**.
 
 ## User contract
 

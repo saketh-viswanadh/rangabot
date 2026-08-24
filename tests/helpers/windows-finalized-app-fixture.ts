@@ -44,7 +44,7 @@ function windowsNativeModules(): DesktopNativeModuleVersion[] {
   ];
 }
 
-export function createSyntheticFinalizedWindowsApplication(root: string) {
+export function createSyntheticFinalizedWindowsApplication(root: string, productVersion = "1.2.0") {
   const appRoot = join(root, "RangaBot-win32-x64");
   const resourceRoot = join(appRoot, "resources");
   const manifestRelativePath = "rangabot-resources/desktop/manifest.json";
@@ -58,6 +58,7 @@ export function createSyntheticFinalizedWindowsApplication(root: string) {
   writeFixtureFile(resourceRoot, "app.asar.unpacked/node_modules/@duckdb/node-bindings-win32-x64/duckdb.dll", syntheticPeX64());
   writeFixtureFile(resourceRoot, "app.asar.unpacked/node_modules/sqlite-vec-windows-x64/vec0.dll", syntheticPeX64());
   writeFixtureFile(resourceRoot, "rangabot-resources/runtime/ollama/ollama.exe", syntheticPeX64());
+  writeFixtureFile(resourceRoot, "rangabot-resources/package.json", JSON.stringify({ name: "rangabot", version: productVersion }));
   const resources = collectDesktopArtifactFiles(resourceRoot, [manifestRelativePath]);
   const natives = resources.filter((file) => /\.(?:node|dll|exe)$/iu.test(file.path));
   const bundleFiles = collectDesktopBundleFiles(appRoot, "win32");
@@ -73,6 +74,7 @@ export function createSyntheticFinalizedWindowsApplication(root: string) {
     sourceManifestSha256: deriveDesktopSourceManifestSha256(sourceFiles),
     sourceFiles,
     packageLockSha256: sha("2"),
+    productVersion,
     webFeedback: {
       state: "known",
       candidateBuildId: sha("3"),

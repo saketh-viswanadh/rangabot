@@ -23,10 +23,18 @@ import {
 export const PINNED_WINDOWS_SDK_VERSION = "10.0.26100.0";
 export const MAXIMUM_MSIX_BYTES_EXCLUSIVE = 2 * 1024 * 1024 * 1024;
 export const MAXIMUM_MSIX_SOURCE_BYTES_EXCLUSIVE = 25 * 1024 * 1024 * 1024;
-export const APPROVED_MSIX_MANIFEST_SHA256 = "32b49625b51a5185654a3b1f387f9c651a1dd8735a4f14bfa8cb7b4010bf8162";
-export const MSIX_OUTPUT_RELATIVE_PATH = "out/make/msix/win32/x64/RangaBot-win32-x64-0.1.0.msix";
+export const APPROVED_MSIX_MANIFEST_SHA256 = "2b0eede25dc5a1f6eb417401fe11f32f8c6c9b50b76eb0fa7ddfa1f84466dc1e";
+export const MSIX_OUTPUT_RELATIVE_PATH = "out/make/msix/win32/x64/RangaBot-win32-x64-1.2.0.msix";
 export const MSIX_APPLICATION_ROOT_RELATIVE_PATH = "out/RangaBot-win32-x64";
 export const MSIX_DESKTOP_MANIFEST_PACKAGE_PATH = "resources/rangabot-resources/desktop/manifest.json";
+
+export function msixIdentityVersionForProductVersion(productVersion: string) {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(productVersion);
+  if (!match || match.slice(1).some((part) => Number(part) > 65_535)) {
+    throw new Error("The desktop product version cannot be represented by the four-part MSIX identity.");
+  }
+  return `${match[1]}.${match[2]}.${match[3]}.0`;
+}
 
 const expectedAssetEvidence = Object.freeze({
   "Assets/StoreLogo.png": Object.freeze({ bytes: 4_704, sha256: "58f9fe0de43915b127c1fec9a32257457f93e55cede415c6312500c1acea9740" }),
@@ -494,7 +502,7 @@ export function readExpectedMsixManifestIdentity(manifestPath: string) {
     || count(/<Capabilities\b/gu) !== 1 || count(/<uap:VisualElements\b/gu) !== 1
     || identity[1] !== "RangaBot.InternalCandidate"
     || identity[2] !== "CN=RangaBot Internal Candidate, OID.2.25.311729368913984317654407730594956997722=1"
-    || identity[3] !== "0.1.0.0" || identity[4] !== "x64"
+    || identity[3] !== "1.2.0.0" || identity[4] !== "x64"
     || application[1] !== "RangaBotInternalCandidate" || application[2] !== "RangaBot.exe"
     || application[3] !== "Windows.FullTrustApplication"
     || dependency[1] !== "Windows.Desktop" || dependency[2] !== "10.0.17763.0"
@@ -537,6 +545,12 @@ export function assertFinalizedWindowsApplicationIdentity(input: Readonly<{
     || (input.expectedSourceSha !== null && input.expectedSourceSha !== input.checkedOutCommit)) {
     throw new Error("Finalized Windows application does not bind the exact unsigned win32/x64 source.");
   }
+  const packageManifestSource = input.inventory.find((entry) => entry.packagePath === "AppxManifest.xml");
+  if (!packageManifestSource) throw new Error("Finalized Windows application is missing its MSIX package manifest.");
+  const packageIdentity = readExpectedMsixManifestIdentity(packageManifestSource.sourcePath);
+  if (packageIdentity.version !== msixIdentityVersionForProductVersion(manifest.productVersion)) {
+    throw new Error("MSIX package identity does not match the bound desktop product version.");
+  }
   const verified = inspectDesktopArtifact({
     resourceRoot: resolve(input.applicationRoot, "resources"),
     manifestPath: manifestSource.sourcePath,
@@ -556,6 +570,8 @@ export function assertFinalizedWindowsApplicationIdentity(input: Readonly<{
   assertStableFileUnchanged(manifestFile, "Finalized Windows desktop provenance manifest");
   return Object.freeze({
     desktopArtifactId: manifest.desktopArtifactId,
+    productVersion: manifest.productVersion,
+    msixIdentityVersion: packageIdentity.version,
     sourceCommit: manifest.sourceCommit,
     manifestBytes: manifestFile.bytes,
     manifestSha256: manifestFile.sha256,

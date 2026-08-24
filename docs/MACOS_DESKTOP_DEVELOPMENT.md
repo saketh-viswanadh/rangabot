@@ -1,8 +1,9 @@
 # macOS desktop development foundation
 
-Status: unreleased development work. The commands here produce unsigned,
-ad-hoc-signed local artifacts only. They do not create a released build, prove
-notarization or Gatekeeper distribution, or update `company/state/current_build.json`.
+Status: the development and packaging path is included in the 1.2.0 source
+release. The commands here produce unsigned or ad-hoc-signed local artifacts
+only. They do not create a supported binary release, prove notarization or
+Gatekeeper distribution, or update `company/state/current_build.json`.
 
 ## Architecture and security boundary
 
@@ -123,7 +124,8 @@ dedicated clean macOS account or VM; this repository does not create one.
 ## Identity and packaging evidence
 
 The final per-architecture manifest binds the baseline commit, complete source
-snapshot, dependency lock, old web-feedback identity, launch profile,
+snapshot, dependency lock, product version from `package.json`, historical
+web-feedback identity, launch profile,
 Electron/embedded Node/Next/native versions, fuse policy, full `Contents`
 bundle inventory, complete `Resources` inventory and every native payload.
 Canonical JSON recursively byte-sorts keys; file inventories use byte-sorted
@@ -131,8 +133,9 @@ POSIX-relative paths, byte lengths and lowercase SHA-256 digests. `generatedAt`
 is evidence metadata and is excluded from the derived artifact ID.
 
 After Forge packaging, finalization removes inherited broad ATS and unused
-camera, microphone, audio and Bluetooth plist declarations; directly reads and
-compares all nine named Electron fuses; restores an ad-hoc signature; hashes the
+camera, microphone, audio and Bluetooth plist declarations; requires both
+macOS bundle version fields to match the bound product version; directly reads
+and compares all nine named Electron fuses; restores an ad-hoc signature; hashes the
 post-mutation bundle/resources/native payloads; writes the manifest; seals the
 outer app; then rechecks the signature, fuse wire and exact identity. Any
 mismatch blocks the artifact.

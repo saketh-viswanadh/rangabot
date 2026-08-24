@@ -254,10 +254,10 @@ test("internal MSIX identity and LocalState binding are exact and fail closed on
   assert.match(identity, /Publisher="CN=RangaBot Internal Candidate, OID\.2\.25\.311729368913984317654407730594956997722=1"/);
   assert.equal(WINDOWS_INTERNAL_MSIX_PUBLISHER_ID, "d8tfa9dph86fg");
   assert.equal(WINDOWS_INTERNAL_MSIX_PACKAGE_FAMILY_NAME, "RangaBot.InternalCandidate_d8tfa9dph86fg");
-  assert.equal(WINDOWS_INTERNAL_MSIX_PACKAGE_VERSION, "0.1.0.0");
+  assert.equal(WINDOWS_INTERNAL_MSIX_PACKAGE_VERSION, "1.2.0.0");
   assert.equal(
     WINDOWS_INTERNAL_MSIX_PACKAGE_FULL_NAME,
-    "RangaBot.InternalCandidate_0.1.0.0_x64__d8tfa9dph86fg",
+    "RangaBot.InternalCandidate_1.2.0.0_x64__d8tfa9dph86fg",
   );
   assert.match(identity, new RegExp(`Version="${WINDOWS_INTERNAL_MSIX_PACKAGE_VERSION.replaceAll(".", "\\.")}"`));
 
@@ -319,7 +319,7 @@ test("internal MSIX identity and LocalState binding are exact and fail closed on
       localAppDataPath: fixture.localAppDataPath,
     }), /executable path is unavailable/);
 
-    const wrongInstallRoot = join(fixture.root, "WindowsApps", "Wrong.Package_0.1.0.0_x64__d8tfa9dph86fg");
+    const wrongInstallRoot = join(fixture.root, "WindowsApps", "Wrong.Package_1.2.0.0_x64__d8tfa9dph86fg");
     const wrongExecPath = join(wrongInstallRoot, "RangaBot.exe");
     mkdirSync(wrongInstallRoot, { recursive: true });
     writeFileSync(wrongExecPath, "wrong package identity\n");
