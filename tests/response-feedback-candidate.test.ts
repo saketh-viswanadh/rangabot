@@ -120,6 +120,7 @@ test("runtime product version is independent from historical feedback evidence",
     Object.assign(process.env, responseFeedbackCandidateEnvironment({}));
     const inspection = getRuntimeResponseFeedbackCandidate();
     assert.equal(inspection.productVersion, packageMetadata.version);
+    assert.equal(inspection.macBuildNumber, null);
     if (inspection.state === "known") {
       assert.equal(inspection.sourceVersion, responseFeedbackCandidateManifestForTests()?.sourceVersion);
     }
@@ -145,6 +146,7 @@ test("build and runtime wiring fail closed around the exact candidate", () => {
   assert.match(buildScript, /writeResponseFeedbackBuildArtifactManifest/);
   assert.match(runtimeRoute, /sourceVersion: candidate\.sourceVersion/);
   assert.match(runtimeRoute, /productVersion: candidate\.productVersion/);
+  assert.match(runtimeRoute, /macBuildNumber: candidate\.macBuildNumber/);
   assert.doesNotMatch(runtimeRoute, /files|path/);
 });
 

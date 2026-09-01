@@ -5,6 +5,9 @@ This is metadata preparation, not a published listing.
 - **Name:** RangaBot
 - **Subtitle:** Private local AI on your Mac
 - **Bundle ID:** `com.rangabot.desktop`
+- **Version:** `1.2.0`
+- **Initial build:** `1.2.0` (must be confirmed above the highest prior Mac
+  build before upload)
 - **SKU:** `rangabot-macos-001`
 - **Primary category:** Productivity
 - **Price:** Free

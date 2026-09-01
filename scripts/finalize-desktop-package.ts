@@ -29,12 +29,30 @@ import {
   desktopFuseBinaryPath,
   inspectDesktopArtifact,
   parseDesktopArtifactManifest,
-  type DesktopArtifactArch,
   type DesktopArtifactFile,
   type DesktopArtifactTarget,
 } from "../lib/desktop-artifact-identity.ts";
 import { isForbiddenDesktopPrivateResourcePath } from "../lib/desktop-private-payload-policy.ts";
+import { reconcileCopiedDesktopResources } from "../lib/desktop-staged-resource-integrity.ts";
+import {
+  assertExactPlistDictionary,
+  buildPlistDictionary,
+  decodeProvisioningProfileBytes,
+  expectedMacAppStoreChildEntitlements,
+  expectedMacAppStoreMainEntitlements,
+  parsePlistDictionary,
+  readCodeSignatureEntitlements,
+  readPlistDictionary,
+  resolveMacSigningCertificate,
+  validateMacAppStoreProvisioningProfile,
+  verifyCompleteMacAppStoreCodeSignature,
+  type MacAppStoreSignatureMode,
+} from "../lib/mac-app-store-signing-policy.ts";
 import { writeSafeAtomicJsonEvidence } from "../lib/safe-atomic-json-output.ts";
+import {
+  auditOllamaArm64RuntimePayload,
+  inspectOllamaRuntimeLegalNotice,
+} from "../lib/ollama-runtime-legal.ts";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 const require = createRequire(import.meta.url);
@@ -44,7 +62,7 @@ const { assertWindowsPeCertificateTableAbsent } = require("../desktop/electron/w
   }>;
 };
 const { assertMacOSInfoPlistProductVersion, readMacOSInfoPlist } = require("../desktop/electron/macos-plist-policy.cjs") as {
-  assertMacOSInfoPlistProductVersion(plist: Record<string, unknown>, productVersion: string): void;
+  assertMacOSInfoPlistProductVersion(plist: Record<string, unknown>, productVersion: string, macBuildNumber: string): void;
   readMacOSInfoPlist(path: string): Record<string, unknown>;
 };
 
@@ -54,9 +72,10 @@ function parseArguments(arguments_: string[]) {
   const platformValues = arguments_.filter((value) => value.startsWith("--platform=")).map((value) => value.slice(11));
   if (archValues.length !== 1 || (archValues[0] !== "arm64" && archValues[0] !== "x64")
     || platformValues.length !== 1 || (platformValues[0] !== "darwin" && platformValues[0] !== "win32")
+    || (platformValues[0] === "darwin" && archValues[0] !== "arm64")
     || (platformValues[0] === "win32" && archValues[0] !== "x64")
     || outputs.length === 0 || outputs.length + 2 !== arguments_.length) {
-    throw new Error("Usage: finalize-desktop-package.ts --platform=darwin|win32 --arch=arm64|x64 --output=<Forge output> [...]");
+    throw new Error("Desktop finalization supports exactly macOS arm64 or Windows x64.");
   }
   return { target: { platform: platformValues[0], arch: archValues[0] } as DesktopArtifactTarget, outputs };
 }
@@ -87,6 +106,11 @@ function assertRequiredResources(files: readonly DesktopArtifactFile[], platform
     "rangabot-resources/server.js",
     "rangabot-resources/.next/BUILD_ID",
     "rangabot-resources/lib/sql-runtime-worker.cjs",
+    "rangabot-resources/LICENSE",
+    "rangabot-resources/DEPENDENCY_NOTICES.md",
+    "rangabot-resources/THIRD_PARTY_NOTICES.md",
+    "rangabot-resources/ELECTRON_LICENSE",
+    "rangabot-resources/ELECTRON_CHROMIUM_LICENSES.html",
     "rangabot-resources/package.json",
     "rangabot-resources/public/brand/rangabot-primary-64.png",
     "rangabot-resources/public/brand/rangabot-primary-192.png",
@@ -99,8 +123,12 @@ function assertRequiredResources(files: readonly DesktopArtifactFile[], platform
     if (!paths.has(path)) throw new Error(`Final desktop package is missing ${path}.`);
   }
   if (platform === "win32") {
-    for (const path of ["rangabot-resources/runtime/ollama/ollama.exe", "rangabot-resources/THIRD_PARTY_NOTICES.md"]) {
+    for (const path of ["rangabot-resources/runtime/ollama/ollama.exe"]) {
       if (!paths.has(path)) throw new Error(`Final Windows desktop package is missing ${path}.`);
+    }
+  } else if (paths.has("rangabot-resources/runtime/ollama/ollama")) {
+    if (!paths.has("rangabot-resources/OLLAMA_RUNTIME_NOTICES.md")) {
+      throw new Error("Final macOS desktop package is missing rangabot-resources/OLLAMA_RUNTIME_NOTICES.md.");
     }
   }
   if (![...paths].some((path) => path.startsWith("rangabot-resources/.next/static/"))) {
@@ -198,10 +226,9 @@ function assertPeX64(path: string) {
   }
 }
 
-function assertMachOArchitecture(path: string, arch: DesktopArtifactArch) {
+function assertMachOArm64(path: string) {
   const reported = execFileSync("/usr/bin/lipo", ["-archs", path], { encoding: "utf8" }).trim().split(/\s+/);
-  const expected = arch === "x64" ? "x86_64" : "arm64";
-  if (!reported.includes(expected)) throw new Error(`Native payload does not contain required ${arch} architecture: ${path}.`);
+  if (!reported.includes("arm64")) throw new Error(`Native payload does not contain required arm64 architecture: ${path}.`);
   if (extname(path) === "" && reported.length !== 1) throw new Error("The packaged Electron executable must be architecture-specific, not universal.");
 }
 
@@ -271,6 +298,7 @@ async function finalizeWindows(output: string, target: DesktopArtifactTarget) {
   const relativeManifest = manifestRelativePath(artifactRoot, manifestPath);
   const resources = collectDesktopArtifactFiles(artifactRoot, [relativeManifest]);
   assertRequiredResources(resources, "win32");
+  reconcileCopiedDesktopResources(staged.resources, resources);
   const natives = resources.filter((file) => /\.(?:node|dll|so|dylib|exe)$/i.test(file.path));
   if (natives.some((file) => /\.(?:so|dylib)$/i.test(file.path))) {
     throw new Error("The Windows resource payload contains a foreign native library.");
@@ -284,6 +312,8 @@ async function finalizeWindows(output: string, target: DesktopArtifactTarget) {
   for (const file of bundleFiles.filter((entry) => /\.(?:exe|dll)$/i.test(entry.path))) {
     assertPeX64(join(appPath, ...file.path.split("/")));
   }
+  const confirmedResources = collectDesktopArtifactFiles(artifactRoot, [relativeManifest]);
+  reconcileCopiedDesktopResources(staged.resources, confirmedResources);
   const manifest = createDesktopArtifactManifest({
     sourceBaseCommit: staged.sourceBaseCommit,
     sourceBaselineCommit: staged.sourceBaselineCommit,
@@ -293,6 +323,7 @@ async function finalizeWindows(output: string, target: DesktopArtifactTarget) {
     sourceFiles: staged.sourceFiles,
     packageLockSha256: staged.packageLockSha256,
     productVersion: staged.productVersion,
+    macBuildNumber: staged.macBuildNumber,
     webFeedback: staged.webFeedback,
     launchProfile: staged.launchProfile,
     runtimeVersions: staged.runtimeVersions,
@@ -307,8 +338,8 @@ async function finalizeWindows(output: string, target: DesktopArtifactTarget) {
       signature: { mode: "unsigned-candidate", postFuseMutation: true, deepStrictVerified: false },
     },
     bundleFiles,
-    resources,
-    natives,
+    resources: confirmedResources,
+    natives: confirmedResources.filter((file) => /\.(?:node|dll|so|dylib|exe)$/i.test(file.path)),
     generatedAt: new Date().toISOString(),
   });
   writeManifestAtomically(manifestPath, manifest, "win32");
@@ -339,8 +370,6 @@ async function finalizeWindows(output: string, target: DesktopArtifactTarget) {
   };
 }
 
-type MacAppStoreSignatureMode = "app-store-development" | "app-store-distribution";
-
 function requiredMacSigningValue(name: string, pattern: RegExp) {
   const value = process.env[name];
   if (!value || value.includes(String.fromCharCode(0)) || !pattern.test(value)) {
@@ -356,13 +385,14 @@ function macAppStoreSigningConfiguration(mode: MacAppStoreSignatureMode) {
   }
   const profile = requiredMacSigningValue("RANGABOT_MAC_PROVISIONING_PROFILE", /^\/[^\r\n]{1,2047}$/);
   const profileStatus = lstatSync(profile);
-  if (profileStatus.isSymbolicLink() || !profileStatus.isFile()) {
+  if (profileStatus.isSymbolicLink() || !profileStatus.isFile()
+    || profileStatus.size < 1_024 || profileStatus.size > 1024 * 1024) {
     throw new Error("The Mac App Store provisioning profile must be a real file.");
   }
   return Object.freeze({
     mode,
     type: mode === "app-store-development" ? "development" as const : "distribution" as const,
-    identity: requiredMacSigningValue("RANGABOT_MAC_APP_SIGNING_IDENTITY", /^[^\r\n]{3,256}$/),
+    identityInput: requiredMacSigningValue("RANGABOT_MAC_APP_SIGNING_IDENTITY", /^[^\r\n]{3,256}$/),
     teamId: requiredMacSigningValue("RANGABOT_MAC_TEAM_ID", /^[A-Z0-9]{10}$/),
     profile: realpathSync(profile),
     entitlements: resolve(projectRoot, "desktop", "mas", "entitlements.plist"),
@@ -371,40 +401,75 @@ function macAppStoreSigningConfiguration(mode: MacAppStoreSignatureMode) {
 }
 
 function displayEntitlements(appPath: string) {
-  const result = spawnSync("/usr/bin/codesign", ["--display", "--entitlements", ":-", appPath], {
-    encoding: "utf8",
-    maxBuffer: 4 * 1024 * 1024,
-  });
-  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-  const xmlStart = output.indexOf("<?xml");
-  if (result.error) throw result.error;
-  if (result.status !== 0 || result.signal || xmlStart < 0 || !output.includes("com.apple.security.app-sandbox")) {
+  const entitlements = readCodeSignatureEntitlements(appPath);
+  if (entitlements["com.apple.security.app-sandbox"] !== true) {
     throw new Error("The Mac App Store application entitlements could not be read.");
   }
-  return output.slice(xmlStart);
+  return buildPlistDictionary(entitlements);
 }
 
 async function signEntireAppForMacAppStore(appPath: string, mode: MacAppStoreSignatureMode) {
   const config = macAppStoreSigningConfiguration(mode);
-  await signAsync({
-    app: appPath,
-    platform: "mas",
-    type: config.type,
-    identity: config.identity,
-    provisioningProfile: config.profile,
-    preAutoEntitlements: true,
-    preEmbedProvisioningProfile: true,
-    strictVerify: true,
-    optionsForFile: (filePath) => ({
-      entitlements: filePath.includes(".app/") ? config.childEntitlements : config.entitlements,
-    }),
+  const profileBytes = readFileSync(config.profile);
+  const certificate = resolveMacSigningCertificate(config.identityInput);
+  const validatedProfile = validateMacAppStoreProvisioningProfile({
+    profile: decodeProvisioningProfileBytes(profileBytes),
+    certificate,
+    mode,
+    teamId: config.teamId,
   });
-  return Object.freeze({ ...config, effectiveEntitlements: displayEntitlements(appPath) });
+  const mainEntitlements = expectedMacAppStoreMainEntitlements(
+    readPlistDictionary(config.entitlements, "Mac App Store main entitlement template"),
+    validatedProfile,
+    config.teamId,
+  );
+  const childEntitlements = expectedMacAppStoreChildEntitlements(
+    readPlistDictionary(config.childEntitlements, "Mac App Store child entitlement template"),
+  );
+  const temporaryRoot = mkdtempSync(resolve(projectRoot, "desktop", "out", "mas-signing-"));
+  try {
+    const mainEntitlementsPath = join(temporaryRoot, "main-entitlements.plist");
+    writeFileSync(mainEntitlementsPath, buildPlistDictionary(mainEntitlements), { mode: 0o600, flag: "wx" });
+    const embeddedProfilePath = join(appPath, "Contents", "embedded.provisionprofile");
+    if (existsSync(embeddedProfilePath)) {
+      throw new Error("The unsigned app unexpectedly contains an embedded provisioning profile.");
+    }
+    writeFileSync(embeddedProfilePath, profileBytes, { mode: 0o444, flag: "wx" });
+    await signAsync({
+      app: appPath,
+      platform: "mas",
+      type: config.type,
+      identity: certificate.sha1,
+      // The provisioning profile is an Apple-signed embedded resource, not
+      // nested executable code. The outer app signature still seals it.
+      ignore: (filePath) => filePath === embeddedProfilePath,
+      preAutoEntitlements: false,
+      preEmbedProvisioningProfile: false,
+      strictVerify: true,
+      optionsForFile: (filePath) => ({
+        entitlements: filePath === appPath ? mainEntitlementsPath : config.childEntitlements,
+      }),
+    });
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+  const effectiveEntitlements = displayEntitlements(appPath);
+  const actualMainEntitlements = parsePlistDictionary(effectiveEntitlements, "Signed application entitlements");
+  assertExactPlistDictionary(actualMainEntitlements, mainEntitlements, "Signed application entitlements");
+  return Object.freeze({
+    ...config,
+    identity: certificate.sha1,
+    certificate,
+    mainEntitlements,
+    childEntitlements,
+    effectiveEntitlements,
+    profileBytes: Buffer.from(profileBytes),
+  });
 }
 
 function sealOuterAppForMacAppStore(
   appPath: string,
-  config: ReturnType<typeof macAppStoreSigningConfiguration> & { effectiveEntitlements: string },
+  config: Awaited<ReturnType<typeof signEntireAppForMacAppStore>>,
 ) {
   const temporaryRoot = mkdtempSync(resolve(projectRoot, "desktop", "out", "mas-entitlements-"));
   try {
@@ -424,35 +489,34 @@ function sealOuterAppForMacAppStore(
 
 function verifyFinalMacAppStoreSignature(
   appPath: string,
-  config: ReturnType<typeof macAppStoreSigningConfiguration>,
+  config: Awaited<ReturnType<typeof signEntireAppForMacAppStore>>,
 ) {
-  execFileSync("/usr/bin/codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath], { stdio: "inherit" });
-  const details = spawnSync("/usr/bin/codesign", ["--display", "--verbose=4", appPath], { encoding: "utf8" });
-  const output = `${details.stdout ?? ""}\n${details.stderr ?? ""}`;
-  if (details.error) throw details.error;
-  if (details.status !== 0 || details.signal
-    || !output.includes(`Identifier=com.rangabot.desktop`)
-    || !output.includes(`TeamIdentifier=${config.teamId}`)
-    || !output.includes(`Authority=${config.identity}`)
-    || output.includes("Signature=adhoc")) {
-    throw new Error("The final Mac App Store application signature identity is invalid.");
+  const embeddedProfilePath = join(appPath, "Contents", "embedded.provisionprofile");
+  const embeddedProfileStatus = lstatSync(embeddedProfilePath);
+  const embeddedProfileBytes = readFileSync(embeddedProfilePath);
+  if (embeddedProfileStatus.isSymbolicLink() || !embeddedProfileStatus.isFile()
+    || !embeddedProfileBytes.equals(config.profileBytes)) {
+    throw new Error("The final app does not embed the exact validated provisioning profile.");
   }
-  const entitlements = displayEntitlements(appPath);
-  for (const key of [
-    "com.apple.security.app-sandbox",
-    "com.apple.security.files.bookmarks.app-scope",
-    "com.apple.security.files.user-selected.read-write",
-    "com.apple.security.network.client",
-    "com.apple.security.network.server",
-  ]) {
-    if (!new RegExp(`<key>${key.replaceAll(".", "\\.")}</key>\\s*<true\\s*/>`).test(entitlements)) {
-      throw new Error(`The final Mac App Store application is missing entitlement ${key}.`);
-    }
-  }
+  validateMacAppStoreProvisioningProfile({
+    profile: decodeProvisioningProfileBytes(embeddedProfileBytes),
+    certificate: config.certificate,
+    mode: config.mode,
+    teamId: config.teamId,
+  });
+  return verifyCompleteMacAppStoreCodeSignature({
+    appPath,
+    mainExecutablePath: join(appPath, "Contents", "MacOS", basename(appPath, ".app")),
+    teamId: config.teamId,
+    certificate: config.certificate,
+    mainEntitlements: config.mainEntitlements,
+    childEntitlements: config.childEntitlements,
+  });
 }
 
 async function finalize(output: string, target: DesktopArtifactTarget) {
   if (target.platform === "win32") return finalizeWindows(output, target);
+  if (target.arch !== "arm64") throw new Error("Desktop finalization supports exactly macOS arm64 or Windows x64.");
   const { arch } = target;
   const appPath = findApp(output, "darwin");
   const contentsRoot = join(appPath, "Contents");
@@ -461,10 +525,16 @@ async function finalize(output: string, target: DesktopArtifactTarget) {
   const manifestPath = join(runtimeResourceRoot, "desktop", "manifest.json");
   const staged = parseDesktopArtifactManifest(JSON.parse(readFileSync(manifestPath, "utf8")));
   if (!staged || staged.target.platform !== "darwin" || staged.target.arch !== arch) throw new Error("The staged desktop provenance manifest is missing or mismatched.");
-  assertMacOSInfoPlistProductVersion(readMacOSInfoPlist(join(contentsRoot, "Info.plist")), staged.productVersion);
+  if (staged.macBuildNumber === null) throw new Error("The staged macOS artifact is missing its bound build number.");
+  assertMacOSInfoPlistProductVersion(
+    readMacOSInfoPlist(join(contentsRoot, "Info.plist")),
+    staged.productVersion,
+    staged.macBuildNumber,
+  );
   const relativeManifest = manifestRelativePath(artifactRoot, manifestPath);
   const unsignedResources = collectDesktopArtifactFiles(artifactRoot, [relativeManifest]);
   assertRequiredResources(unsignedResources);
+  reconcileCopiedDesktopResources(staged.resources, unsignedResources);
   const unsignedNatives = unsignedResources.filter((file) => /\.(?:node|dylib|so|dll|exe)$/i.test(file.path));
   const wire = await assertFuses(appPath, target);
   const browserSnapshotCompatibility = assertBrowserSnapshotFuseCompatibility(
@@ -472,8 +542,16 @@ async function finalize(output: string, target: DesktopArtifactTarget) {
     wire.inspection.entries[FuseV1Options.LoadBrowserProcessSpecificV8Snapshot].actual as FuseState,
   );
   const executable = join(contentsRoot, "MacOS", basename(appPath, ".app"));
-  assertMachOArchitecture(executable, arch);
-  for (const native of unsignedNatives) assertMachOArchitecture(join(artifactRoot, ...native.path.split("/")), arch);
+  assertMachOArm64(executable);
+  for (const native of unsignedNatives) assertMachOArm64(join(artifactRoot, ...native.path.split("/")));
+
+  const confirmedUnsignedResources = collectDesktopArtifactFiles(artifactRoot, [relativeManifest]);
+  assertRequiredResources(confirmedUnsignedResources);
+  reconcileCopiedDesktopResources(staged.resources, confirmedUnsignedResources);
+  if (confirmedUnsignedResources.some((file) => file.path === "rangabot-resources/runtime/ollama/ollama")) {
+    auditOllamaArm64RuntimePayload(join(runtimeResourceRoot, "runtime", "ollama"));
+    inspectOllamaRuntimeLegalNotice(join(runtimeResourceRoot, "OLLAMA_RUNTIME_NOTICES.md"));
+  }
 
   const stagedSignatureMode = staged.packagingTooling.signature.mode;
   const macAppStore = stagedSignatureMode === "app-store-development" || stagedSignatureMode === "app-store-distribution";
@@ -490,6 +568,9 @@ async function finalize(output: string, target: DesktopArtifactTarget) {
   }
   const resources = collectDesktopArtifactFiles(artifactRoot, [relativeManifest]);
   assertRequiredResources(resources);
+  if (resources.some((file) => file.path === "rangabot-resources/runtime/ollama/ollama")) {
+    inspectOllamaRuntimeLegalNotice(join(runtimeResourceRoot, "OLLAMA_RUNTIME_NOTICES.md"));
+  }
   const natives = resources.filter((file) => /\.(?:node|dylib|so|dll|exe)$/i.test(file.path));
   const bundleFiles = collectDesktopBundleFiles(contentsRoot, "darwin");
   const manifest = createDesktopArtifactManifest({
@@ -501,6 +582,7 @@ async function finalize(output: string, target: DesktopArtifactTarget) {
     sourceFiles: staged.sourceFiles,
     packageLockSha256: staged.packageLockSha256,
     productVersion: staged.productVersion,
+    macBuildNumber: staged.macBuildNumber,
     webFeedback: staged.webFeedback,
     launchProfile: staged.launchProfile,
     runtimeVersions: staged.runtimeVersions,
@@ -585,6 +667,7 @@ for (const output of outputs) {
     profilesBehaviorCommit: result.manifest.sourceBaselineCommit,
     packagingCommit: result.manifest.sourceCommit,
     productVersion: result.manifest.productVersion,
+    macBuildNumber: result.manifest.macBuildNumber,
     fusePolicyName: DESKTOP_FUSE_POLICY_NAME,
     fuseWire: String.fromCharCode(...result.manifest.packagingTooling.fuseWireStates),
     browserSnapshotCompatibility: result.browserSnapshotCompatibility,

@@ -11,6 +11,8 @@ const PROHIBITED_USAGE_DESCRIPTION_KEYS = Object.freeze([
   "NSCameraUsageDescription",
   "NSMicrophoneUsageDescription",
 ]);
+const MAC_BUILD_NUMBER_PATTERN = /^[1-9]\d{0,3}(?:\.(?:0|[1-9]\d?)){0,2}$/u;
+const MAC_MARKETING_VERSION_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u;
 
 function readMacOSInfoPlist(plistPath) {
   const output = execFileSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", plistPath], {
@@ -38,15 +40,26 @@ function assertMacOSInfoPlistPolicy(plist) {
   }
 }
 
-function assertMacOSInfoPlistProductVersion(plist, productVersion) {
-  if (typeof productVersion !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/u.test(productVersion)) {
-    throw new Error("The expected macOS product version is invalid.");
+function assertMacOSBuildNumber(macBuildNumber) {
+  if (typeof macBuildNumber !== "string" || !MAC_BUILD_NUMBER_PATTERN.test(macBuildNumber)) {
+    throw new Error("The expected macOS build number must use one to three bounded numeric components and begin above zero.");
   }
+}
+
+function assertMacOSMarketingVersion(productVersion) {
+  if (typeof productVersion !== "string" || !MAC_MARKETING_VERSION_PATTERN.test(productVersion)) {
+    throw new Error("The expected macOS marketing version must use three numeric components.");
+  }
+}
+
+function assertMacOSInfoPlistProductVersion(plist, productVersion, macBuildNumber) {
+  assertMacOSMarketingVersion(productVersion);
+  assertMacOSBuildNumber(macBuildNumber);
   if (plist.CFBundleShortVersionString !== productVersion) {
     throw new Error("Packaged macOS CFBundleShortVersionString does not match the desktop product version.");
   }
-  if (plist.CFBundleVersion !== productVersion) {
-    throw new Error("Packaged macOS CFBundleVersion does not match the desktop product version.");
+  if (plist.CFBundleVersion !== macBuildNumber) {
+    throw new Error("Packaged macOS CFBundleVersion does not match the bound Mac build number.");
   }
 }
 
@@ -101,7 +114,11 @@ function hardenPackagedMacOSInfoPlist(outputPath) {
 }
 
 module.exports = {
+  MAC_BUILD_NUMBER_PATTERN,
+  MAC_MARKETING_VERSION_PATTERN,
   PROHIBITED_USAGE_DESCRIPTION_KEYS,
+  assertMacOSBuildNumber,
+  assertMacOSMarketingVersion,
   assertMacOSInfoPlistPolicy,
   assertMacOSInfoPlistProductVersion,
   hardenMacOSInfoPlist,

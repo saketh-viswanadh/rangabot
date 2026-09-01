@@ -82,7 +82,7 @@ test("Electron 43 fuse policy disables Node escape hatches and requires ASAR int
     WasmTrapHandlers: true,
   });
   assert.deepEqual(electronFuseOptions("darwin", "arm64"), { resetAdHocDarwinSignature: true });
-  assert.deepEqual(electronFuseOptions("darwin", "x64"), { resetAdHocDarwinSignature: false });
+  assert.throws(() => electronFuseOptions("darwin", "x64"), /arm64 only/);
   assert.deepEqual(electronFuseOptions("win32", "x64"), { resetAdHocDarwinSignature: false });
   const namedStates = new Map<number, FuseState>([
     [FuseV1Options.RunAsNode, FuseState.DISABLE],
@@ -261,6 +261,7 @@ test("tampered launch rejection leaves every path outside the disposable app cop
         artifactSha256: null,
         sourceVersion: null,
         productVersion: null,
+        macBuildNumber: null,
         reason: "resource-mismatch",
         manifest: null,
       };
@@ -290,6 +291,7 @@ test("desktop startup reports a dedicated product-version mismatch before privat
         artifactSha256: null,
         sourceVersion: null,
         productVersion: null,
+        macBuildNumber: null,
         reason: "product-version-mismatch",
         manifest: null,
       };
@@ -300,6 +302,38 @@ test("desktop startup reports a dedicated product-version mismatch before privat
     "A20_RUNTIME_EVIDENCE",
     "A30_ARTIFACT_INSPECTION",
     "A46_PRODUCT_VERSION_MISMATCH",
+  ]);
+  assert.equal(existsSync(join(testFixture.userDataPath, "private-data")), false);
+});
+
+test("desktop startup reports a dedicated Mac build-number mismatch before private runtime mutation", () => {
+  const testFixture = fixture();
+  const stages: string[] = [];
+  assert.throws(() => verifyDesktopResourcesBeforeMutation({
+    resourcesPath: testFixture.resourcesPath,
+    isPackaged: true,
+    reportStage(stage) { stages.push(stage); },
+    verifyArtifact() {
+      return {
+        state: "mixed",
+        candidateBuildId: null,
+        build: null,
+        baseCommit: null,
+        manifestSha256: null,
+        artifactSha256: null,
+        sourceVersion: null,
+        productVersion: null,
+        macBuildNumber: null,
+        reason: "mac-build-number-mismatch",
+        manifest: null,
+      };
+    },
+  }), /mac-build-number-mismatch/);
+  assert.deepEqual(stages, [
+    "A10_RESOURCE_BOUNDARY",
+    "A20_RUNTIME_EVIDENCE",
+    "A30_ARTIFACT_INSPECTION",
+    "A47_MAC_BUILD_NUMBER_MISMATCH",
   ]);
   assert.equal(existsSync(join(testFixture.userDataPath, "private-data")), false);
 });

@@ -4,6 +4,10 @@ import { requireKnownResponseFeedbackCandidate } from "./lib/response-feedback-c
 const development = process.env.NODE_ENV !== "production";
 const desktopStagingBuildId = process.env.RANGABOT_DESKTOP_STAGING_BUILD_ID;
 const sourceBuildId = process.env.RANGABOT_SOURCE_BUILD_ID;
+const sharpTracingExcludes = [
+  "./node_modules/sharp/**/*",
+  "./node_modules/@img/**/*",
+];
 if (desktopStagingBuildId !== undefined && !/^desktop-stage-[0-9a-f]{16}$/.test(desktopStagingBuildId)) {
   throw new Error("RANGABOT_DESKTOP_STAGING_BUILD_ID is invalid.");
 }
@@ -27,11 +31,20 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Rangabot serves only governed local image assets. Keeping optimization
+  // disabled removes the unused native Sharp/libvips runtime from consumer
+  // packages and preserves direct, inspectable local URLs.
+  images: { unoptimized: true },
   // Turbopack's file tracer can conservatively retain source-only test files
   // reached while it analyzes dynamic private-root validation. Tests are never
   // runtime inputs and must not enter the packaged standalone application.
   outputFileTracingExcludes: {
-    "/*": ["./tests/**/*"],
+    "/*": [
+      "./tests/**/*",
+      ...sharpTracingExcludes,
+    ],
+    // Next's shared standalone server is traced separately from route entries.
+    "next-server": sharpTracingExcludes,
   },
   poweredByHeader: false,
   generateBuildId: async () => desktopStagingBuildId ?? sourceBuildId ?? requireKnownResponseFeedbackCandidate().build,

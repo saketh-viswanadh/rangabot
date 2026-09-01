@@ -416,7 +416,10 @@ test("source and packaging preserve fail-before-write ordering and distinct veri
   assert.match(prepare, /\^\(\?:out\|desktop\)/);
   assert.match(prepare, /RangaBot Verification/);
   const nextConfig = readFileSync(new URL("../next.config.ts", import.meta.url), "utf8");
-  assert.match(nextConfig, /outputFileTracingExcludes:\s*\{\s*"\/\*": \["\.\/tests\/\*\*\/\*"\]/);
+  assert.match(nextConfig, /outputFileTracingExcludes:/);
+  assert.match(nextConfig, /"\.\/tests\/\*\*\/\*"/);
+  assert.match(nextConfig, /"\.\/node_modules\/sharp\/\*\*\/\*"/);
+  assert.match(nextConfig, /"\.\/node_modules\/@img\/\*\*\/\*"/);
   const finalizer = readFileSync(new URL("../scripts/finalize-desktop-package.ts", import.meta.url), "utf8");
   assert.match(finalizer, /desktop-artifact-verification-/);
   assert.match(finalizer, /desktop-artifact-normal-refresh-20260812-/);

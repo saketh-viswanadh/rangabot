@@ -75,6 +75,7 @@ export function createSyntheticFinalizedWindowsApplication(root: string, product
     sourceFiles,
     packageLockSha256: sha("2"),
     productVersion,
+    macBuildNumber: null,
     webFeedback: {
       state: "known",
       candidateBuildId: sha("3"),

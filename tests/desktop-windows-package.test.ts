@@ -100,6 +100,8 @@ test("Forge creates a Windows diagnostic ZIP and finalizes the PE fuse target wi
   assert.match(forge, /path\.resolve\(outputPath, "RangaBot\.exe"\)/);
   assert.match(forge, /packageAfterCopy:[\s\S]*if \(platform === "darwin" \|\| platform === "mas"\)/);
   assert.match(forge, /postPackage:[\s\S]*finalizePackagedExecutables/);
+  assert.match(forge, /targetPlatform === "win32"[\s\S]*win32metadata: \{ CompanyName: "RangaBot contributors" \}/);
+  assert.match(text("desktop/msix/AppxManifest.xml"), /<PublisherDisplayName>RangaBot contributors<\/PublisherDisplayName>/);
   assert.match(forge, /assertWindowsPeCertificateTableAbsent\(executable, "Fuse-mutated RangaBot\.exe"\)/);
   assert.doesNotMatch(forge, /Get-AuthenticodeSignature|powershell\.exe|signtool|HashMismatch/);
   const icon = readFileSync(new URL("../desktop/assets/rangabot.ico", import.meta.url));
