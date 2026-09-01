@@ -22,10 +22,12 @@ import {
 } from "../lib/macos-mas-pkg.ts";
 import {
   MAC_APP_STORE_BUNDLE_ID,
+  buildPlistDictionary,
   decodeProvisioningProfile,
   expectedMacAppStoreChildEntitlements,
   expectedMacAppStoreMainEntitlements,
   readPlistDictionary,
+  readCodeSignatureEntitlements,
   resolveMacSigningCertificate,
   validateMacAppStoreProvisioningProfile,
   verifyCompleteMacAppStoreCodeSignature,
@@ -404,12 +406,7 @@ export async function verifyMacAppStorePackage(arguments_ = process.argv.slice(2
       applicationSigningCertificate.commonName,
       teamId,
     );
-    const entitlements = commandOutput(
-      "/usr/bin/codesign",
-      ["--display", "--entitlements", ":-", appPath],
-      "Application entitlement inspection",
-    );
-    assertMacAppStoreEntitlements(entitlements);
+    assertMacAppStoreEntitlements(buildPlistDictionary(readCodeSignatureEntitlements(appPath)));
 
     const contentsRoot = join(appPath, "Contents");
     const infoPlistPath = join(contentsRoot, "Info.plist");

@@ -129,6 +129,39 @@ export function buildPlistDictionary(value: Record<string, unknown>) {
   return plist.build(value);
 }
 
+export function parseCodesignEntitlementsRepresentation(value: string, label = "Code-signature entitlements") {
+  if (value.trim() === "") return {};
+  const lines = value.split(/\r?\n/u).filter((line) => line.trim() !== "");
+  if (lines.shift()?.trim() !== "[Dict]") throw new Error(`${label} is not a codesign dictionary.`);
+  const result: Record<string, unknown> = {};
+  while (lines.length > 0) {
+    const key = lines.shift()?.match(/^\s*\[Key\] (.+)$/u)?.[1];
+    if (!key || Object.hasOwn(result, key) || lines.shift()?.trim() !== "[Value]") {
+      throw new Error(`${label} has malformed or duplicate dictionary entries.`);
+    }
+    const valueLine = lines.shift()?.trim() ?? "";
+    const scalar = valueLine.match(/^\[(Bool|String)\](?: (.*))?$/u);
+    if (!scalar) throw new Error(`${label} contains an unsupported value.`);
+    if (scalar[1] === "Bool") {
+      if (scalar[2] !== "true" && scalar[2] !== "false") throw new Error(`${label} contains an invalid Boolean.`);
+      result[key] = scalar[2] === "true";
+    } else {
+      result[key] = scalar[2] ?? "";
+    }
+  }
+  return result;
+}
+
+export function readCodeSignatureEntitlements(path: string) {
+  const result = spawnSync("/usr/bin/codesign", ["--display", "--entitlements", "-", path], {
+    encoding: "utf8",
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0 || result.signal) throw new Error(`Code-signature entitlements could not be read: ${path}.`);
+  return parseCodesignEntitlementsRepresentation(result.stdout ?? "");
+}
+
 function assertCertificateCurrentlyValid(certificate: X509Certificate, now: number, label: string) {
   const validFrom = Date.parse(certificate.validFrom);
   const validTo = Date.parse(certificate.validTo);
@@ -245,8 +278,9 @@ export function resolveMacSigningCertificate(identity: string) {
   });
   const certificates = pemOutput.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) ?? [];
   const selected = certificates
-    .map((pem) => certificateFromX509(new X509Certificate(pem)))
-    .filter((certificate) => certificate.sha1 === matches[0].sha1);
+    .map((pem) => new X509Certificate(pem))
+    .filter((certificate) => normalizedSha1(certificate.fingerprint) === matches[0].sha1)
+    .map((certificate) => certificateFromX509(certificate));
   if (selected.length !== 1 || selected[0].commonName !== matches[0].name) {
     throw new Error("The selected signing identity certificate could not be resolved unambiguously from the Keychain.");
   }
@@ -418,7 +452,12 @@ export function assertMacAppStoreCodeSignatureInspections(input: Readonly<{
       || inspection.authorities.some((authority, index) => authority !== outer.authorities[index])) {
       throw new Error(`Signed code has a mismatched team, authority chain, or leaf certificate: ${inspection.path}.`);
     }
-    const expectedEntitlements = input.mainPaths.has(inspection.path) ? input.mainEntitlements : input.childEntitlements;
+    const entitlementFreeLibrary = inspection.path.includes(".framework/")
+      || inspection.path.endsWith(".dylib")
+      || inspection.path.endsWith(".node");
+    const expectedEntitlements = input.mainPaths.has(inspection.path)
+      ? input.mainEntitlements
+      : entitlementFreeLibrary ? {} : input.childEntitlements;
     if (!samePlist(inspection.entitlements, expectedEntitlements)) {
       throw new Error(`Signed code has unexpected or missing entitlements: ${inspection.path}.`);
     }
@@ -526,23 +565,13 @@ export function inspectMacCodeSignature(
   }
   const leafCertificateSha1 = extractAndAssertLeafSigningCertificate(path, expectedCertificate);
 
-  const entitlementsResult = spawnSync("/usr/bin/codesign", ["--display", "--entitlements", ":-", path], {
-    encoding: "utf8",
-    maxBuffer: 4 * 1024 * 1024,
-  });
-  const entitlementsOutput = `${entitlementsResult.stdout ?? ""}\n${entitlementsResult.stderr ?? ""}`;
-  const xmlStart = entitlementsOutput.indexOf("<?xml");
-  if (entitlementsResult.error) throw entitlementsResult.error;
-  if (entitlementsResult.status !== 0 || entitlementsResult.signal || xmlStart < 0) {
-    throw new Error(`Nested signed code entitlements could not be read: ${path}.`);
-  }
   return Object.freeze({
     path,
     identifier: identifier[0],
     teamIdentifier: teamIdentifier[0],
     authorities,
     leafCertificateSha1,
-    entitlements: parsePlistDictionary(entitlementsOutput.slice(xmlStart), "Code-signature entitlements"),
+    entitlements: readCodeSignatureEntitlements(path),
   });
 }
 

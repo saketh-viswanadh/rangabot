@@ -41,6 +41,7 @@ import {
   expectedMacAppStoreChildEntitlements,
   expectedMacAppStoreMainEntitlements,
   parsePlistDictionary,
+  readCodeSignatureEntitlements,
   readPlistDictionary,
   resolveMacSigningCertificate,
   validateMacAppStoreProvisioningProfile,
@@ -400,17 +401,11 @@ function macAppStoreSigningConfiguration(mode: MacAppStoreSignatureMode) {
 }
 
 function displayEntitlements(appPath: string) {
-  const result = spawnSync("/usr/bin/codesign", ["--display", "--entitlements", ":-", appPath], {
-    encoding: "utf8",
-    maxBuffer: 4 * 1024 * 1024,
-  });
-  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-  const xmlStart = output.indexOf("<?xml");
-  if (result.error) throw result.error;
-  if (result.status !== 0 || result.signal || xmlStart < 0 || !output.includes("com.apple.security.app-sandbox")) {
+  const entitlements = readCodeSignatureEntitlements(appPath);
+  if (entitlements["com.apple.security.app-sandbox"] !== true) {
     throw new Error("The Mac App Store application entitlements could not be read.");
   }
-  return output.slice(xmlStart);
+  return buildPlistDictionary(entitlements);
 }
 
 async function signEntireAppForMacAppStore(appPath: string, mode: MacAppStoreSignatureMode) {
@@ -445,6 +440,9 @@ async function signEntireAppForMacAppStore(appPath: string, mode: MacAppStoreSig
       platform: "mas",
       type: config.type,
       identity: certificate.sha1,
+      // The provisioning profile is an Apple-signed embedded resource, not
+      // nested executable code. The outer app signature still seals it.
+      ignore: (filePath) => filePath === embeddedProfilePath,
       preAutoEntitlements: false,
       preEmbedProvisioningProfile: false,
       strictVerify: true,

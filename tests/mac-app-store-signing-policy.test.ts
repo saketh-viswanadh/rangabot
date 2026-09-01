@@ -5,6 +5,7 @@ import {
   decodeProvisioningProfileBytes,
   expectedMacAppStoreChildEntitlements,
   expectedMacAppStoreMainEntitlements,
+  parseCodesignEntitlementsRepresentation,
   validateMacAppStoreProvisioningProfile,
   type MacCodeSignatureInspection,
   type MacSigningCertificate,
@@ -191,7 +192,7 @@ function signatureFixture() {
     signature(mainExecutable, mainEntitlements),
     signature("/RangaBot.app/Contents/Frameworks/RangaBot Helper.app/Contents/MacOS/RangaBot Helper", childEntitlements),
     signature("/RangaBot.app/Contents/Resources/rangabot-resources/runtime/ollama/ollama", childEntitlements),
-    signature("/RangaBot.app/Contents/Resources/rangabot-resources/node_modules/native.node", childEntitlements),
+    signature("/RangaBot.app/Contents/Resources/rangabot-resources/node_modules/native.node", {}),
   ];
   return { appPath, mainExecutable, inspections, mainEntitlements, childEntitlements };
 }
@@ -212,7 +213,31 @@ function assertSignatureFixture(inspections: readonly MacCodeSignatureInspection
 }
 
 test("complete signature inventory accepts exact main, helper, Ollama, and native-module signatures", () => {
-  assert.doesNotThrow(() => assertSignatureFixture(signatureFixture().inspections));
+  const inspections = [
+    ...signatureFixture().inspections,
+    signature("/RangaBot.app/Contents/Frameworks/Electron.framework/Versions/A/Electron", {}),
+    signature("/RangaBot.app/Contents/Resources/native.dylib", {}),
+    signature("/RangaBot.app/Contents/Resources/native.node", {}),
+  ];
+  assert.doesNotThrow(() => assertSignatureFixture(inspections));
+});
+
+test("codesign abstract entitlements accept exact scalar dictionaries and reject malformed values", () => {
+  assert.deepEqual(parseCodesignEntitlementsRepresentation(`
+[Dict]
+\t[Key] com.apple.application-identifier
+\t[Value]
+\t\t[String] ${applicationIdentifier}
+\t[Key] com.apple.security.app-sandbox
+\t[Value]
+\t\t[Bool] true
+`), {
+    "com.apple.application-identifier": applicationIdentifier,
+    "com.apple.security.app-sandbox": true,
+  });
+  assert.deepEqual(parseCodesignEntitlementsRepresentation(""), {});
+  assert.throws(() => parseCodesignEntitlementsRepresentation("[Dict]\n[Key] x\n[Value]\n[Array]"));
+  assert.throws(() => parseCodesignEntitlementsRepresentation("[Dict]\n[Key] x\n[Value]\n[Bool] maybe"));
 });
 
 test("complete signature inventory rejects wrong team, authority, exact leaf certificate, identifier, entitlement, and missing main", () => {

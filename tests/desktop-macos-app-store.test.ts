@@ -75,6 +75,7 @@ test("Forge and finalizer keep App Store signing fail-closed and separate from d
   const prepare = readFileSync("scripts/prepare-desktop.ts", "utf8");
   const finalizer = readFileSync("scripts/finalize-desktop-package.ts", "utf8");
   const signingPolicy = readFileSync("lib/mac-app-store-signing-policy.ts", "utf8");
+  const installerPolicy = readFileSync("lib/macos-mas-pkg.ts", "utf8");
   assert.match(forge, /new MakerPKG/);
   assert.match(forge, /expectedForgePlatform = macAppStoreBuild \? "mas" : targetPlatform/);
   assert.match(forge, /RANGABOT_MAC_TEAM_ID/);
@@ -88,6 +89,7 @@ test("Forge and finalizer keep App Store signing fail-closed and separate from d
   assert.doesNotMatch(prepare, /a51158c5bb802cd441049fd733bfe803b6b5581f01dd83bbfb5cee07b45626c4/);
   assert.match(finalizer, /platform: "mas"/);
   assert.match(finalizer, /writeFileSync\(embeddedProfilePath, profileBytes/);
+  assert.match(finalizer, /ignore: \(filePath\) => filePath === embeddedProfilePath/);
   assert.match(finalizer, /preEmbedProvisioningProfile: false/);
   assert.match(finalizer, /verifyCompleteMacAppStoreCodeSignature/);
   assert.match(signingPolicy, /"--verify", "--deep", "--strict"/);
@@ -97,6 +99,9 @@ test("Forge and finalizer keep App Store signing fail-closed and separate from d
   assert.match(signingPolicy, /--extract-certificates/);
   assert.match(signingPolicy, /leaf\.raw\.equals\(expectedDer\)/);
   assert.match(signingPolicy, /rmSync\(temporaryRoot, \{ recursive: true, force: true \}\)/);
+  for (const policy of [signingPolicy, installerPolicy]) {
+    assert.match(policy, /\.filter\(\(certificate\) => normalizedSha1\(certificate\.fingerprint\) === matches\[0\]\.sha1\)\s*\.map\(\(certificate\) => certificateFromX509\(certificate\)\)/u);
+  }
 });
 
 test("Mac App Store runtime never auto-opens the standard home Ollama model store", () => {

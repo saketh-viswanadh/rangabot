@@ -165,8 +165,9 @@ export function resolveMacInstallerSigningCertificate(identityInput: string, exp
   });
   const certificates = pemOutput.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/gu) ?? [];
   const selected = certificates
-    .map((pem) => certificateFromX509(new X509Certificate(pem)))
-    .filter((certificate) => certificate.sha1 === matches[0].sha1);
+    .map((pem) => new X509Certificate(pem))
+    .filter((certificate) => normalizedSha1(certificate.fingerprint) === matches[0].sha1)
+    .map((certificate) => certificateFromX509(certificate));
   if (selected.length !== 1 || selected[0].commonName !== matches[0].name) {
     throw new Error("The selected installer certificate could not be resolved unambiguously from the Keychain.");
   }
